@@ -10,7 +10,7 @@ A comprehensive algorithmic trading workspace for quant development, research, a
 ├── freqtrade/           # Freqtrade bot strategies, hyperopts, and configs
 ├── options/             # Options strategies (Indian market focus: NSE/BSE)
 ├── models/              # AI/ML models (training, inference, feature engineering)
-├── backtesting/         # Backtesting engine, reports, and configs
+├── backtesting/         # Backtesting engine, reports, results, and CSV exports
 ├── data/                # Market data pipeline (raw → processed → alternative)
 ├── research/            # Quant research notebooks, alpha signals, statistical tests
 ├── risk_management/     # Position sizing, portfolio optimization, drawdown analysis
@@ -71,6 +71,8 @@ A comprehensive algorithmic trading workspace for quant development, research, a
 
 - **Strategy naming**: `<TYPE>_<NAME>_<VERSION>` (e.g., `PINE_MeanReversion_v1.pine`)
 - **Backtest reports**: stored in `backtesting/reports/` with date prefix
+- **Backtest results**: per-platform results in `backtesting/results/<platform>/`
+- **Backtest exports**: CSV/XLSX trade logs and equity curves in `backtesting/exports/`
 - **Config files**: YAML format, secrets never committed (use `.example` templates)
 - **Research notebooks**: numbered prefix for ordering (e.g., `01_data_exploration.ipynb`)
 

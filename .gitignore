@@ -26,6 +26,17 @@ backtesting/reports/*
 !backtesting/reports/.gitkeep
 
 # ===========================
+# Backtest Results & Exports
+# ===========================
+backtesting/results/**/*.html
+backtesting/results/**/*.pdf
+backtesting/exports/**/*.csv
+backtesting/exports/**/*.xlsx
+backtesting/exports/**/*.json
+!backtesting/results/**/.gitkeep
+!backtesting/exports/**/.gitkeep
+
+# ===========================
 # Secrets & Credentials
 # ===========================
 .env
