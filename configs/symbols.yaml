@@ -1,0 +1,51 @@
+# Tracked Symbols / Instruments
+# Add your watched instruments here grouped by market
+
+indian_equity:
+  nifty50:
+    - RELIANCE
+    - TCS
+    - HDFCBANK
+    - INFY
+    - ICICIBANK
+  # Add more as needed
+
+indian_indices:
+  - NIFTY
+  - BANKNIFTY
+  - FINNIFTY
+  - MIDCPNIFTY
+
+indian_options:
+  underlyings:
+    - NIFTY
+    - BANKNIFTY
+    - FINNIFTY
+  # Default expiry: weekly for index, monthly for stock options
+
+forex:
+  majors:
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+    - USDCHF
+  crosses:
+    - EURGBP
+    - EURJPY
+
+crypto:
+  spot:
+    - BTC/USDT
+    - ETH/USDT
+    - SOL/USDT
+  futures:
+    - BTC/USDT:USDT
+    - ETH/USDT:USDT
+
+us_equity:
+  large_cap:
+    - AAPL
+    - MSFT
+    - GOOGL
+    - AMZN
+    - NVDA

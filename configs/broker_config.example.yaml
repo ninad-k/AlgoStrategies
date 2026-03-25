@@ -1,0 +1,51 @@
+# Broker Configuration Template
+# Copy this to broker_config.yaml and fill in your credentials
+# NEVER commit the actual broker_config.yaml
+
+# Indian Brokers
+zerodha:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  access_token: ""
+  # Kite Connect API
+
+angel_one:
+  api_key: "YOUR_API_KEY"
+  client_id: "YOUR_CLIENT_ID"
+  password: "YOUR_PASSWORD"
+  totp_secret: "YOUR_TOTP_SECRET"
+
+fyers:
+  app_id: "YOUR_APP_ID"
+  secret_key: "YOUR_SECRET_KEY"
+  redirect_uri: "https://localhost"
+
+# International Brokers
+interactive_brokers:
+  host: "127.0.0.1"
+  port: 7497
+  client_id: 1
+  account: "YOUR_ACCOUNT"
+
+alpaca:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  base_url: "https://paper-api.alpaca.markets"  # paper trading
+
+# Crypto Exchanges
+binance:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  testnet: true
+
+bybit:
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  testnet: true
+
+# MetaTrader 5
+metatrader5:
+  login: 0
+  password: "YOUR_PASSWORD"
+  server: "YOUR_BROKER_SERVER"
+  path: "C:/Program Files/MetaTrader 5/terminal64.exe"

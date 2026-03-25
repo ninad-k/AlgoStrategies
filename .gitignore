@@ -1,41 +1,133 @@
-# Prerequisites
-*.d
+# ===========================
+# Market Data (large files)
+# ===========================
+data/raw/
+data/processed/
+data/alternative/
+!data/**/.gitkeep
 
-# Compiled Object files
+# ===========================
+# Model Artifacts
+# ===========================
+models/saved_models/*
+!models/saved_models/.gitkeep
+*.h5
+*.pkl
+*.joblib
+*.onnx
+*.pt
+*.pth
+*.safetensors
+
+# ===========================
+# Backtest Reports (generated)
+# ===========================
+backtesting/reports/*
+!backtesting/reports/.gitkeep
+
+# ===========================
+# Secrets & Credentials
+# ===========================
+.env
+.env.*
+!.env.example
+*.secret
+*_credentials.json
+*_credentials.yaml
+broker_config.yaml
+!broker_config.example.yaml
+
+# ===========================
+# Python
+# ===========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+env/
+.conda/
+
+# ===========================
+# Jupyter Notebooks
+# ===========================
+.ipynb_checkpoints/
+
+# ===========================
+# MQL5 Compiled
+# ===========================
+*.ex5
+*.ex4
+MQL5/Logs/
+
+# ===========================
+# Freqtrade
+# ===========================
+freqtrade/user_data/
+freqtrade/tradesv3.sqlite
+freqtrade/tradesv3.dryrun.sqlite
+*.sqlite
+
+# ===========================
+# Options Data
+# ===========================
+options/chain_data/*
+!options/chain_data/.gitkeep
+
+# ===========================
+# Compiled Objects & Binaries
+# ===========================
 *.slo
 *.lo
 *.o
 *.obj
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Linker files
 *.ilk
-
-# Debugger Files
 *.pdb
-
-# Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
-
-# Fortran module files
 *.mod
 *.smod
-
-# Compiled Static libraries
 *.lai
 *.la
 *.a
 *.lib
-
-# Executables
 *.exe
 *.out
 *.app
-
-# debug information files
+*.d
 *.dwo
+
+# ===========================
+# IDE & OS
+# ===========================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===========================
+# Logs & Temp
+# ===========================
+logs/
+*.log
+tmp/
+temp/
+*.tmp
+
+# ===========================
+# Node (webhooks/dashboards)
+# ===========================
+node_modules/
+package-lock.json

@@ -1,0 +1,54 @@
+# Timeframe Definitions
+# Maps standard labels to platform-specific values
+
+timeframes:
+  scalping:
+    - label: 1m
+      tradingview: "1"
+      mql5: PERIOD_M1
+      freqtrade: "1m"
+    - label: 5m
+      tradingview: "5"
+      mql5: PERIOD_M5
+      freqtrade: "5m"
+
+  intraday:
+    - label: 15m
+      tradingview: "15"
+      mql5: PERIOD_M15
+      freqtrade: "15m"
+    - label: 30m
+      tradingview: "30"
+      mql5: PERIOD_M30
+      freqtrade: "30m"
+    - label: 1h
+      tradingview: "60"
+      mql5: PERIOD_H1
+      freqtrade: "1h"
+
+  swing:
+    - label: 4h
+      tradingview: "240"
+      mql5: PERIOD_H4
+      freqtrade: "4h"
+    - label: 1D
+      tradingview: "D"
+      mql5: PERIOD_D1
+      freqtrade: "1d"
+
+  positional:
+    - label: 1W
+      tradingview: "W"
+      mql5: PERIOD_W1
+      freqtrade: "1w"
+    - label: 1M
+      tradingview: "M"
+      mql5: PERIOD_MN1
+      freqtrade: "1M"
+
+# Indian market session times (IST)
+indian_market:
+  pre_open: "09:00"
+  market_open: "09:15"
+  market_close: "15:30"
+  post_close: "16:00"
