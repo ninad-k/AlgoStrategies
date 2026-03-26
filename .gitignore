@@ -142,3 +142,8 @@ temp/
 # ===========================
 node_modules/
 package-lock.json
+
+# ===========================
+# Claude Code internals
+# ===========================
+.claude/worktrees/
