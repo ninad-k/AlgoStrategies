@@ -432,6 +432,21 @@ main {
   border-bottom: 1px solid var(--border);
 }
 .news-item:last-child { border-bottom: none; }
+.news-filter-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.news-filter-chip:hover { border-color: var(--accent); color: var(--text); }
+.news-filter-chip.active { background: rgba(79,124,255,.15); border-color: var(--accent); color: var(--accent); }
+
 .news-source {
   font-size: 10px;
   text-transform: uppercase;
@@ -634,7 +649,17 @@ main {
         <div class="stab" onclick="switchTab('calendar')">Economic Events</div>
       </div>
       <div class="sidebar-panel active" id="panel-news">
-        <p style="color:var(--text-dim);font-size:12px">Load analysis to see news</p>
+        <!-- Symbol filter chips -->
+        <div id="news-filter-bar" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)"></div>
+        <!-- Articles list -->
+        <div id="news-list"></div>
+        <!-- Pagination -->
+        <div id="news-pagination" style="display:none;align-items:center;justify-content:space-between;padding-top:10px;margin-top:6px;border-top:1px solid var(--border)">
+          <button class="btn btn-sm btn-outline" id="news-prev" onclick="newsPage(-1)">&#8592; Prev</button>
+          <span id="news-page-info" style="font-size:11px;color:var(--text-dim)"></span>
+          <button class="btn btn-sm btn-outline" id="news-next" onclick="newsPage(1)">Next &#8594;</button>
+        </div>
+        <p id="news-empty" style="color:var(--text-dim);font-size:12px">Load analysis to see news</p>
       </div>
       <div class="sidebar-panel" id="panel-calendar">
         <p style="color:var(--text-dim);font-size:12px">Loading economic calendar…</p>
@@ -753,6 +778,7 @@ async function loadDashboard() {
       renderCalendar();
     }
     renderCards();
+    updateNewsFeed();
     updateLastUpdate();
     toast(`Analysis complete — ${data.symbols.length} symbols loaded`);
   } catch (e) {
@@ -956,9 +982,13 @@ function switchTab(tab) {
   document.getElementById('panel-calendar').classList.toggle('active', tab === 'calendar');
 }
 
+/* ── News feed state ───────────────────────────────────────── */
+let newsFilterSymbol = 'ALL';
+let newsCurrentPage  = 0;
+const NEWS_PAGE_SIZE = 5;
+
 function updateNewsFeed() {
-  // Aggregate all news from loaded analyses
-  const panel = document.getElementById('panel-news');
+  // Build full news list across loaded symbols
   const allNews = [];
   for (const sym of selectedSymbols) {
     if (!analyses[sym]) continue;
@@ -966,17 +996,69 @@ function updateNewsFeed() {
       allNews.push({ ...n, symbol: sym });
     }
   }
+
+  const empty   = document.getElementById('news-empty');
+  const filterBar = document.getElementById('news-filter-bar');
+  const pagination = document.getElementById('news-pagination');
+
   if (!allNews.length) {
-    panel.innerHTML = '<p style="color:var(--text-dim);font-size:12px">No news articles available.</p>';
+    empty.style.display = 'block';
+    filterBar.style.display = 'none';
+    pagination.style.display = 'none';
+    document.getElementById('news-list').innerHTML = '';
     return;
   }
-  panel.innerHTML = allNews.map(n => `
+  empty.style.display = 'none';
+
+  // Build symbol filter chips (ALL + each symbol that has news)
+  const symsWithNews = [...new Set(allNews.map(n => n.symbol))];
+  filterBar.style.display = 'flex';
+  filterBar.innerHTML = ['ALL', ...symsWithNews].map(s => `
+    <div class="news-filter-chip ${newsFilterSymbol === s ? 'active' : ''}"
+         onclick="setNewsFilter('${s}')">${s}</div>
+  `).join('');
+
+  // Filter by selected symbol
+  const filtered = newsFilterSymbol === 'ALL'
+    ? allNews
+    : allNews.filter(n => n.symbol === newsFilterSymbol);
+
+  // Clamp page
+  const totalPages = Math.ceil(filtered.length / NEWS_PAGE_SIZE);
+  if (newsCurrentPage >= totalPages) newsCurrentPage = 0;
+
+  const start   = newsCurrentPage * NEWS_PAGE_SIZE;
+  const page    = filtered.slice(start, start + NEWS_PAGE_SIZE);
+
+  document.getElementById('news-list').innerHTML = page.map(n => `
 <div class="news-item">
   <div class="news-source">${escHtml(n.source)} · <span style="color:var(--accent)">${escHtml(n.symbol)}</span></div>
   <div class="news-title"><a href="${escHtml(n.url)}" target="_blank">${escHtml(n.title)}</a></div>
   ${n.summary ? `<div class="news-summary">${escHtml(n.summary)}</div>` : ''}
   <div class="news-meta">${n.published ? new Date(n.published).toLocaleString() : ''}</div>
 </div>`).join('');
+
+  // Pagination controls
+  if (totalPages > 1) {
+    pagination.style.display = 'flex';
+    document.getElementById('news-page-info').textContent =
+      `${newsCurrentPage + 1} / ${totalPages}  (${filtered.length} articles)`;
+    document.getElementById('news-prev').disabled = newsCurrentPage === 0;
+    document.getElementById('news-next').disabled = newsCurrentPage >= totalPages - 1;
+  } else {
+    pagination.style.display = 'none';
+  }
+}
+
+function setNewsFilter(sym) {
+  newsFilterSymbol = sym;
+  newsCurrentPage  = 0;
+  updateNewsFeed();
+}
+
+function newsPage(dir) {
+  newsCurrentPage += dir;
+  updateNewsFeed();
 }
 
 async function loadCalendar() {
