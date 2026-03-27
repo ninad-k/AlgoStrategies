@@ -1037,7 +1037,7 @@ async function toggleSymbol(sym, chip) {
 /* ── Dashboard load ────────────────────────────────────────── */
 async function loadDashboard() {
   if (!selectedSymbols.length) return;
-  showLoading(`Analysing ${selectedSymbols.length} symbol(s) with Claude AI…`);
+  showLoading(`Analysing ${selectedSymbols.length} symbol(s) with AI…`);
   hideError();
   try {
     const data = await apiFetch(`/api/dashboard?symbols=${selectedSymbols.join(',')}`);
