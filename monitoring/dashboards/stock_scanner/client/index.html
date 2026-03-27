@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rey Capital — US Stock Scanner</title>
+  <link rel="stylesheet" href="/client/styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <header>
+    <div class="logo">RC <span>US Stock Scanner</span></div>
+    <div class="header-right">
+      <!-- Schedule / cache badge -->
+      <div class="schedule-badge" id="scheduleBadge" title="Auto-scan schedule info">
+        <span class="schedule-icon">🕐</span>
+        <span id="scheduleText">Loading schedule…</span>
+      </div>
+      <span class="scan-meta" id="lastScanMeta"></span>
+      <!-- Force-scan button (secondary, for manual override only) -->
+      <button class="btn btn-ghost btn-sm" id="btnScan" title="Force a manual scan now">Force Scan</button>
+    </div>
+  </header>
+
+  <!-- ── Progress bar ─────────────────────────────────────── -->
+  <div id="scanProgressWrap">
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div id="progressText">Initialising scan…</div>
+  </div>
+
+  <!-- ── Main ─────────────────────────────────────────────── -->
+  <main>
+
+    <!-- Category tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn active" data-cat="multibagger"  role="tab">🚀 Multibagger</button>
+      <button class="tab-btn"        data-cat="investment"   role="tab">💼 Investment</button>
+      <button class="tab-btn"        data-cat="swing_medium" role="tab">📈 Swing 2-3 Weeks</button>
+      <button class="tab-btn"        data-cat="swing_short"  role="tab">⚡ Swing 2-3 Days</button>
+    </nav>
+
+    <!-- Data freshness banner (shown when data is stale) -->
+    <div class="data-banner" id="dataBanner" style="display:none"></div>
+
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Min Score</label>
+        <div class="filter-score-row">
+          <input type="range" id="minScore" min="0" max="100" value="50" step="5" />
+          <span id="minScoreVal">50</span>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label>Sector</label>
+        <select id="sectorFilter">
+          <option value="">All Sectors</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Market Cap</label>
+        <select id="capFilter">
+          <option value="">All</option>
+          <option value="micro">Micro  (&lt; $300M)</option>
+          <option value="small">Small  ($300M – $2B)</option>
+          <option value="mid">Mid    ($2B – $10B)</option>
+          <option value="large">Large  (&gt; $10B)</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Rows per page</label>
+        <select id="pageSizeSelect">
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+
+      <div class="filter-group" style="justify-content:flex-end;flex:1;align-items:flex-end;">
+        <div id="resultCount" style="font-size:.8rem;color:var(--text-muted)"></div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:36px">#</th>
+            <th class="sortable" data-col="symbol">Symbol</th>
+            <th>Company</th>
+            <th class="sortable" data-col="sector">Sector</th>
+            <th class="sortable" data-col="price">Price</th>
+            <th class="sortable" data-col="price_change_pct">Change</th>
+            <th class="sortable" data-col="market_cap">Mkt Cap</th>
+            <th class="sortable" data-col="rsi">RSI</th>
+            <th class="sortable" data-col="rs_vs_spy">RS/SPY</th>
+            <th class="sortable" data-col="stage">Stage</th>
+            <th id="scoreColHeader" class="sortable" data-col="multibagger_score">Score</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody">
+          <tr>
+            <td colspan="12" class="no-data">
+              No scan data yet.<br/>
+              <small style="color:var(--text-muted)">The scanner runs automatically at 8:30 AM ET on weekdays.</small>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" id="pagination"></div>
+
+  </main>
+
+  <!-- ── Score Breakdown Modal ────────────────────────────── -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+      <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+      <div class="modal-header">
+        <span class="modal-symbol" id="modalSymbol"></span>
+        <span class="modal-name"   id="modalName"></span>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- ── Toast ─────────────────────────────────────────────── -->
+  <div id="toast"></div>
+
+  <script src="/client/app.js"></script>
+</body>
+</html>
