@@ -9,24 +9,25 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0b0d14;
-  --surface:   #111420;
-  --surface2:  #181c2b;
-  --border:    #1e2438;
-  --accent:    #4f7cff;
-  --green:     #00d97e;
-  --red:       #ff4d6d;
-  --yellow:    #ffd060;
-  --text:      #e2e8f0;
-  --text-dim:  #7a88a8;
+  --bg:        #F0F4F8;
+  --surface:   #FFFFFF;
+  --surface2:  #E8EEF4;
+  --border:    #CBD5E1;
+  --accent:    #1B4FBE;
+  --green:     #16A34A;
+  --red:       #DC2626;
+  --yellow:    #D97706;
+  --text:      #1E293B;
+  --text-dim:  #64748B;
   --radius:    10px;
-  --shadow:    0 4px 24px rgba(0,0,0,.45);
+  --shadow:    0 4px 24px rgba(0,0,0,.08);
 }
 
 body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
   font-size: 14px;
   min-height: 100vh;
 }
@@ -141,12 +142,12 @@ header {
 }
 .sym-chip:hover { border-color: var(--accent); color: var(--text); }
 .sym-chip.active {
-  background: rgba(79,124,255,.15);
+  background: rgba(27,79,190,.1);
   border-color: var(--accent);
   color: var(--accent);
 }
-.sym-chip.bullish { border-color: var(--green); color: var(--green); background: rgba(0,217,126,.08); }
-.sym-chip.bearish { border-color: var(--red); color: var(--red); background: rgba(255,77,109,.08); }
+.sym-chip.bullish { border-color: var(--green); color: var(--green); background: rgba(22,163,74,.08); }
+.sym-chip.bearish { border-color: var(--red); color: var(--red); background: rgba(220,38,38,.08); }
 .sym-chip.custom { border-style: dashed; }
 .sym-chip .remove-chip {
   margin-left: 5px; opacity: .5; font-size: 11px; line-height: 1;
@@ -171,13 +172,13 @@ header {
   top: 100%;
   left: 0;
   z-index: 999;
-  background: var(--surface2);
+  background: #FFFFFF;
   border: 1px solid var(--accent);
   border-radius: 6px;
   min-width: 220px;
   max-height: 280px;
   overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
   margin-top: 3px;
 }
 .sym-autocomplete-item {
@@ -191,7 +192,7 @@ header {
 }
 .sym-autocomplete-item:last-child { border-bottom: none; }
 .sym-autocomplete-item:hover, .sym-autocomplete-item.active {
-  background: rgba(79,124,255,.15);
+  background: rgba(27,79,190,.08);
 }
 .sym-autocomplete-item .ac-sym { font-weight: 700; color: var(--accent); min-width: 80px; }
 .sym-autocomplete-item .ac-name { color: var(--text-dim); font-size: 11px; }
@@ -226,7 +227,7 @@ main {
   transition: border-color .2s;
   position: relative;
 }
-.card:hover { border-color: #2a3050; }
+.card:hover { border-color: #94A3B8; }
 .card.bullish { border-left: 3px solid var(--green); }
 .card.bearish  { border-left: 3px solid var(--red); }
 .card.neutral  { border-left: 3px solid var(--text-dim); }
@@ -284,9 +285,9 @@ main {
   border-radius: 4px;
   white-space: nowrap;
 }
-.badge-bullish { background: rgba(0,217,126,.2); color: var(--green); }
-.badge-bearish  { background: rgba(255,77,109,.2); color: var(--red); }
-.badge-neutral  { background: rgba(122,136,168,.15); color: var(--text-dim); }
+.badge-bullish { background: rgba(22,163,74,.15); color: var(--green); }
+.badge-bearish  { background: rgba(220,38,38,.15); color: var(--red); }
+.badge-neutral  { background: rgba(100,116,139,.12); color: var(--text-dim); }
 
 .confidence-wrap { flex: 1; }
 .confidence-label {
@@ -350,8 +351,8 @@ main {
   font-variant-numeric: tabular-nums;
   margin: 2px 3px 2px 0;
 }
-.level-pill.sup { border-color: rgba(0,217,126,.3); color: var(--green); }
-.level-pill.res { border-color: rgba(255,77,109,.3); color: var(--red); }
+.level-pill.sup { border-color: rgba(22,163,74,.3); color: var(--green); }
+.level-pill.res { border-color: rgba(220,38,38,.3); color: var(--red); }
 
 /* Prediction */
 .prediction-row {
@@ -370,9 +371,9 @@ main {
   border-radius: 6px;
   white-space: nowrap;
 }
-.pred-up   { background: rgba(0,217,126,.15); color: var(--green); }
-.pred-down { background: rgba(255,77,109,.15); color: var(--red); }
-.pred-side { background: rgba(122,136,168,.12); color: var(--text-dim); }
+.pred-up   { background: rgba(22,163,74,.12); color: var(--green); }
+.pred-down { background: rgba(220,38,38,.12); color: var(--red); }
+.pred-side { background: rgba(100,116,139,.1); color: var(--text-dim); }
 
 .pred-meta {
   font-size: 11px;
@@ -447,7 +448,7 @@ main {
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--border);
-  background: rgba(0,0,0,.15);
+  background: rgba(0,0,0,.03);
 }
 .card-time { font-size: 10px; color: var(--text-dim); }
 
@@ -508,7 +509,7 @@ main {
   white-space: nowrap;
 }
 .news-filter-chip:hover { border-color: var(--accent); color: var(--text); }
-.news-filter-chip.active { background: rgba(79,124,255,.15); border-color: var(--accent); color: var(--accent); }
+.news-filter-chip.active { background: rgba(27,79,190,.1); border-color: var(--accent); color: var(--accent); }
 
 .news-source {
   font-size: 10px;
@@ -560,9 +561,9 @@ main {
   border-radius: 3px;
   text-transform: uppercase;
 }
-.impact-HIGH   { background: rgba(255,77,109,.2); color: var(--red); }
-.impact-MEDIUM { background: rgba(255,208,96,.2); color: var(--yellow); }
-.impact-LOW    { background: rgba(122,136,168,.12); color: var(--text-dim); }
+.impact-HIGH   { background: rgba(220,38,38,.12); color: var(--red); }
+.impact-MEDIUM { background: rgba(217,119,6,.12); color: var(--yellow); }
+.impact-LOW    { background: rgba(100,116,139,.1); color: var(--text-dim); }
 .event-country { font-size: 10px; font-weight: 700; color: var(--text-dim); }
 .event-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
 .event-title a { color: var(--text); }
@@ -581,7 +582,7 @@ main {
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(11,13,20,.85);
+  background: rgba(240,244,248,.9);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -600,8 +601,8 @@ main {
 .loading-text { font-size: 14px; color: var(--text-dim); }
 
 .error-banner {
-  background: rgba(255,77,109,.1);
-  border: 1px solid rgba(255,77,109,.3);
+  background: rgba(220,38,38,.08);
+  border: 1px solid rgba(220,38,38,.2);
   color: var(--red);
   padding: 12px 20px;
   border-radius: 8px;
@@ -628,7 +629,7 @@ main {
   gap: 8px;
 }
 .toast {
-  background: var(--surface2);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 16px;
@@ -642,7 +643,7 @@ main {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #2a3050; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 900px) {
@@ -664,13 +665,15 @@ main {
   <!-- Header -->
   <header>
     <div class="logo">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
-        <polyline points="16 7 22 7 22 13"/>
+      <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="50,2 93,27 93,73 50,98 7,73 7,27" fill="#1B4FBE" stroke="#0D3B8C" stroke-width="3"/>
+        <polyline points="35,58 50,46 65,58" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="35,48 50,36 65,48" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="35,38 50,26 65,38" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      Market <span>Sentiment</span>
+      <span style="color:var(--accent);font-size:16px;font-weight:800;letter-spacing:1px;">REY CAPITAL</span>
       <div class="logo-divider"></div>
-      <span class="logo-company">Rey Capital</span>
+      <span class="logo-company" style="font-size:12px;color:var(--text-dim);">Market Sentiment Dashboard</span>
     </div>
     <div class="header-meta">
       <span id="last-update">Not loaded yet</span>
@@ -928,7 +931,7 @@ async function addCustomSymbol(e) {
     // Already exists — just select it
     input.value = '';
     if (!selectedSymbols.includes(sym)) {
-      selectedSymbols.push(sym);
+      selectedSymbols.unshift(sym);
       const chip = document.querySelector(`.sym-chip[data-symbol="${sym}"]`);
       if (chip) chip.classList.add('active');
       await loadSingleSymbol(sym);
@@ -942,7 +945,7 @@ async function addCustomSymbol(e) {
     const analysis = await apiFetch(`/api/analysis/${encodeURIComponent(sym)}`);
     customSymbols.push(sym);
     localStorage.setItem('customSymbols', JSON.stringify(customSymbols));
-    selectedSymbols.push(sym);
+    selectedSymbols.unshift(sym);
     analyses[sym] = analysis;
     renderCustomChips();
     renderCard(analysis);
@@ -986,7 +989,7 @@ async function toggleSymbol(sym, chip) {
     removeCard(sym);
     delete analyses[sym];
   } else {
-    selectedSymbols.push(sym);
+    selectedSymbols.unshift(sym);
     chip.classList.add('active');
     await loadSingleSymbol(sym);
   }
@@ -1076,14 +1079,14 @@ function renderCard(a) {
   const macdColor = a.technical.macd_signal === 'BULLISH' ? 'dot-green' : a.technical.macd_signal === 'BEARISH' ? 'dot-red' : 'dot-gray';
   const trendColor = a.technical.trend_signal === 'UPTREND' ? 'dot-green' : a.technical.trend_signal === 'DOWNTREND' ? 'dot-red' : 'dot-gray';
 
-  const supPills = a.technical.supports.map(v =>
+  const supPills = a.technical.supports.slice(0, 2).map(v =>
     `<span class="level-pill sup">${fmt(v)}</span>`).join('');
-  const resPills = a.technical.resistances.map(v =>
+  const resPills = a.technical.resistances.slice(0, 2).map(v =>
     `<span class="level-pill res">${fmt(v)}</span>`).join('');
 
-  const swingSup = a.technical.swing_supports?.map(v =>
+  const swingSup = a.technical.swing_supports?.slice(0, 2).map(v =>
     `<span class="level-pill sup" style="opacity:.7">${fmt(v)}</span>`).join('') || '';
-  const swingRes = a.technical.swing_resistances?.map(v =>
+  const swingRes = a.technical.swing_resistances?.slice(0, 2).map(v =>
     `<span class="level-pill res" style="opacity:.7">${fmt(v)}</span>`).join('') || '';
 
   const reasonsHtml = a.key_reasons.slice(0, 3).map(r =>
@@ -1145,12 +1148,10 @@ function renderCard(a) {
     <div class="levels-col support">
       <label>▲ Support Levels</label>
       ${supPills}
-      ${swingSup}
     </div>
     <div class="levels-col resistance">
       <label>▼ Resistance Levels</label>
       ${resPills}
-      ${swingRes}
     </div>
   </div>
 

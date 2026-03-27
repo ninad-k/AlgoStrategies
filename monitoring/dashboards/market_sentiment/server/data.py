@@ -98,20 +98,46 @@ def fetch_ohlcv(symbol: str, period: str = "90d", interval: str = "1d"):
 
 # ── News ──────────────────────────────────────────────────────────────────────
 
+# Human-readable keywords for symbols whose ticker names don't appear in headlines
+_RSS_KEYWORD_MAP: dict[str, list[str]] = {
+    "XAUUSD":   ["gold", "xau"],
+    "XAGUSD":   ["silver", "xag"],
+    "OIL":      ["oil", "crude", "wti"],
+    "USOIL":    ["oil", "crude", "wti"],
+    "US30":     ["dow jones", "dow", "djia"],
+    "US100":    ["nasdaq"],
+    "DAX":      ["dax", "german"],
+    "GE30":     ["dax", "german"],
+    "UK100":    ["ftse"],
+    "SP500":    ["s&p", "s&p 500"],
+    "EURUSD":   ["eurusd", "eur/usd", "euro"],
+    "GBPUSD":   ["gbpusd", "gbp/usd", "sterling", "pound"],
+    "USDJPY":   ["usdjpy", "usd/jpy", "yen"],
+    "USDCHF":   ["usdchf", "usd/chf", "swiss franc"],
+    "EURGBP":   ["eurgbp", "eur/gbp"],
+    "EURJPY":   ["eurjpy", "eur/jpy"],
+    "NIFTY":    ["nifty", "sensex", "nse"],
+    "BANKNIFTY":["banknifty", "bank nifty", "nse bank"],
+}
+
+
 def _parse_rss(url: str, symbol: str, limit: int = 5) -> list[NewsArticle]:
     articles: list[NewsArticle] = []
     try:
         feed = feedparser.parse(url, agent="Mozilla/5.0")
         sym_lower = symbol.lower().replace("/", "").replace("usdt", "")
+        # Build keyword list: ticker + any human-readable aliases
+        extra_kws = [k.lower() for k in _RSS_KEYWORD_MAP.get(symbol.upper(), [])]
+        keywords = [sym_lower] + extra_kws
+
         for entry in feed.entries[:limit * 3]:
             title = _clean_html(entry.get("title", ""))
             summary = _clean_html(entry.get("summary", entry.get("description", "")))[:500]
             if not title:
                 continue
-            # Loose relevance filter — keep if symbol keyword found or keep all for general feeds
+            text = (title + " " + summary).lower()
             relevant = (
-                sym_lower in title.lower()
-                or sym_lower in summary.lower()
+                any(kw in text for kw in keywords)
                 or len(sym_lower) <= 3  # very short tickers — keep all
             )
             if not relevant:

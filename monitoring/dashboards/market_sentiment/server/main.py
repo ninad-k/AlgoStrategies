@@ -70,6 +70,21 @@ if _static_dir.exists():
 _analysis_cache: dict[str, tuple[float, SymbolAnalysis]] = {}  # symbol → (ts, result)
 _calendar_cache: tuple[float, list[EconomicEvent]] | None = None
 
+# ── News cache (per-symbol, longer TTL) ──────────────────────────────────────
+_news_cache: dict[str, tuple[float, list[NewsArticle]]] = {}  # symbol → (ts, articles)
+NEWS_CACHE_TTL = 4 * 3600  # 4 hours
+
+
+def _news_cache_get(symbol: str) -> list[NewsArticle] | None:
+    entry = _news_cache.get(symbol)
+    if entry and (time.time() - entry[0]) < NEWS_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _news_cache_set(symbol: str, articles: list[NewsArticle]):
+    _news_cache[symbol] = (time.time(), articles)
+
 
 def _cache_get(symbol: str) -> Optional[SymbolAnalysis]:
     entry = _analysis_cache.get(symbol)
@@ -100,11 +115,19 @@ async def _run_analysis(symbol: str, force: bool = False) -> SymbolAnalysis:
     # Run all I/O in thread pool to avoid blocking the event loop
     loop = asyncio.get_event_loop()
 
-    price, ohlcv, news = await asyncio.gather(
+    price, ohlcv = await asyncio.gather(
         loop.run_in_executor(None, fetch_price, symbol),
         loop.run_in_executor(None, fetch_ohlcv, symbol, "1y", "1d"),
-        loop.run_in_executor(None, fetch_news, symbol),
     )
+
+    # Check news cache first (only use cache if it has articles)
+    cached_news = _news_cache_get(symbol)
+    if cached_news:
+        news = cached_news
+    else:
+        news = await loop.run_in_executor(None, fetch_news, symbol)
+        if news:  # only cache non-empty results
+            _news_cache_set(symbol, news)
 
     if price is None:
         raise HTTPException(
@@ -144,7 +167,6 @@ async def _run_analysis(symbol: str, force: bool = False) -> SymbolAnalysis:
 
     display_name = DISPLAY_NAMES.get(symbol, symbol)
     group = _get_group(symbol)
-
     analysis = await loop.run_in_executor(
         None,
         analyze_symbol,
@@ -157,7 +179,8 @@ async def _run_analysis(symbol: str, force: bool = False) -> SymbolAnalysis:
 
 async def _get_calendar() -> list[EconomicEvent]:
     global _calendar_cache
-    if _calendar_cache and (time.time() - _calendar_cache[0]) < CACHE_TTL:
+    CALENDAR_CACHE_TTL = 12 * 3600  # 12 hours
+    if _calendar_cache and (time.time() - _calendar_cache[0]) < CALENDAR_CACHE_TTL:
         return _calendar_cache[1]
     loop = asyncio.get_event_loop()
     events = await loop.run_in_executor(None, fetch_economic_calendar)
@@ -237,8 +260,9 @@ async def get_calendar():
 @app.post("/api/refresh/{symbol}")
 async def refresh_symbol(symbol: str):
     symbol = symbol.upper().replace("-", "/")
-    # Invalidate cache
+    # Invalidate both analysis and news cache
     _analysis_cache.pop(symbol, None)
+    _news_cache.pop(symbol, None)
     analysis = await _run_analysis(symbol, force=True)
     return {"message": f"Refreshed {symbol}", "analysis": analysis}
 
