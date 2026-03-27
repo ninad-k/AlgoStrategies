@@ -144,6 +144,13 @@ node_modules/
 package-lock.json
 
 # ===========================
+# Dashboard & Tool Data (runtime)
+# ===========================
+monitoring/dashboards/*/data/
+tools/backtester/data/
+
+# ===========================
 # Claude Code internals
 # ===========================
 .claude/worktrees/
+.claude/settings.local.json

@@ -1,0 +1,163 @@
+//@version=5
+indicator("Pivot + VWAP + EMA Intraday System", shorttitle="PVE Intraday",
+         overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+grp1 = "Pivot Points"
+pivotType       = input.string("Traditional", "Pivot Type", options=["Traditional"], group=grp1)
+showPivotLabels = input.bool(true, "Show Pivot Labels", group=grp1)
+
+grp2 = "EMA Settings"
+emaPeriod = input.int(20, "EMA Period", minval=1, group=grp2)
+
+grp3 = "VWAP Settings"
+vwapResetSession = input.bool(true, "Reset VWAP Each Session", group=grp3)
+
+grp4 = "Display"
+pivotColor = input.color(color.yellow, "Pivot Color", group=grp4)
+resColor   = input.color(color.red, "Resistance Color", group=grp4)
+supColor   = input.color(color.green, "Support Color", group=grp4)
+vwapColor  = input.color(color.blue, "VWAP Color", group=grp4)
+emaColor   = input.color(#00E676, "EMA Color", group=grp4)
+
+// ============================================================================
+// PIVOT POINTS (Daily timeframe)
+// ============================================================================
+// Request previous day's high, low, close
+[prevHigh, prevLow, prevClose] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+
+// Traditional Pivot Calculations
+pivotPP = (prevHigh + prevLow + prevClose) / 3
+pivotR1 = 2 * pivotPP - prevLow
+pivotS1 = 2 * pivotPP - prevHigh
+pivotR2 = pivotPP + (prevHigh - prevLow)
+pivotS2 = pivotPP - (prevHigh - prevLow)
+pivotR3 = prevHigh + 2 * (pivotPP - prevLow)
+pivotS3 = prevLow - 2 * (prevHigh - pivotPP)
+
+// Plot Pivot Levels
+plot(pivotPP, "Pivot", pivotColor, 2, plot.style_line)
+plot(pivotR1, "R1", resColor, 1, plot.style_circles)
+plot(pivotR2, "R2", resColor, 1, plot.style_circles)
+plot(pivotR3, "R3", resColor, 1, plot.style_cross)
+plot(pivotS1, "S1", supColor, 1, plot.style_circles)
+plot(pivotS2, "S2", supColor, 1, plot.style_circles)
+plot(pivotS3, "S3", supColor, 1, plot.style_cross)
+
+// ============================================================================
+// VWAP (Session-based, resets daily)
+// ============================================================================
+vwapValue = ta.vwap
+plot(vwapValue, "VWAP", vwapColor, 2, plot.style_line)
+
+// ============================================================================
+// 20 EMA
+// ============================================================================
+emaValue = ta.ema(close, emaPeriod)
+plot(emaValue, "EMA " + str.tostring(emaPeriod), emaColor, 2, plot.style_line)
+
+// ============================================================================
+// ENTRY SIGNAL LOGIC
+// ============================================================================
+isGreenCandle = close > open
+isRedCandle   = close < open
+
+// Long Conditions
+priceAbovePivot = close > pivotPP
+priceAboveEma   = close > emaValue
+priceAboveVwap  = close > vwapValue
+
+// Previous bar was below at least one (new crossover confirmation)
+prevBelowAny = close[1] <= pivotPP or close[1] <= emaValue or close[1] <= vwapValue
+
+longSignal = priceAbovePivot and priceAboveEma and priceAboveVwap and isGreenCandle and prevBelowAny
+
+// Short Conditions
+priceBelowPivot = close < pivotPP
+priceBelowEma   = close < emaValue
+priceBelowVwap  = close < vwapValue
+
+prevAboveAny = close[1] >= pivotPP or close[1] >= emaValue or close[1] >= vwapValue
+
+shortSignal = priceBelowPivot and priceBelowEma and priceBelowVwap and isRedCandle and prevAboveAny
+
+// ============================================================================
+// PLOT SIGNALS
+// ============================================================================
+plotshape(longSignal, title="Long Signal", location=location.belowbar,
+          color=color.lime, style=shape.triangleup, size=size.normal, text="BUY")
+
+plotshape(shortSignal, title="Short Signal", location=location.abovebar,
+          color=color.red, style=shape.triangledown, size=size.normal, text="SELL")
+
+// ============================================================================
+// TARGET LABELS
+// ============================================================================
+if longSignal
+    label.new(bar_index, pivotR1, "TP1: R1", style=label.style_label_left,
+              color=color.new(color.green, 80), textcolor=color.white, size=size.small)
+    label.new(bar_index, pivotR2, "TP2: R2", style=label.style_label_left,
+              color=color.new(color.green, 60), textcolor=color.white, size=size.small)
+
+if shortSignal
+    label.new(bar_index, pivotS1, "TP1: S1", style=label.style_label_left,
+              color=color.new(color.red, 80), textcolor=color.white, size=size.small)
+    label.new(bar_index, pivotS2, "TP2: S2", style=label.style_label_left,
+              color=color.new(color.red, 60), textcolor=color.white, size=size.small)
+
+// ============================================================================
+// BACKGROUND COLOR (Bullish / Bearish Zone)
+// ============================================================================
+isBullishZone = close > pivotPP and close > emaValue and close > vwapValue
+isBearishZone = close < pivotPP and close < emaValue and close < vwapValue
+
+bgcolor(isBullishZone ? color.new(color.green, 92) : isBearishZone ? color.new(color.red, 92) : na,
+        title="Zone Background")
+
+// ============================================================================
+// INFO TABLE
+// ============================================================================
+var table infoTable = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 80),
+                                border_color=color.gray, border_width=1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Indicator", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 0, "Value", text_color=color.white, text_size=size.small)
+
+    table.cell(infoTable, 0, 1, "Pivot", text_color=pivotColor, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(pivotPP, format.mintick), text_color=pivotColor, text_size=size.small)
+
+    table.cell(infoTable, 0, 2, "VWAP", text_color=vwapColor, text_size=size.small)
+    table.cell(infoTable, 1, 2, str.tostring(vwapValue, format.mintick), text_color=vwapColor, text_size=size.small)
+
+    table.cell(infoTable, 0, 3, "EMA " + str.tostring(emaPeriod), text_color=emaColor, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(emaValue, format.mintick), text_color=emaColor, text_size=size.small)
+
+    biasText = isBullishZone ? "BULLISH" : isBearishZone ? "BEARISH" : "NEUTRAL"
+    biasColor = isBullishZone ? color.lime : isBearishZone ? color.red : color.gray
+    table.cell(infoTable, 0, 4, "Bias", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, biasText, text_color=biasColor, text_size=size.small)
+
+    table.cell(infoTable, 0, 5, "R1 / R2 / R3", text_color=resColor, text_size=size.tiny)
+    table.cell(infoTable, 1, 5, str.tostring(pivotR1, format.mintick) + " / " +
+               str.tostring(pivotR2, format.mintick) + " / " +
+               str.tostring(pivotR3, format.mintick), text_color=resColor, text_size=size.tiny)
+
+    table.cell(infoTable, 0, 6, "S1 / S2 / S3", text_color=supColor, text_size=size.tiny)
+    table.cell(infoTable, 1, 6, str.tostring(pivotS1, format.mintick) + " / " +
+               str.tostring(pivotS2, format.mintick) + " / " +
+               str.tostring(pivotS3, format.mintick), text_color=supColor, text_size=size.tiny)
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+alertcondition(longSignal, title="Long Entry Signal",
+               message="PVE LONG: Price above Pivot + VWAP + EMA with green candle on {{ticker}}")
+alertcondition(shortSignal, title="Short Entry Signal",
+               message="PVE SHORT: Price below Pivot + VWAP + EMA with red candle on {{ticker}}")
+alertcondition(isBullishZone and not isBullishZone[1], title="Bullish Zone Entry",
+               message="{{ticker}} entered BULLISH zone (above Pivot, VWAP, EMA)")
+alertcondition(isBearishZone and not isBearishZone[1], title="Bearish Zone Entry",
+               message="{{ticker}} entered BEARISH zone (below Pivot, VWAP, EMA)")

@@ -1,0 +1,262 @@
+//@version=5
+strategy("Pivot + VWAP + EMA Intraday Strategy", shorttitle="PVE Strategy",
+         overlay=true, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=100, initial_capital=100000, currency=currency.INR,
+         commission_type=strategy.commission.percent, commission_value=0.03,
+         slippage=2, calc_on_every_tick=false)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+grp1 = "Strategy Settings"
+emaPeriod       = input.int(20, "EMA Period", minval=1, group=grp1)
+slMode          = input.string("VWAP", "Stop Loss Mode", options=["Candle Low/High", "VWAP", "Pivot"], group=grp1)
+filterBigCandle = input.bool(true, "Filter Out Large Candles", group=grp1)
+maxCandleATR    = input.float(2.0, "Max Candle Size (x ATR)", minval=0.5, step=0.1, group=grp1)
+
+grp2 = "Session Time (Exchange Time)"
+sessionStartHr  = input.int(9, "Session Start Hour", minval=0, maxval=23, group=grp2)
+sessionStartMin  = input.int(15, "Session Start Minute", minval=0, maxval=59, group=grp2)
+forceExitHr     = input.int(15, "Force Exit Hour", minval=0, maxval=23, group=grp2)
+forceExitMin    = input.int(20, "Force Exit Minute", minval=0, maxval=59, group=grp2)
+noNewTradeHr    = input.int(14, "No New Trade After Hour", minval=0, maxval=23, group=grp2)
+noNewTradeMin   = input.int(30, "No New Trade After Minute", minval=0, maxval=59, group=grp2)
+
+grp3 = "Profit Booking"
+tp1Pct = input.float(50, "TP1 % (at R1/S1)", minval=10, maxval=100, group=grp3)
+tp2Pct = input.float(25, "TP2 % (at R2/S2)", minval=0, maxval=100, group=grp3)
+tp3Pct = input.float(25, "TP3 % (at R3/S3)", minval=0, maxval=100, group=grp3)
+
+grp4 = "Display"
+pivotColor = input.color(color.yellow, "Pivot Color", group=grp4)
+resColor   = input.color(color.red, "Resistance Color", group=grp4)
+supColor   = input.color(color.green, "Support Color", group=grp4)
+vwapColor  = input.color(color.blue, "VWAP Color", group=grp4)
+emaColor   = input.color(#00E676, "EMA Color", group=grp4)
+
+// ============================================================================
+// PIVOT POINTS (Daily timeframe)
+// ============================================================================
+[prevHigh, prevLow, prevClose] = request.security(syminfo.tickerid, "D",
+    [high[1], low[1], close[1]], lookahead=barmerge.lookahead_on)
+
+pivotPP = (prevHigh + prevLow + prevClose) / 3
+pivotR1 = 2 * pivotPP - prevLow
+pivotS1 = 2 * pivotPP - prevHigh
+pivotR2 = pivotPP + (prevHigh - prevLow)
+pivotS2 = pivotPP - (prevHigh - prevLow)
+pivotR3 = prevHigh + 2 * (pivotPP - prevLow)
+pivotS3 = prevLow - 2 * (prevHigh - pivotPP)
+
+// Plot
+plot(pivotPP, "Pivot", pivotColor, 2)
+plot(pivotR1, "R1", resColor, 1, plot.style_circles)
+plot(pivotR2, "R2", resColor, 1, plot.style_circles)
+plot(pivotR3, "R3", resColor, 1, plot.style_cross)
+plot(pivotS1, "S1", supColor, 1, plot.style_circles)
+plot(pivotS2, "S2", supColor, 1, plot.style_circles)
+plot(pivotS3, "S3", supColor, 1, plot.style_cross)
+
+// ============================================================================
+// VWAP
+// ============================================================================
+vwapValue = ta.vwap
+plot(vwapValue, "VWAP", vwapColor, 2)
+
+// ============================================================================
+// 20 EMA
+// ============================================================================
+emaValue = ta.ema(close, emaPeriod)
+plot(emaValue, "EMA", emaColor, 2)
+
+// ============================================================================
+// ATR for candle filter
+// ============================================================================
+atrValue = ta.atr(14)
+
+// ============================================================================
+// TIME FUNCTIONS
+// ============================================================================
+currentHour   = hour(time, syminfo.timezone)
+currentMinute = minute(time, syminfo.timezone)
+currentMins   = currentHour * 60 + currentMinute
+
+isSessionActive  = currentMins >= (sessionStartHr * 60 + sessionStartMin) and
+                   currentMins < (forceExitHr * 60 + forceExitMin)
+isForceExitTime  = currentMins >= (forceExitHr * 60 + forceExitMin)
+isNoNewTradeTime = currentMins >= (noNewTradeHr * 60 + noNewTradeMin)
+
+// ============================================================================
+// ENTRY CONDITIONS
+// ============================================================================
+isGreenCandle = close > open
+isRedCandle   = close < open
+candleSize    = high - low
+
+// Candle size filter
+candleOK = not filterBigCandle or (atrValue > 0 and candleSize <= atrValue * maxCandleATR)
+
+// Long conditions
+priceAbovePivot = close > pivotPP
+priceAboveEma   = close > emaValue
+priceAboveVwap  = close > vwapValue
+prevBelowAny    = close[1] <= pivotPP or close[1] <= emaValue or close[1] <= vwapValue
+
+longEntry = priceAbovePivot and priceAboveEma and priceAboveVwap and
+            isGreenCandle and prevBelowAny and candleOK and
+            isSessionActive and not isNoNewTradeTime
+
+// Short conditions
+priceBelowPivot = close < pivotPP
+priceBelowEma   = close < emaValue
+priceBelowVwap  = close < vwapValue
+prevAboveAny    = close[1] >= pivotPP or close[1] >= emaValue or close[1] >= vwapValue
+
+shortEntry = priceBelowPivot and priceBelowEma and priceBelowVwap and
+             isRedCandle and prevAboveAny and candleOK and
+             isSessionActive and not isNoNewTradeTime
+
+// ============================================================================
+// STOP LOSS CALCULATION
+// ============================================================================
+longSL = switch slMode
+    "Candle Low/High" => low
+    "VWAP"            => vwapValue
+    "Pivot"           => pivotPP
+    => vwapValue
+
+shortSL = switch slMode
+    "Candle Low/High" => high
+    "VWAP"            => vwapValue
+    "Pivot"           => pivotPP
+    => vwapValue
+
+// ============================================================================
+// RISK/REWARD FILTER
+// ============================================================================
+longRR  = pivotR1 > close ? (pivotR1 - close) / math.max(close - longSL, syminfo.mintick) : 0
+shortRR = pivotS1 < close ? (close - pivotS1) / math.max(shortSL - close, syminfo.mintick) : 0
+
+longEntryValid  = longEntry and longRR >= 1.0
+shortEntryValid = shortEntry and shortRR >= 1.0
+
+// ============================================================================
+// STRATEGY EXECUTION
+// ============================================================================
+
+// Track partial exits
+var bool tp1LongHit  = false
+var bool tp2LongHit  = false
+var bool tp1ShortHit = false
+var bool tp2ShortHit = false
+
+// Long Entry
+if longEntryValid and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    tp1LongHit := false
+    tp2LongHit := false
+
+// Short Entry
+if shortEntryValid and strategy.position_size == 0
+    strategy.entry("Short", strategy.short)
+    tp1ShortHit := false
+    tp2ShortHit := false
+
+// ============================================================================
+// LONG POSITION MANAGEMENT
+// ============================================================================
+if strategy.position_size > 0
+    // Stop Loss
+    strategy.exit("Long SL", "Long", stop=longSL)
+
+    // TP1: 50% at R1
+    if not tp1LongHit and high >= pivotR1
+        strategy.close("Long", comment="TP1 R1", qty_percent=tp1Pct)
+        tp1LongHit := true
+
+    // TP2: 25% at R2
+    if tp1LongHit and not tp2LongHit and high >= pivotR2
+        strategy.close("Long", comment="TP2 R2", qty_percent=tp2Pct / (tp2Pct + tp3Pct) * 100)
+        tp2LongHit := true
+
+    // TP3: Remaining at R3
+    if tp1LongHit and tp2LongHit and high >= pivotR3
+        strategy.close("Long", comment="TP3 R3")
+
+// ============================================================================
+// SHORT POSITION MANAGEMENT
+// ============================================================================
+if strategy.position_size < 0
+    // Stop Loss
+    strategy.exit("Short SL", "Short", stop=shortSL)
+
+    // TP1: 50% at S1
+    if not tp1ShortHit and low <= pivotS1
+        strategy.close("Short", comment="TP1 S1", qty_percent=tp1Pct)
+        tp1ShortHit := true
+
+    // TP2: 25% at S2
+    if tp1ShortHit and not tp2ShortHit and low <= pivotS2
+        strategy.close("Short", comment="TP2 S2", qty_percent=tp2Pct / (tp2Pct + tp3Pct) * 100)
+        tp2ShortHit := true
+
+    // TP3: Remaining at S3
+    if tp1ShortHit and tp2ShortHit and low <= pivotS3
+        strategy.close("Short", comment="TP3 S3")
+
+// ============================================================================
+// FORCE EXIT at 15:20
+// ============================================================================
+if isForceExitTime and strategy.position_size != 0
+    strategy.close_all(comment="Force Exit 15:20")
+    tp1LongHit  := false
+    tp2LongHit  := false
+    tp1ShortHit := false
+    tp2ShortHit := false
+
+// ============================================================================
+// SIGNAL PLOTS
+// ============================================================================
+plotshape(longEntryValid and strategy.position_size == 0, title="Long Signal",
+          location=location.belowbar, color=color.lime, style=shape.triangleup,
+          size=size.normal, text="BUY")
+
+plotshape(shortEntryValid and strategy.position_size == 0, title="Short Signal",
+          location=location.abovebar, color=color.red, style=shape.triangledown,
+          size=size.normal, text="SELL")
+
+// ============================================================================
+// ZONE BACKGROUND
+// ============================================================================
+isBullishZone = close > pivotPP and close > emaValue and close > vwapValue
+isBearishZone = close < pivotPP and close < emaValue and close < vwapValue
+bgcolor(isBullishZone ? color.new(color.green, 92) : isBearishZone ? color.new(color.red, 92) : na)
+
+// ============================================================================
+// INFO TABLE
+// ============================================================================
+var table infoTable = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 80),
+                                border_color=color.gray, border_width=1)
+
+if barstate.islast
+    biasText  = isBullishZone ? "BULLISH" : isBearishZone ? "BEARISH" : "NEUTRAL"
+    biasColor = isBullishZone ? color.lime : isBearishZone ? color.red : color.gray
+
+    table.cell(infoTable, 0, 0, "Pivot", text_color=pivotColor, text_size=size.small)
+    table.cell(infoTable, 1, 0, str.tostring(pivotPP, format.mintick), text_color=pivotColor, text_size=size.small)
+    table.cell(infoTable, 0, 1, "VWAP", text_color=vwapColor, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(vwapValue, format.mintick), text_color=vwapColor, text_size=size.small)
+    table.cell(infoTable, 0, 2, "EMA", text_color=emaColor, text_size=size.small)
+    table.cell(infoTable, 1, 2, str.tostring(emaValue, format.mintick), text_color=emaColor, text_size=size.small)
+    table.cell(infoTable, 0, 3, "Bias", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, biasText, text_color=biasColor, text_size=size.small)
+    table.cell(infoTable, 0, 4, "SL Mode", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 4, slMode, text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 0, 5, "R:R Filter", text_color=color.white, text_size=size.tiny)
+    table.cell(infoTable, 1, 5, "Min 1:1", text_color=color.white, text_size=size.tiny)
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+alertcondition(longEntryValid, title="Long Entry", message="PVE LONG on {{ticker}} at {{close}}")
+alertcondition(shortEntryValid, title="Short Entry", message="PVE SHORT on {{ticker}} at {{close}}")
