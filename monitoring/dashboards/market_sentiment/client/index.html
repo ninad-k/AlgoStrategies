@@ -696,9 +696,7 @@ main {
 <script>
 /* ── State ─────────────────────────────────────────────────── */
 // Auto-detect: if opened as a file, point to the running server
-const API = (location.protocol === 'file:' || location.port !== '8000')
-  ? 'http://localhost:8000'
-  : '';
+const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
 let symbolGroups = {};
 let selectedSymbols = [];
 let analyses = {};
