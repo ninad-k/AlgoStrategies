@@ -1047,7 +1047,7 @@ function updateNewsFeed() {
 
   document.getElementById('news-list').innerHTML = page.map(n => `
 <div class="news-item">
-  <div class="news-source">${escHtml(n.source)} · <span style="color:var(--accent)">${escHtml(n.symbol)}</span></div>
+  <div class="news-source">${n.url ? `<a href="${escHtml(new URL(n.url).origin)}" target="_blank" style="color:inherit;text-decoration:underline dotted;">${escHtml(n.source)}</a>` : escHtml(n.source)} · <span style="color:var(--accent)">${escHtml(n.symbol)}</span></div>
   <div class="news-title"><a href="${escHtml(n.url)}" target="_blank">${escHtml(n.title)}</a></div>
   ${n.summary ? `<div class="news-summary">${escHtml(n.summary)}</div>` : ''}
   <div class="news-meta">${n.published ? new Date(n.published).toLocaleString() : ''}</div>

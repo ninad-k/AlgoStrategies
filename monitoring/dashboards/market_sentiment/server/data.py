@@ -221,46 +221,61 @@ def fetch_news(symbol: str) -> list[NewsArticle]:
 
 # ── Economic Calendar ─────────────────────────────────────────────────────────
 
-_FF_CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+_FF_URLS = [
+    "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
+    "https://nfs.faireconomy.media/ff_calendar_nextweek.json",
+]
+# Forex Factory source page for each event
+_FF_SOURCE_URL = "https://www.forexfactory.com/calendar"
+
+
+def _fetch_ff_url(url: str) -> list[dict]:
+    resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+    return resp.json()
+
 
 def fetch_economic_calendar() -> list[EconomicEvent]:
     """
-    Pull this week's high/medium-impact events from Forex Factory's
-    public JSON endpoint. Falls back to an empty list if unavailable.
+    Pull this week's AND next week's high/medium-impact events from
+    Forex Factory's public JSON endpoints. Each event links to Forex Factory
+    calendar as the source. Falls back to an empty list if unavailable.
     """
-    events: list[EconomicEvent] = []
-    try:
-        resp = requests.get(_FF_CALENDAR_URL, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-        resp.raise_for_status()
-        data = resp.json()
-        for item in data:
-            impact_raw = (item.get("impact") or "").upper()
-            impact = impact_raw if impact_raw in ("HIGH", "MEDIUM", "LOW") else "LOW"
-            # Only include HIGH and MEDIUM impact
-            if impact == "LOW":
-                continue
-            # Parse datetime
-            dt_str = item.get("date", "")
-            try:
-                dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                scheduled = dt.strftime("%Y-%m-%d %H:%M UTC")
-            except Exception:
-                scheduled = dt_str
+    from urllib.parse import quote_plus
+    raw_items: list[dict] = []
 
-            title = item.get("title", "Unknown Event")
-            from urllib.parse import quote_plus
-            search_url = f"https://news.google.com/search?q={quote_plus(title)}"
-            events.append(EconomicEvent(
-                title=title,
-                country=item.get("country", ""),
-                impact=impact,
-                scheduled_time=scheduled,
-                forecast=item.get("forecast") or None,
-                previous=item.get("previous") or None,
-                url=search_url,
-            ))
-    except Exception as exc:
-        log.warning("Economic calendar fetch failed: %s", exc)
+    for url in _FF_URLS:
+        try:
+            raw_items.extend(_fetch_ff_url(url))
+        except Exception as exc:
+            log.warning("Calendar fetch failed (%s): %s", url, exc)
+
+    events: list[EconomicEvent] = []
+    for item in raw_items:
+        impact_raw = (item.get("impact") or "").upper()
+        impact = impact_raw if impact_raw in ("HIGH", "MEDIUM", "LOW") else "LOW"
+        if impact == "LOW":
+            continue
+
+        dt_str = item.get("date", "")
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            scheduled = dt.strftime("%Y-%m-%d %H:%M UTC")
+        except Exception:
+            scheduled = dt_str
+
+        title = item.get("title", "Unknown Event")
+        # Direct Forex Factory calendar link as canonical source
+        ff_url = _FF_SOURCE_URL
+        events.append(EconomicEvent(
+            title=title,
+            country=item.get("country", ""),
+            impact=impact,
+            scheduled_time=scheduled,
+            forecast=item.get("forecast") or None,
+            previous=item.get("previous") or None,
+            url=ff_url,
+        ))
 
     # Sort by time
     events.sort(key=lambda e: e.scheduled_time)
