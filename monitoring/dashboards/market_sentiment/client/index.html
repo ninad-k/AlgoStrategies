@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Market Sentiment Dashboard</title>
+<title>Rey Capital — Market Sentiment Dashboard</title>
 <style>
 /* ── Reset & Base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -58,6 +58,19 @@ header {
   gap: 8px;
 }
 .logo span { color: var(--accent); }
+.logo-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+.logo-company {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
 
 .header-meta {
   margin-left: auto;
@@ -606,6 +619,8 @@ main {
         <polyline points="16 7 22 7 22 13"/>
       </svg>
       Market <span>Sentiment</span>
+      <div class="logo-divider"></div>
+      <span class="logo-company">Rey Capital</span>
     </div>
     <div class="header-meta">
       <span id="last-update">Not loaded yet</span>
