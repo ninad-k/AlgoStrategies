@@ -124,15 +124,32 @@ def _atr(df: pd.DataFrame, period: int = 14) -> float:
 # ── Trend Signal (MA crossover) ───────────────────────────────────────────────
 
 def _trend_signal(series: pd.Series) -> str:
-    if len(series) < 50:
+    if len(series) < 20:
         return "SIDEWAYS"
-    ma50 = series.rolling(50).mean().iloc[-1]
-    ma200 = series.rolling(200).mean().iloc[-1] if len(series) >= 200 else ma50
     price = series.iloc[-1]
-    if price > ma50 > ma200:
-        return "UPTREND"
-    if price < ma50 < ma200:
-        return "DOWNTREND"
+    if len(series) >= 200:
+        # Full MA50 vs MA200 crossover
+        ma50  = series.rolling(50).mean().iloc[-1]
+        ma200 = series.rolling(200).mean().iloc[-1]
+        if price > ma50 > ma200:
+            return "UPTREND"
+        if price < ma50 < ma200:
+            return "DOWNTREND"
+    elif len(series) >= 50:
+        # MA20 vs MA50 when not enough data for MA200
+        ma20 = series.rolling(20).mean().iloc[-1]
+        ma50 = series.rolling(50).mean().iloc[-1]
+        if price > ma20 > ma50:
+            return "UPTREND"
+        if price < ma20 < ma50:
+            return "DOWNTREND"
+    else:
+        # Short-term: price vs MA20 only
+        ma20 = series.rolling(20).mean().iloc[-1]
+        if price > ma20 * 1.01:
+            return "UPTREND"
+        if price < ma20 * 0.99:
+            return "DOWNTREND"
     return "SIDEWAYS"
 
 

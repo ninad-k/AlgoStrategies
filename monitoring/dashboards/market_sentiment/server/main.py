@@ -102,7 +102,7 @@ async def _run_analysis(symbol: str, force: bool = False) -> SymbolAnalysis:
 
     price, ohlcv, news = await asyncio.gather(
         loop.run_in_executor(None, fetch_price, symbol),
-        loop.run_in_executor(None, fetch_ohlcv, symbol, "90d", "1d"),
+        loop.run_in_executor(None, fetch_ohlcv, symbol, "1y", "1d"),
         loop.run_in_executor(None, fetch_news, symbol),
     )
 
