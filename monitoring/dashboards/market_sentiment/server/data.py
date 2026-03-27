@@ -118,8 +118,8 @@ _RSS_KEYWORD_MAP: dict[str, list[str]] = {
     "USDCHF":   ["usdchf", "usd/chf", "swiss franc"],
     "EURGBP":   ["eurgbp", "eur/gbp"],
     "EURJPY":   ["eurjpy", "eur/jpy"],
-    "NIFTY":    ["nifty", "sensex", "nse"],
-    "BANKNIFTY":["banknifty", "bank nifty", "nse bank"],
+    "NIFTY":    ["nifty", "nse", "nifty 50"],
+    "SENSEX":   ["sensex", "bse", "bombay stock"],
 }
 
 
@@ -163,6 +163,9 @@ def _parse_rss(url: str, symbol: str, limit: int = 5) -> list[NewsArticle]:
 
 _NEWSAPI_QUERY_MAP = {
     "XAUUSD": "gold price XAU",
+    "XAGUSD": "silver price XAG",
+    "OIL": "crude oil WTI price",
+    "SENSEX": "BSE Sensex India",
     "US30": "Dow Jones index",
     "US100": "Nasdaq 100 index",
     "DAX": "DAX German stock index",
@@ -219,8 +222,8 @@ def fetch_news(symbol: str) -> list[NewsArticle]:
     # 3. Category-specific RSS
     is_crypto = "/" in symbol or symbol in ("BTC", "ETH", "SOL")
     is_india = symbol in (
-        "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY",
-        "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+        "NIFTY", "SENSEX",
+        "HDFCBANK", "INFY",
     )
     is_commodity = symbol in ("XAUUSD", "XAGUSD", "OIL", "USOIL")
     is_forex = symbol in ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "EURGBP", "EURJPY")

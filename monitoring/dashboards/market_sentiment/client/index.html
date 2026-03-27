@@ -1086,7 +1086,9 @@ async function refreshAll() {
 function renderCards() {
   const grid = document.getElementById('cards-grid');
   grid.innerHTML = '';
-  for (const sym of selectedSymbols) {
+  // Iterate in reverse so first symbol in selectedSymbols ends up on top (prepend order)
+  for (let i = selectedSymbols.length - 1; i >= 0; i--) {
+    const sym = selectedSymbols[i];
     if (analyses[sym]) renderCard(analyses[sym]);
   }
   if (!grid.children.length) {
@@ -1220,7 +1222,7 @@ function renderCard(a) {
   const emptyState = grid.querySelector('.empty-state');
   if (emptyState) emptyState.remove();
 
-  grid.insertAdjacentHTML('beforeend', html);
+  grid.insertAdjacentHTML('afterbegin', html);
   updateChipSentiment(a.symbol, a.sentiment);
 }
 

@@ -41,15 +41,10 @@ MAX_NEWS_ARTICLES = int(os.getenv("MAX_NEWS_ARTICLES", 10))
 TICKER_MAP: dict[str, str] = {
     # Indian indices
     "NIFTY": "^NSEI",
-    "BANKNIFTY": "^NSEBANK",
-    "FINNIFTY": "NIFTY_FIN_SERVICE.NS",
-    "MIDCPNIFTY": "^NSMIDCP",
+    "SENSEX": "^BSESN",
     # Indian large-cap stocks
-    "RELIANCE": "RELIANCE.NS",
-    "TCS": "TCS.NS",
     "HDFCBANK": "HDFCBANK.NS",
     "INFY": "INFY.NS",
-    "ICICIBANK": "ICICIBANK.NS",
     # Forex majors
     "EURUSD": "EURUSD=X",
     "GBPUSD": "GBPUSD=X",
@@ -60,7 +55,6 @@ TICKER_MAP: dict[str, str] = {
     # Crypto
     "BTC/USDT": "BTC-USD",
     "ETH/USDT": "ETH-USD",
-    "SOL/USDT": "SOL-USD",
     # US large-cap
     "AAPL": "AAPL",
     "MSFT": "MSFT",
@@ -69,6 +63,8 @@ TICKER_MAP: dict[str, str] = {
     "NVDA": "NVDA",
     # Commodities
     "XAUUSD": "GC=F",
+    "XAGUSD": "SI=F",
+    "OIL": "CL=F",
     # Global indices / CFDs
     "US30": "^DJI",
     "US100": "^NDX",
@@ -79,12 +75,9 @@ TICKER_MAP: dict[str, str] = {
 # ── Human-readable display names ──────────────────────────────────────────────
 DISPLAY_NAMES: dict[str, str] = {
     "NIFTY": "Nifty 50",
-    "BANKNIFTY": "Bank Nifty",
-    "FINNIFTY": "Fin Nifty",
-    "MIDCPNIFTY": "Midcap Nifty",
+    "SENSEX": "BSE Sensex",
     "BTC/USDT": "Bitcoin",
     "ETH/USDT": "Ethereum",
-    "SOL/USDT": "Solana",
     "EURUSD": "EUR/USD",
     "GBPUSD": "GBP/USD",
     "USDJPY": "USD/JPY",
@@ -92,6 +85,8 @@ DISPLAY_NAMES: dict[str, str] = {
     "EURGBP": "EUR/GBP",
     "EURJPY": "EUR/JPY",
     "XAUUSD": "Gold (XAU/USD)",
+    "XAGUSD": "Silver (XAG/USD)",
+    "OIL": "Crude Oil (WTI)",
     "US30": "Dow Jones 30",
     "US100": "Nasdaq 100",
     "DAX": "DAX 40",
@@ -100,12 +95,12 @@ DISPLAY_NAMES: dict[str, str] = {
 
 # ── Symbol categories (used for grouping in UI) ───────────────────────────────
 SYMBOL_GROUPS: dict[str, list[str]] = {
-    "Indian Indices": ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"],
-    "Indian Stocks": ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"],
+    "Indian Indices": ["NIFTY", "SENSEX"],
+    "Indian Stocks": ["INFY", "HDFCBANK"],
     "Forex": ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "EURGBP", "EURJPY"],
-    "Commodities": ["XAUUSD"],
+    "Commodities": ["XAUUSD", "XAGUSD", "OIL"],
     "Global Indices": ["US30", "US100", "DAX", "GE30"],
-    "Crypto": ["BTC/USDT", "ETH/USDT", "SOL/USDT"],
+    "Crypto": ["BTC/USDT", "ETH/USDT"],
     "US Stocks": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
 }
 
