@@ -117,11 +117,22 @@ RSS_FEEDS_GENERAL = [
     "https://feeds.finance.yahoo.com/rss/2.0/headline?region=US&lang=en-US",
     "https://feeds.reuters.com/reuters/businessNews",
     "https://feeds.reuters.com/reuters/topNews",
+    "https://www.investing.com/rss/news.rss",
+    "https://www.investing.com/rss/news_25.rss",       # Stocks
+]
+
+RSS_FEEDS_FOREX = [
+    "https://www.investing.com/rss/news_14.rss",       # Forex
+]
+
+RSS_FEEDS_COMMODITIES = [
+    "https://www.investing.com/rss/news_11.rss",       # Commodities
 ]
 
 RSS_FEEDS_CRYPTO = [
     "https://cointelegraph.com/rss",
     "https://coindesk.com/arc/outboundfeeds/rss/",
+    "https://www.investing.com/rss/news_301.rss",      # Crypto
 ]
 
 RSS_FEEDS_INDIA = [

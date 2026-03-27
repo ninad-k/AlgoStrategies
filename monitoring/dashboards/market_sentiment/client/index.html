@@ -8,7 +8,7 @@
 /* ── Reset & Base ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-:root {
+:root, [data-theme="light"] {
   --bg:        #F0F4F8;
   --surface:   #FFFFFF;
   --surface2:  #E8EEF4;
@@ -21,6 +21,20 @@
   --text-dim:  #64748B;
   --radius:    10px;
   --shadow:    0 4px 24px rgba(0,0,0,.08);
+}
+[data-theme="dark"] {
+  --bg:        #0b0d14;
+  --surface:   #141722;
+  --surface2:  #1c2030;
+  --border:    #2a2f42;
+  --accent:    #4e8cff;
+  --green:     #22c55e;
+  --red:       #ef4444;
+  --yellow:    #f59e0b;
+  --text:      #e2e8f0;
+  --text-dim:  #94a3b8;
+  --radius:    10px;
+  --shadow:    0 4px 24px rgba(0,0,0,.35);
 }
 
 body {
@@ -167,12 +181,22 @@ header {
 .add-symbol-input:focus { border-color: var(--accent); }
 .add-symbol-input::placeholder { color: var(--text-dim); }
 
+.theme-toggle {
+  display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim);
+}
+.theme-toggle label {
+  display: flex; align-items: center; gap: 3px; cursor: pointer;
+}
+.theme-toggle input[type="radio"] {
+  accent-color: var(--accent); margin: 0; cursor: pointer;
+}
+
 .sym-autocomplete {
   position: absolute;
   top: 100%;
   left: 0;
   z-index: 999;
-  background: #FFFFFF;
+  background: var(--surface);
   border: 1px solid var(--accent);
   border-radius: 6px;
   min-width: 220px;
@@ -676,6 +700,10 @@ main {
       <span class="logo-company" style="font-size:12px;color:var(--text-dim);">Market Sentiment Dashboard</span>
     </div>
     <div class="header-meta">
+      <div class="theme-toggle">
+        <label><input type="radio" name="theme" value="light" checked onchange="setTheme('light')"> Light</label>
+        <label><input type="radio" name="theme" value="dark" onchange="setTheme('dark')"> Dark</label>
+      </div>
       <span id="last-update">Not loaded yet</span>
       <button class="btn btn-sm btn-outline" id="btn-refresh" onclick="refreshAll()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -758,6 +786,12 @@ main {
 <div id="toast-container"></div>
 
 <script>
+/* ── Theme toggle ─────────────────────────────────────────── */
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  document.querySelectorAll('input[name="theme"]').forEach(r => r.checked = r.value === theme);
+}
+
 /* ── State ─────────────────────────────────────────────────── */
 // Auto-detect: if opened as a file, point to the running server
 const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';

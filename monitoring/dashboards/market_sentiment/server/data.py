@@ -17,7 +17,9 @@ import yfinance as yf
 from .config import (
     NEWS_API_KEY,
     MAX_NEWS_ARTICLES,
+    RSS_FEEDS_COMMODITIES,
     RSS_FEEDS_CRYPTO,
+    RSS_FEEDS_FOREX,
     RSS_FEEDS_GENERAL,
     RSS_FEEDS_INDIA,
     TICKER_MAP,
@@ -221,13 +223,23 @@ def fetch_news(symbol: str) -> list[NewsArticle]:
         "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
     )
     is_commodity = symbol in ("XAUUSD", "XAGUSD", "OIL", "USOIL")
-    is_global_index = symbol in ("US30", "US100", "DAX", "GE30", "UK100", "SP500")
+    is_forex = symbol in ("EURUSD", "GBPUSD", "USDJPY", "USDCHF", "EURGBP", "EURJPY")
 
     if is_crypto:
         for feed_url in RSS_FEEDS_CRYPTO:
             articles.extend(_parse_rss(feed_url, symbol, limit=3))
     elif is_india:
         for feed_url in RSS_FEEDS_INDIA:
+            articles.extend(_parse_rss(feed_url, symbol, limit=3))
+    elif is_commodity:
+        for feed_url in RSS_FEEDS_COMMODITIES:
+            articles.extend(_parse_rss(feed_url, symbol, limit=3))
+        for feed_url in RSS_FEEDS_GENERAL:
+            articles.extend(_parse_rss(feed_url, symbol, limit=3))
+    elif is_forex:
+        for feed_url in RSS_FEEDS_FOREX:
+            articles.extend(_parse_rss(feed_url, symbol, limit=3))
+        for feed_url in RSS_FEEDS_GENERAL:
             articles.extend(_parse_rss(feed_url, symbol, limit=3))
     else:
         for feed_url in RSS_FEEDS_GENERAL:
