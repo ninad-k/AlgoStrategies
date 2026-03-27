@@ -110,7 +110,7 @@ SYMBOL_GROUPS: dict[str, list[str]] = {
 }
 
 # ── Default symbols shown on load ─────────────────────────────────────────────
-DEFAULT_SYMBOLS = ["NIFTY", "BANKNIFTY", "EURUSD", "BTC/USDT", "AAPL", "NVDA"]
+DEFAULT_SYMBOLS = ["XAUUSD", "EURUSD", "US30", "US100"]
 
 # ── News RSS sources (symbol-agnostic + symbol-specific) ─────────────────────
 RSS_FEEDS_GENERAL = [
