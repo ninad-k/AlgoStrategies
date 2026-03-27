@@ -179,8 +179,6 @@ def list_symbols():
 @app.get("/api/analysis/{symbol}")
 async def get_analysis(symbol: str):
     symbol = symbol.upper().replace("-", "/")
-    if symbol not in TICKER_MAP:
-        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not configured.")
     analysis = await _run_analysis(symbol)
     return analysis
 
@@ -193,7 +191,7 @@ async def get_dashboard(
     )
 ):
     requested = [s.strip().upper().replace("-", "/") for s in symbols.split(",") if s.strip()]
-    valid = [s for s in requested if s in TICKER_MAP]
+    valid = list(dict.fromkeys(requested))  # deduplicate, preserve order
     if not valid:
         raise HTTPException(status_code=400, detail="No valid symbols provided.")
 
@@ -225,8 +223,6 @@ async def get_dashboard(
 @app.get("/api/news/{symbol}")
 async def get_news(symbol: str):
     symbol = symbol.upper().replace("-", "/")
-    if symbol not in TICKER_MAP:
-        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not configured.")
     loop = asyncio.get_event_loop()
     news = await loop.run_in_executor(None, fetch_news, symbol)
     return {"symbol": symbol, "articles": news, "count": len(news)}
@@ -241,8 +237,6 @@ async def get_calendar():
 @app.post("/api/refresh/{symbol}")
 async def refresh_symbol(symbol: str):
     symbol = symbol.upper().replace("-", "/")
-    if symbol not in TICKER_MAP:
-        raise HTTPException(status_code=404, detail=f"Symbol '{symbol}' not configured.")
     # Invalidate cache
     _analysis_cache.pop(symbol, None)
     analysis = await _run_analysis(symbol, force=True)
