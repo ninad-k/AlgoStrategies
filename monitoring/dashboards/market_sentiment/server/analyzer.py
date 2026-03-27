@@ -45,26 +45,40 @@ def _get_anthropic_client():
     return _anthropic_client
 
 
+def _call_groq(prompt: str) -> str:
+    client = _get_groq_client()
+    response = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1500,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content
+
+
+def _call_anthropic(prompt: str) -> str:
+    client = _get_anthropic_client()
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.content[0].text
+
+
 def _call_ai(prompt: str) -> str:
-    """Call whichever AI provider is configured and return raw text."""
+    """Call AI provider with fallback: Groq → Anthropic → error."""
     if AI_PROVIDER == "groq":
-        client = _get_groq_client()
-        response = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1500,
-            temperature=0.3,
-        )
-        return response.choices[0].message.content
+        try:
+            return _call_groq(prompt)
+        except Exception as exc:
+            log.warning("Groq failed (%s), falling back to Anthropic", exc)
+            if ANTHROPIC_API_KEY:
+                return _call_anthropic(prompt)
+            raise
 
     if AI_PROVIDER == "anthropic":
-        client = _get_anthropic_client()
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
+        return _call_anthropic(prompt)
 
     raise RuntimeError("No AI provider configured. Set GROQ_API_KEY or ANTHROPIC_API_KEY in .env")
 

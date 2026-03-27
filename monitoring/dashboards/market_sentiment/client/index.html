@@ -809,6 +809,10 @@ async function boot() {
   try {
     const data = await apiFetch('/api/symbols');
     symbolGroups = data.groups;
+    // Clean up custom symbols: remove any that are now in built-in groups
+    const allBuiltIn = Object.values(data.groups).flat();
+    customSymbols = customSymbols.filter(s => !allBuiltIn.includes(s));
+    localStorage.setItem('customSymbols', JSON.stringify(customSymbols));
     selectedSymbols = [...data.defaults];
     renderSymbolBar();
     renderCustomChips();
