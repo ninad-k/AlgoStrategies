@@ -1,8 +1,8 @@
 """
-AI market analyzer — supports Groq (free) and Anthropic Claude.
+AI market analyzer — supports Groq, Anthropic Claude, and OpenAI.
 
 Auto-detects which provider to use based on which API key is set in .env.
-Priority: GROQ_API_KEY → ANTHROPIC_API_KEY → fallback neutral response.
+Priority: GROQ → ANTHROPIC → OPENAI → fallback neutral response.
 """
 
 from __future__ import annotations
@@ -12,7 +12,10 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from .config import AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_MODEL, GROQ_API_KEY, GROQ_MODEL
+from .config import (
+    AI_PROVIDER, ANTHROPIC_API_KEY, CLAUDE_MODEL,
+    GROQ_API_KEY, GROQ_MODEL, OPENAI_API_KEY, OPENAI_MODEL,
+)
 from .models import (
     EconomicEvent,
     NewsArticle,
@@ -27,6 +30,7 @@ log = logging.getLogger(__name__)
 
 _anthropic_client = None
 _groq_client = None
+_openai_client = None
 
 
 def _get_groq_client():
@@ -43,6 +47,14 @@ def _get_anthropic_client():
         from anthropic import Anthropic
         _anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
     return _anthropic_client
+
+
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        from openai import OpenAI
+        _openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    return _openai_client
 
 
 def _call_groq(prompt: str) -> str:
@@ -66,21 +78,43 @@ def _call_anthropic(prompt: str) -> str:
     return response.content[0].text
 
 
+def _call_openai(prompt: str) -> str:
+    client = _get_openai_client()
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1500,
+        temperature=0.3,
+    )
+    return response.choices[0].message.content
+
+
 def _call_ai(prompt: str) -> str:
-    """Call AI provider with fallback: Groq → Anthropic → error."""
-    if AI_PROVIDER == "groq":
+    """Call AI provider with fallback chain: Groq → Anthropic → OpenAI → error."""
+    errors = []
+
+    if GROQ_API_KEY:
         try:
             return _call_groq(prompt)
         except Exception as exc:
-            log.warning("Groq failed (%s), falling back to Anthropic", exc)
-            if ANTHROPIC_API_KEY:
-                return _call_anthropic(prompt)
-            raise
+            errors.append(f"Groq: {exc}")
+            log.warning("Groq failed (%s), trying next provider", exc)
 
-    if AI_PROVIDER == "anthropic":
-        return _call_anthropic(prompt)
+    if ANTHROPIC_API_KEY:
+        try:
+            return _call_anthropic(prompt)
+        except Exception as exc:
+            errors.append(f"Anthropic: {exc}")
+            log.warning("Anthropic failed (%s), trying next provider", exc)
 
-    raise RuntimeError("No AI provider configured. Set GROQ_API_KEY or ANTHROPIC_API_KEY in .env")
+    if OPENAI_API_KEY:
+        try:
+            return _call_openai(prompt)
+        except Exception as exc:
+            errors.append(f"OpenAI: {exc}")
+            log.warning("OpenAI failed (%s), no more providers", exc)
+
+    raise RuntimeError(f"All AI providers failed: {'; '.join(errors) or 'No API keys configured'}")
 
 
 # ── Prompt Builder ────────────────────────────────────────────────────────────

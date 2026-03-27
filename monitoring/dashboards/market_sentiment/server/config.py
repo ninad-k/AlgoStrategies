@@ -10,6 +10,7 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 # ── API Keys ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")
 NEWS_API_KEY      = os.getenv("NEWS_API_KEY", "")
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
 
@@ -35,6 +36,7 @@ AI_PROVIDER = _detect_provider()
 # ── Model config ──────────────────────────────────────────────────────────────
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-4-6")
 GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 MAX_NEWS_ARTICLES = int(os.getenv("MAX_NEWS_ARTICLES", 10))
 
 # ── Symbol → Yahoo Finance ticker mapping ─────────────────────────────────────

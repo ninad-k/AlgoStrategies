@@ -269,12 +269,13 @@ async def refresh_symbol(symbol: str):
 
 @app.get("/api/health")
 def health():
-    from .config import AI_PROVIDER, ANTHROPIC_API_KEY, GROQ_API_KEY
+    from .config import AI_PROVIDER, ANTHROPIC_API_KEY, GROQ_API_KEY, OPENAI_API_KEY
     return {
         "status": "ok",
         "ai_provider": AI_PROVIDER,
-        "anthropic_key_set": bool(ANTHROPIC_API_KEY),
         "groq_key_set": bool(GROQ_API_KEY),
+        "anthropic_key_set": bool(ANTHROPIC_API_KEY),
+        "openai_key_set": bool(OPENAI_API_KEY),
         "cached_symbols": list(_analysis_cache.keys()),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
