@@ -258,11 +258,17 @@ def fetch_economic_calendar() -> list[EconomicEvent]:
             continue
 
         dt_str = item.get("date", "")
+        dt = None
         try:
             dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
             scheduled = dt.strftime("%Y-%m-%d %H:%M UTC")
         except Exception:
             scheduled = dt_str
+
+        # Skip past events — only keep today and future
+        now_utc = datetime.now(timezone.utc)
+        if dt is not None and dt.date() < now_utc.date():
+            continue
 
         title = item.get("title", "Unknown Event")
         # Direct Forex Factory calendar link as canonical source

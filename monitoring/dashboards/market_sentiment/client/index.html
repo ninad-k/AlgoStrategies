@@ -843,7 +843,7 @@ function renderCards() {
 }
 
 function removeCard(symbol) {
-  const existing = document.getElementById(`card-${CSS.escape(symbol)}`);
+  const existing = document.getElementById(`card-${symbol}`);
   if (existing) existing.remove();
 }
 
