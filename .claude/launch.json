@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Market Sentiment Dashboard",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "run.py"],
+      "cwd": "monitoring/dashboards/market_sentiment",
+      "port": 8000
+    }
+  ]
+}

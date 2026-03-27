@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+anthropic>=0.40.0
+yfinance==0.2.43
+pandas==2.2.3
+pandas-ta==0.3.14b
+feedparser==6.0.11
+requests==2.32.3
+python-dotenv==1.0.1
+pydantic==2.9.2
+aiohttp==3.10.10
+beautifulsoup4==4.12.3
+lxml==5.3.0
+cachetools==5.5.0
+groq>=1.1.0
