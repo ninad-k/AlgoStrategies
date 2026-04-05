@@ -1,0 +1,11 @@
+---
+description: AlgoStrategies repo layout, agent conventions, and doc locations
+alwaysApply: true
+---
+
+# AlgoStrategies — project context
+
+- **Docs**: Strategy templates and setup under `docs/`; dashboard product notes under `docs/dashboards/`.
+- **Dashboards**: `monitoring/dashboards/<app>/` — run from that directory (`python run.py` or `python start.py` per app). See root `AGENTS.md` for ports and Render.
+- **Comments**: Do not include AI assistant names, tool names, or attributions in code comments.
+- **Scope**: Change only files needed for the task; follow existing style and imports in the touched file.
