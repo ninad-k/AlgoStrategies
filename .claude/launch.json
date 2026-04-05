@@ -21,6 +21,13 @@
       "runtimeArgs": ["-3", "run.py"],
       "cwd": "tools/backtester",
       "port": 8002
+    },
+    {
+      "name": "Video Downloader",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["dev.sh"],
+      "cwd": "tools/video_downloader",
+      "port": 1420
     }
   ]
 }
