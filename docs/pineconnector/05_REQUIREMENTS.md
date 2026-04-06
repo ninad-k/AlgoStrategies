@@ -109,7 +109,7 @@
 
 ### NFR-01: Performance
 - **NFR-01.1**: Webhook response time < 50ms (p95)
-- **NFR-01.2**: Signal dispatch to Rust engine < 10ms
+- **NFR-01.2**: Signal dispatch to Trade engine < 10ms
 - **NFR-01.3**: Risk check completion < 5ms
 - **NFR-01.4**: No blocking I/O in the webhook request path
 - **NFR-01.5**: Database writes executed asynchronously

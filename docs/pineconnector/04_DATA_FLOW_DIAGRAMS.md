@@ -6,7 +6,7 @@
                                     SIGNAL LIFECYCLE
   ═══════════════════════════════════════════════════════════════════════
 
-  TradingView                Python Server              Rust Engine              MT5 Bridge              MT5 Terminal
+  TradingView                Python Server              Trade Engine              MT5 Bridge              MT5 Terminal
   ───────────                ─────────────              ───────────              ──────────              ────────────
        │                          │                          │                       │                       │
        │  POST /webhook           │                          │                       │                       │

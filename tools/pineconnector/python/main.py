@@ -199,7 +199,7 @@ async def webhook(request: Request) -> JSONResponse:
             now.isoformat(),
         )
 
-        # Push to Rust engine via ZMQ
+        # Push to trade engine via ZMQ
         await _zmq_producer.send(signal)
         log.info("Signal dispatched: %s %s %s lot=%.2f", signal_id, alert.action.value, mt5_symbol, alert.lot)
     else:
@@ -280,7 +280,7 @@ async def _consume_results() -> None:
 
 
 async def _consume_state_updates() -> None:
-    """Consume state updates from Rust engine (partial TP, trailing, etc.)."""
+    """Consume state updates from trade engine (partial TP, trailing, etc.)."""
     while True:
         try:
             data = await _zmq_state_subscriber.receive()
@@ -308,7 +308,7 @@ async def health() -> HealthResponse:
     )
     return HealthResponse(
         status="ok",
-        rust_engine="connected" if _zmq_producer and _zmq_producer.connected else "disconnected",
+        trade_engine="connected" if _zmq_producer and _zmq_producer.connected else "disconnected",
         mt5_connected=_mt5_bridge is not None and getattr(_mt5_bridge, "connected", False),
         zmq_connected=_zmq_producer is not None,
         uptime_seconds=round(uptime, 1),
@@ -352,7 +352,7 @@ async def get_config() -> dict:
 
 @app.post("/api/close-all")
 async def close_all() -> JSONResponse:
-    """Emergency: send closeall signal to Rust engine."""
+    """Emergency: send closeall signal to trade engine."""
     signal = ValidatedSignal(
         action="closeall",
         symbol="ALL",

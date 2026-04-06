@@ -136,7 +136,7 @@ class StateUpdate(BaseModel):
 class HealthResponse(BaseModel):
     status: str = "ok"
     service: str = "pineconnector"
-    rust_engine: str = "unknown"  # connected, disconnected
+    trade_engine: str = "unknown"  # connected, disconnected
     mt5_connected: bool = False
     zmq_connected: bool = False
     uptime_seconds: float = 0.0

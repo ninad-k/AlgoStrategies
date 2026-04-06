@@ -9,7 +9,7 @@ TradingView Alert
   ↓ POST /webhook (token auth, <50ms)
 Python FastAPI [port 8003] — parse, validate, risk check
   ↓ ZMQ PUSH tcp://127.0.0.1:5555
-Rust Engine (tokio) — execution logic, partial TP, trailing stops
+Trade Engine (tokio) — execution logic, partial TP, trailing stops
   ↓ ZMQ PUSH tcp://127.0.0.1:5556
 MT5 Bridge — Python MetaTrader5 package OR MQL5 ZMQ EA
   ↓ ZMQ PUSH tcp://127.0.0.1:5557

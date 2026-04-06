@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 class ZMQProducer:
-    """PUSH socket — sends validated signals to Rust engine."""
+    """PUSH socket — sends validated signals to trade engine."""
 
     def __init__(self, address: str) -> None:
         self.address = address
@@ -66,7 +66,7 @@ class ZMQConsumer:
 
 
 class ZMQStateSubscriber:
-    """SUB socket — receives state updates from Rust engine."""
+    """SUB socket — receives state updates from trade engine."""
 
     def __init__(self, address: str) -> None:
         self.address = address

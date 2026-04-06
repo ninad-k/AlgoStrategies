@@ -34,7 +34,7 @@
 **Flow:**
 1. TradingView sends POST to webhook
 2. Python parses, authenticates, risk checks pass
-3. Signal dispatched to Rust engine
+3. Signal dispatched to Trade engine
 4. Rust sends `place_order` command to MT5 bridge
 5. MT5 opens market buy 0.05 lots XAUUSD
 6. Result stored in database

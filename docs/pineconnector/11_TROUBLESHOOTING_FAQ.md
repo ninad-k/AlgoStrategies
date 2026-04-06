@@ -33,11 +33,11 @@ curl -X POST "http://localhost:8003/webhook?token=your_token" ...
 
 **Possible causes**:
 
-a) **Rust engine not running**:
+a) **Trade engine not running**:
 ```bash
 # Check health
 curl http://localhost:8003/api/health
-# Look at "rust_engine" field
+# Look at "trade_engine" field
 ```
 
 b) **MT5 bridge not connected**:
@@ -76,7 +76,7 @@ d) **Symbol mapping mismatch**:
 
 a) **TP pips set to 0**: Check that `tp1_pips`, `tp2_pips`, `tp3_pips` are all > 0
 
-b) **Price not reaching TP level**: The Rust engine checks prices on a 100ms tick interval using the last known price from execution results. If no new results come in, the engine won't detect price changes.
+b) **Price not reaching TP level**: The Trade engine checks prices on a 100ms tick interval using the last known price from execution results. If no new results come in, the engine won't detect price changes.
 
 c) **Lot too small**: If computed close lot < broker minimum (0.01), the engine closes all remaining instead of partial.
 
@@ -97,7 +97,7 @@ ZMQ send error: Resource temporarily unavailable
 ```
 
 **Fix**:
-- Ensure Rust engine is running BEFORE Python server
+- Ensure Trade engine is running BEFORE Python server
 - Check no other process is using ports 5555-5559
 - Restart both services
 
@@ -110,7 +110,7 @@ ZMQ send error: Resource temporarily unavailable
 2. Check "Allow algorithmic trading"
 3. Click the "AutoTrading" button in MT5 toolbar (should be green)
 
-### 10. Rust engine won't compile
+### 10. Trade engine won't compile
 
 ```
 error: failed to run custom build command for `zmq-sys`
@@ -131,7 +131,7 @@ cargo build --release
 
 ### Q: Can I run this on Linux/Mac?
 
-**A**: The Python webhook server and Rust engine work on any OS. However, the MetaTrader5 Python package only works on Windows. For Linux, use the MQL5 EA bridge mode (`MT5_BRIDGE_MODE=mql5`) with MT5 running on a Windows machine or Wine.
+**A**: The Python webhook server and Trade engine work on any OS. However, the MetaTrader5 Python package only works on Windows. For Linux, use the MQL5 EA bridge mode (`MT5_BRIDGE_MODE=mql5`) with MT5 running on a Windows machine or Wine.
 
 ### Q: How many alerts can it handle per second?
 
@@ -147,7 +147,7 @@ cargo build --release
 
 ### Q: Can I use this with crypto exchanges instead of MT5?
 
-**A**: Yes. Replace the MT5 bridge with an exchange API bridge (e.g., Binance, Bybit). The Python webhook, Rust engine, and all risk management remain identical. Only the bridge module needs to change.
+**A**: Yes. Replace the MT5 bridge with an exchange API bridge (e.g., Binance, Bybit). The Python webhook, Trade engine, and all risk management remain identical. Only the bridge module needs to change.
 
 ### Q: What happens if TradingView sends the same alert twice?
 
@@ -155,7 +155,7 @@ cargo build --release
 
 ### Q: What if the VPS reboots?
 
-**A**: If configured as Windows services (NSSM), all components restart automatically. The Rust engine starts fresh with no managed positions. On startup, the system should reconcile with MT5 to detect any positions opened before the restart.
+**A**: If configured as Windows services (NSSM), all components restart automatically. The Trade engine starts fresh with no managed positions. On startup, the system should reconcile with MT5 to detect any positions opened before the restart.
 
 ### Q: Can I test without risking real money?
 
@@ -174,11 +174,11 @@ sqlite3 data/pineconnector.db "SELECT * FROM signals WHERE risk_passed = 0 ORDER
 
 **A**: Currently, risk config loads on startup. To change settings:
 1. Edit `configs/risk.yaml`
-2. Restart the Python server (Rust engine doesn't need restart)
+2. Restart the Python server (Trade engine doesn't need restart)
 
 ### Q: What happens during market close?
 
-**A**: Pending orders stay in MT5. The Rust engine continues monitoring positions (trailing stops, time exits). Market orders will fail with broker errors during closed hours — the system handles this gracefully.
+**A**: Pending orders stay in MT5. The Trade engine continues monitoring positions (trailing stops, time exits). Market orders will fail with broker errors during closed hours — the system handles this gracefully.
 
 ---
 

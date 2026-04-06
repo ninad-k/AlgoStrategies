@@ -415,7 +415,7 @@
         <div class="status-bar">
             <div class="status-item">
                 <span class="dot dot-yellow" id="dotRust"></span>
-                <span class="status-label">Rust Engine:</span>
+                <span class="status-label">Trade Engine:</span>
                 <span class="status-value" id="rustStatus">&mdash;</span>
             </div>
             <div class="status-item">
@@ -536,8 +536,8 @@ async function refreshHealth() {
         badge.className = 'badge ' + (h.status === 'ok' ? 'badge-ok' : 'badge-err');
     }
 
-    document.getElementById('rustStatus').textContent = h.rust_engine;
-    dotRust.className = 'dot ' + (h.rust_engine === 'connected' ? 'dot-green' : 'dot-red');
+    document.getElementById('rustStatus').textContent = h.trade_engine;
+    dotRust.className = 'dot ' + (h.trade_engine === 'connected' ? 'dot-green' : 'dot-red');
 
     document.getElementById('mt5Status').textContent = h.mt5_connected ? 'connected' : 'disconnected';
     dotMt5.className = 'dot ' + (h.mt5_connected ? 'dot-green' : 'dot-red');

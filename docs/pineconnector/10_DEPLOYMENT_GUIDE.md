@@ -67,7 +67,7 @@ notepad .env
 pip install -r requirements.txt
 ```
 
-### Step 6: Build Rust Engine
+### Step 6: Build Trade Engine
 
 ```powershell
 cd rust
@@ -88,7 +88,7 @@ nssm set PineConnector-Python AppDirectory "C:\AlgoStrategies\tools\pineconnecto
 nssm set PineConnector-Python AppStdout "C:\AlgoStrategies\tools\pineconnector\data\python.log"
 nssm set PineConnector-Python AppStderr "C:\AlgoStrategies\tools\pineconnector\data\python-error.log"
 
-# Install Rust engine as service
+# Install Trade engine as service
 nssm install PineConnector-Rust "C:\AlgoStrategies\tools\pineconnector\rust\target\release\pineconnector-engine.exe"
 nssm set PineConnector-Rust AppDirectory "C:\AlgoStrategies\tools\pineconnector"
 nssm set PineConnector-Rust AppStdout "C:\AlgoStrategies\tools\pineconnector\data\rust.log"
@@ -201,7 +201,7 @@ Ensure all components start after VPS reboot:
 
 **Startup order matters:**
 1. MT5 must start first (needs 10-30s to connect to broker)
-2. Rust engine starts next (binds ZMQ sockets)
+2. Trade engine starts next (binds ZMQ sockets)
 3. Python server starts last (connects to ZMQ sockets)
 
 Add a startup delay in NSSM:
@@ -242,5 +242,5 @@ type C:\...\data\rust-error.log
 - TradingView has a 3-second webhook timeout
 - If your server responds slower, check:
   - Risk engine: should be <5ms (is DB query leaking into critical path?)
-  - ZMQ: check if Rust engine is consuming signals (blocked?)
+  - ZMQ: check if Trade engine is consuming signals (blocked?)
   - Network: VPS bandwidth saturated?

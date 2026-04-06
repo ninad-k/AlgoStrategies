@@ -153,7 +153,7 @@ System health check with per-component status.
 {
   "status": "ok",
   "service": "pineconnector",
-  "rust_engine": "connected",
+  "trade_engine": "connected",
   "mt5_connected": true,
   "zmq_connected": true,
   "uptime_seconds": 7200.5,
@@ -165,7 +165,7 @@ System health check with per-component status.
 | Field | Type | Values |
 |-------|------|--------|
 | `status` | string | `"ok"` or `"error"` |
-| `rust_engine` | string | `"connected"` or `"disconnected"` |
+| `trade_engine` | string | `"connected"` or `"disconnected"` |
 | `mt5_connected` | bool | true/false |
 | `zmq_connected` | bool | true/false |
 | `dry_run` | bool | true if paper trading |

@@ -187,7 +187,7 @@ pub enum Direction {
     Short,
 }
 
-/// A position managed by the Rust engine.
+/// A position managed by the trade engine.
 #[derive(Debug, Clone)]
 pub struct ManagedPosition {
     pub signal_id: String,

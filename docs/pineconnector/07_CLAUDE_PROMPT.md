@@ -46,7 +46,7 @@ Design a hybrid system:
      - Option 3: TCP socket
 
 4. Execution Flow:
-   TradingView -> Python Webhook -> Queue -> Rust Engine -> Broker/MT5
+   TradingView -> Python Webhook -> Queue -> Trade Engine -> Broker/MT5
 
 -----------------------------------
 ### PHASE 1: PYTHON WEBHOOK (FASTAPI)
@@ -264,7 +264,7 @@ Focus on performance, reliability, and real-world trading usage.
 ## How to Adapt This Prompt
 
 ### For a different broker (not MT5):
-Replace Phase 3's "MT5" references with your broker's API. The Rust engine and Python webhook layer remain unchanged — only the bridge needs swapping.
+Replace Phase 3's "MT5" references with your broker's API. The Trade engine and Python webhook layer remain unchanged — only the bridge needs swapping.
 
 ### For cryptocurrency exchanges:
 Replace the MT5 bridge with exchange API calls (Binance, Bybit, etc.). Add WebSocket price feed for real-time trailing stop updates instead of relying on execution results.

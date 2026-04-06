@@ -15,7 +15,7 @@ py -3 run.py                  # Live mode
 py -3 run.py --dry-run        # Paper trading (no real orders)
 py -3 run.py --port 9000      # Custom port
 
-# Terminal 2: Rust engine
+# Terminal 2: Trade engine
 cd tools/pineconnector/rust
 cargo run --release
 ```
@@ -344,7 +344,7 @@ All three alerts use the **same webhook URL**. PineConnector handles them indepe
 
 Open `http://YOUR_IP:8003/` in your browser:
 
-- **Health bar**: Shows Rust engine, MT5 connection, ZMQ status
+- **Health bar**: Shows Trade engine, MT5 connection, ZMQ status
 - **Analytics cards**: Net PnL, win rate, profit factor, max drawdown
 - **Open trades**: Real-time table of active positions
 - **Recent trades**: Closed trades with PnL
@@ -387,7 +387,7 @@ Returns:
 ```json
 {
   "status": "ok",
-  "rust_engine": "connected",
+  "trade_engine": "connected",
   "mt5_connected": true,
   "zmq_connected": true,
   "uptime_seconds": 3600.5,

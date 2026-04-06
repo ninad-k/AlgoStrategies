@@ -20,7 +20,7 @@ PineConnector is a hybrid Python + Rust trading automation platform that bridges
          | HTTP POST /webhook
          v
 +------------------+     ZMQ PUSH      +-------------------+
-|  Python FastAPI  | ----------------> |   Rust Engine     |
+|  Python FastAPI  | ----------------> |   Trade Engine     |
 |  (Port 8003)     |  tcp://:5555      |   (Tokio async)   |
 |                  |                   |                   |
 |  - Auth          |  ZMQ PUB/SUB     |  - Partial TP FSM |
@@ -124,7 +124,7 @@ Tokio Runtime:
 ### 4. Dashboard (Port 8003)
 
 Single-page HTML/JS application served by FastAPI:
-- Real-time health status (Rust engine, MT5, ZMQ)
+- Real-time health status (Trade engine, MT5, ZMQ)
 - Open/closed trades tables (auto-refresh 5s)
 - Analytics cards (PnL, win rate, profit factor, drawdown)
 - Emergency "Close All" button

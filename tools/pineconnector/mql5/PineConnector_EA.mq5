@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| PineConnector_EA.mq5                                              |
-//| ZMQ Bridge EA — receives execution commands from Rust engine      |
+//| ZMQ Bridge EA — receives execution commands from trade engine      |
 //| via ZeroMQ and executes trades in MetaTrader 5.                   |
 //|                                                                    |
 //| Requires: mql-zmq library (https://github.com/dingmaotu/mql-zmq) |
