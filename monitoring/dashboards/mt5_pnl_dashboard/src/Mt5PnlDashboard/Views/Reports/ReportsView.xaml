@@ -1,0 +1,63 @@
+<UserControl x:Class="Mt5PnlDashboard.Views.Reports.ReportsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:Mt5PnlDashboard.ViewModels"
+             xmlns:conv="clr-namespace:Mt5PnlDashboard.Converters"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ReportsViewModel, IsDesignTimeCreatable=False}">
+
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Generate Report" FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <StackPanel Grid.Row="1" Orientation="Vertical" MaxWidth="400" HorizontalAlignment="Left">
+            <!-- Period -->
+            <TextBlock Text="Period" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ComboBox SelectedItem="{Binding SelectedPeriod}" Margin="0,0,0,12">
+                <ComboBoxItem Content="Daily" />
+                <ComboBoxItem Content="Weekly" />
+                <ComboBoxItem Content="Monthly" />
+                <ComboBoxItem Content="Quarterly" />
+                <ComboBoxItem Content="Yearly" />
+                <ComboBoxItem Content="Custom" />
+            </ComboBox>
+
+            <!-- Start Date -->
+            <TextBlock Text="Start Date" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <DatePicker SelectedDate="{Binding StartDate}" Margin="0,0,0,12" />
+
+            <!-- End Date -->
+            <TextBlock Text="End Date" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <DatePicker SelectedDate="{Binding EndDate}" Margin="0,0,0,12" />
+
+            <!-- Generate Button -->
+            <Button Content="Generate Report" Command="{Binding GenerateReportCommand}"
+                    Padding="16,8" HorizontalAlignment="Left" Margin="0,8,0,0" />
+        </StackPanel>
+
+        <!-- Report Output Placeholder -->
+        <Border Grid.Row="2" BorderBrush="LightGray" BorderThickness="1" Margin="0,16,0,0">
+            <TextBlock Text="Report output will appear here"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Foreground="Gray" FontStyle="Italic" />
+        </Border>
+
+        <!-- Loading Overlay -->
+        <Border Grid.RowSpan="3" Background="#80FFFFFF"
+                Visibility="{Binding IsGenerating, Converter={StaticResource BoolToVisibilityConverter}}">
+            <TextBlock Text="Generating report..." FontSize="18"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,21 @@
+syntax = "proto3";
+option csharp_namespace = "Mt5PnlDashboard.Bridge.Protos";
+package mt5bridge;
+
+service Mt5DataService {
+  rpc GetAccountInfo (AccountInfoRequest) returns (AccountInfoResponse);
+  rpc GetTradeHistory (TradeHistoryRequest) returns (TradeHistoryResponse);
+  rpc GetOpenPositions (OpenPositionsRequest) returns (OpenPositionsResponse);
+  rpc TestConnection (TestConnectionRequest) returns (TestConnectionResponse);
+}
+
+message AccountInfoRequest { int32 mt5_login = 1; string server = 2; string password = 3; }
+message AccountInfoResponse { bool success = 1; string error = 2; double balance = 3; double equity = 4; double free_margin = 5; double margin_level = 6; string currency = 7; string name = 8; int32 leverage = 9; }
+message TradeHistoryRequest { int32 mt5_login = 1; string server = 2; string password = 3; int64 since_timestamp_utc = 4; }
+message TradeHistoryResponse { bool success = 1; string error = 2; repeated TradeRecord trades = 3; }
+message TradeRecord { int64 ticket = 1; string symbol = 2; int32 direction = 3; int32 magic_number = 4; int64 entry_time_utc = 5; int64 exit_time_utc = 6; double entry_price = 7; double exit_price = 8; double volume = 9; double profit_loss = 10; double commission = 11; double swap = 12; double mfe = 13; double mae = 14; string order_comment = 15; }
+message OpenPositionsRequest { int32 mt5_login = 1; string server = 2; string password = 3; }
+message OpenPositionsResponse { bool success = 1; string error = 2; repeated LivePositionRecord positions = 3; }
+message LivePositionRecord { int64 ticket = 1; string symbol = 2; int32 direction = 3; int32 magic_number = 4; int64 open_time_utc = 5; double open_price = 6; double current_price = 7; double volume = 8; double unrealized_pnl = 9; double commission = 10; double swap = 11; double sl = 12; double tp = 13; string order_comment = 14; }
+message TestConnectionRequest { int32 mt5_login = 1; string server = 2; string password = 3; }
+message TestConnectionResponse { bool success = 1; string error = 2; string account_name = 3; string broker = 4; }
