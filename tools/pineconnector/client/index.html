@@ -1,147 +1,442 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PineConnector Dashboard</title>
+    <title>Rey Capital — PineConnector</title>
+    <link rel="icon" type="image/png" href="/client/static/favicon.png">
     <style>
-        :root {
-            --bg: #0f1117;
-            --surface: #1a1d27;
-            --border: #2a2d3a;
-            --text: #e4e4e7;
-            --muted: #71717a;
-            --green: #22c55e;
-            --red: #ef4444;
-            --blue: #3b82f6;
-            --orange: #f59e0b;
+        /* ── Theme Variables ─────────────────────────────────── */
+        :root, [data-theme="light"] {
+            --bg: #F0F4F8;
+            --surface: #FFFFFF;
+            --surface2: #E8EEF4;
+            --border: #D0D8E4;
+            --border-hover: #B0BCC8;
+            --text: #1E293B;
+            --text-dim: #64748B;
+            --text-muted: #94A3B8;
+            --accent: #1B4FBE;
+            --accent-light: #1B4FBE15;
+            --accent-hover: #153F99;
+            --green: #16A34A;
+            --green-bg: #16A34A15;
+            --red: #DC2626;
+            --red-bg: #DC262615;
+            --yellow: #D97706;
+            --yellow-bg: #D9770615;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+            --logo-display-color: block;
+            --logo-display-white: none;
+            --hover-bg: rgba(0,0,0,0.03);
+            --table-stripe: rgba(0,0,0,0.015);
         }
+        [data-theme="dark"] {
+            --bg: #0b0d14;
+            --surface: #141722;
+            --surface2: #1c2030;
+            --border: #252938;
+            --border-hover: #353a4d;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --text-muted: #64748b;
+            --accent: #4e8cff;
+            --accent-light: #4e8cff15;
+            --accent-hover: #6da0ff;
+            --green: #22c55e;
+            --green-bg: #22c55e15;
+            --red: #ef4444;
+            --red-bg: #ef444415;
+            --yellow: #f59e0b;
+            --yellow-bg: #f59e0b15;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
+            --logo-display-color: none;
+            --logo-display-white: block;
+            --hover-bg: rgba(255,255,255,0.03);
+            --table-stripe: rgba(255,255,255,0.015);
+        }
+
+        /* ── Base ────────────────────────────────────────────── */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background: var(--bg);
             color: var(--text);
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: 14px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            transition: background 0.3s ease, color 0.3s ease;
         }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header {
+
+        /* ── Layout ──────────────────────────────────────────── */
+        .container { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+
+        /* ── Top Navbar ──────────────────────────────────────── */
+        .navbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+            transition: background 0.3s ease, border-color 0.3s ease;
+        }
+        .navbar-inner {
+            max-width: 1280px;
+            margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px 0;
-            border-bottom: 1px solid var(--border);
-            margin-bottom: 20px;
+            height: 60px;
         }
-        header h1 { font-size: 18px; font-weight: 600; }
-        .status-badge {
+        .navbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .logo-img {
+            height: 32px;
+            width: auto;
+        }
+        .logo-color { display: var(--logo-display-color); }
+        .logo-white { display: var(--logo-display-white); }
+        .nav-divider {
+            width: 1px;
+            height: 28px;
+            background: var(--border);
+        }
+        .nav-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: -0.01em;
+        }
+        .nav-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* ── Theme Toggle ────────────────────────────────────── */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 2px;
+        }
+        .theme-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+        .theme-btn.active {
+            background: var(--surface);
+            color: var(--accent);
+            box-shadow: var(--shadow);
+        }
+        .theme-btn:hover:not(.active) {
+            color: var(--text-dim);
+        }
+
+        /* ── Status Badges ───────────────────────────────────── */
+        .badge {
             padding: 4px 12px;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
-        .status-ok { background: #16a34a20; color: var(--green); border: 1px solid #16a34a40; }
-        .status-warn { background: #f59e0b20; color: var(--orange); border: 1px solid #f59e0b40; }
-        .status-err { background: #ef444420; color: var(--red); border: 1px solid #ef444440; }
+        .badge-ok { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+        .badge-warn { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow); }
+        .badge-err { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
 
+        /* ── Status Bar ──────────────────────────────────────── */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 12px 0;
+            margin-bottom: 20px;
+            font-size: 12px;
+            color: var(--text-dim);
+            flex-wrap: wrap;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .dot-red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+        .dot-yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+        .status-label { color: var(--text-muted); }
+        .status-value { color: var(--text); font-weight: 500; }
+        .mode-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--yellow-bg);
+            color: var(--yellow);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        /* ── Cards Grid ──────────────────────────────────────── */
         .cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-bottom: 24px;
+            gap: 14px;
+            margin-bottom: 28px;
         }
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
         }
-        .card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
-        .card .value { font-size: 22px; font-weight: 700; }
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-lg);
+        }
+        .card .label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.02em;
+        }
         .card .value.positive { color: var(--green); }
         .card .value.negative { color: var(--red); }
 
-        .section { margin-bottom: 24px; }
-        .section h2 {
-            font-size: 14px;
+        /* ── Sections ────────────────────────────────────────── */
+        .section { margin-bottom: 28px; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .section-title {
+            font-size: 15px;
             font-weight: 600;
-            margin-bottom: 12px;
+            color: var(--text);
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .section h2 .count {
-            background: var(--border);
-            padding: 2px 8px;
-            border-radius: 10px;
+        .count-badge {
+            background: var(--accent-light);
+            color: var(--accent);
+            padding: 2px 10px;
+            border-radius: 12px;
             font-size: 11px;
+            font-weight: 600;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        /* ── Tables ──────────────────────────────────────────── */
+        .table-wrap {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
+            box-shadow: var(--shadow);
         }
-        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-        th { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: 600;
+            background: var(--surface2);
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 10px 14px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
         tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #ffffff05; }
+        tr:hover td { background: var(--hover-bg); }
+        .empty-row td {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 24px;
+            font-style: italic;
+        }
 
-        .action-buy { color: var(--green); }
-        .action-sell { color: var(--red); }
-        .pnl-positive { color: var(--green); }
-        .pnl-negative { color: var(--red); }
+        .action-buy { color: var(--green); font-weight: 600; }
+        .action-sell { color: var(--red); font-weight: 600; }
+        .pnl-positive { color: var(--green); font-weight: 600; }
+        .pnl-negative { color: var(--red); font-weight: 600; }
+        .signal-id {
+            font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .status-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: capitalize;
+        }
+        .status-open { background: var(--green-bg); color: var(--green); }
+        .status-pending { background: var(--yellow-bg); color: var(--yellow); }
+        .status-partial { background: var(--accent-light); color: var(--accent); }
+        .status-closed { background: var(--surface2); color: var(--text-dim); }
 
+        /* ── Buttons ─────────────────────────────────────────── */
         .btn {
-            padding: 8px 16px;
+            padding: 8px 18px;
             border: 1px solid var(--border);
-            border-radius: 6px;
+            border-radius: 8px;
             background: var(--surface);
             color: var(--text);
             cursor: pointer;
             font-family: inherit;
             font-size: 12px;
+            font-weight: 500;
+            transition: all 0.15s ease;
         }
-        .btn:hover { background: var(--border); }
-        .btn-danger { border-color: #ef444440; color: var(--red); }
-        .btn-danger:hover { background: #ef444420; }
+        .btn:hover { background: var(--surface2); border-color: var(--border-hover); }
+        .btn-danger {
+            border-color: var(--red);
+            color: var(--red);
+            background: var(--red-bg);
+        }
+        .btn-danger:hover {
+            background: var(--red);
+            color: #fff;
+        }
 
-        .info-bar {
-            display: flex;
-            gap: 16px;
-            font-size: 11px;
-            color: var(--muted);
-            margin-bottom: 16px;
+        /* ── Footer ──────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 24px 0 32px;
+            color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border);
+            margin-top: 12px;
         }
-        .info-bar span { display: flex; align-items: center; gap: 4px; }
-        .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .dot-green { background: var(--green); }
-        .dot-red { background: var(--red); }
-        .dot-yellow { background: var(--orange); }
+        .footer-logo {
+            height: 20px;
+            width: auto;
+            opacity: 0.4;
+            margin-bottom: 8px;
+        }
+
+        /* ── Responsive ──────────────────────────────────────── */
+        @media (max-width: 768px) {
+            .navbar-inner { height: 52px; }
+            .logo-img { height: 24px; }
+            .nav-subtitle { display: none; }
+            .cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .status-bar { gap: 12px; }
+            .container { padding: 0 16px; }
+            td, th { padding: 8px 10px; font-size: 12px; }
+        }
+        @media (max-width: 480px) {
+            .cards { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>PineConnector</h1>
-            <div>
-                <span id="healthBadge" class="status-badge status-warn">LOADING</span>
-                <button class="btn btn-danger" onclick="closeAll()" style="margin-left:8px">Close All</button>
+    <!-- ── Navbar ─────────────────────────────────────────── -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <div class="navbar-left">
+                <a href="/">
+                    <img src="/client/static/logo-color.png" alt="Rey Capital" class="logo-img logo-color">
+                    <img src="/client/static/logo-white.png" alt="Rey Capital" class="logo-img logo-white">
+                </a>
+                <div class="nav-divider"></div>
+                <div>
+                    <div class="nav-title">PineConnector</div>
+                    <div class="nav-subtitle">Trade Automation</div>
+                </div>
             </div>
-        </header>
+            <div class="navbar-right">
+                <span id="healthBadge" class="badge badge-warn">LOADING</span>
+                <div class="theme-toggle">
+                    <button class="theme-btn" onclick="setTheme('light')" id="btnLight" title="Light mode">&#9788;</button>
+                    <button class="theme-btn active" onclick="setTheme('dark')" id="btnDark" title="Dark mode">&#9790;</button>
+                </div>
+                <button class="btn btn-danger" onclick="closeAll()">Close All</button>
+            </div>
+        </div>
+    </nav>
 
-        <div class="info-bar" id="infoBar">
-            <span><span class="dot dot-yellow" id="dotRust"></span> Rust Engine: <span id="rustStatus">—</span></span>
-            <span><span class="dot dot-yellow" id="dotMt5"></span> MT5: <span id="mt5Status">—</span></span>
-            <span>Trades today: <span id="tradesToday">0</span></span>
-            <span>Uptime: <span id="uptime">—</span></span>
-            <span id="modeLabel"></span>
+    <div class="container">
+        <!-- ── Status Bar ─────────────────────────────────── -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="dot dot-yellow" id="dotRust"></span>
+                <span class="status-label">Rust Engine:</span>
+                <span class="status-value" id="rustStatus">&mdash;</span>
+            </div>
+            <div class="status-item">
+                <span class="dot dot-yellow" id="dotMt5"></span>
+                <span class="status-label">MT5:</span>
+                <span class="status-value" id="mt5Status">&mdash;</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Trades today:</span>
+                <span class="status-value" id="tradesToday">0</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Uptime:</span>
+                <span class="status-value" id="uptime">&mdash;</span>
+            </div>
+            <div class="status-item" id="modeLabelWrap" style="display:none">
+                <span class="mode-badge" id="modeLabel">PAPER MODE</span>
+            </div>
         </div>
 
+        <!-- ── Analytics Cards ────────────────────────────── -->
         <div class="cards">
             <div class="card"><div class="label">Net PnL</div><div class="value" id="cardPnl">$0.00</div></div>
             <div class="card"><div class="label">Win Rate</div><div class="value" id="cardWinRate">0%</div></div>
@@ -151,32 +446,71 @@
             <div class="card"><div class="label">Expectancy</div><div class="value" id="cardExpect">$0.00</div></div>
         </div>
 
+        <!-- ── Open Trades ────────────────────────────────── -->
         <div class="section">
-            <h2>Open Trades <span class="count" id="openCount">0</span></h2>
-            <table>
-                <thead><tr>
-                    <th>Signal</th><th>Symbol</th><th>Action</th><th>Lot</th>
-                    <th>Entry</th><th>SL</th><th>TP</th><th>Status</th><th>Time</th>
-                </tr></thead>
-                <tbody id="openTrades"></tbody>
-            </table>
+            <div class="section-header">
+                <div class="section-title">
+                    Open Trades <span class="count-badge" id="openCount">0</span>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Signal</th><th>Symbol</th><th>Action</th><th>Lot</th>
+                        <th>Entry</th><th>SL</th><th>TP</th><th>Status</th><th>Time</th>
+                    </tr></thead>
+                    <tbody id="openTrades">
+                        <tr class="empty-row"><td colspan="9">No open trades</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
+        <!-- ── Recent Trades ──────────────────────────────── -->
         <div class="section">
-            <h2>Recent Trades <span class="count" id="recentCount">0</span></h2>
-            <table>
-                <thead><tr>
-                    <th>Signal</th><th>Symbol</th><th>Action</th><th>Lot</th>
-                    <th>Entry</th><th>Exit</th><th>PnL</th><th>Time</th>
-                </tr></thead>
-                <tbody id="recentTrades"></tbody>
-            </table>
+            <div class="section-header">
+                <div class="section-title">
+                    Recent Trades <span class="count-badge" id="recentCount">0</span>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr>
+                        <th>Signal</th><th>Symbol</th><th>Action</th><th>Lot</th>
+                        <th>Entry</th><th>Exit</th><th>PnL</th><th>Time</th>
+                    </tr></thead>
+                    <tbody id="recentTrades">
+                        <tr class="empty-row"><td colspan="8">No recent trades</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
+
+        <!-- ── Footer ─────────────────────────────────────── -->
+        <footer class="footer">
+            <div>
+                <img src="/client/static/logo-color.png" alt="Rey Capital" class="footer-logo logo-color">
+                <img src="/client/static/logo-white.png" alt="Rey Capital" class="footer-logo logo-white">
+            </div>
+            PineConnector v1.0 &middot; Rey Capital &middot; Smart Investments
+        </footer>
     </div>
 
 <script>
+/* ── Theme ─────────────────────────────────────────────── */
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('rc-theme', theme);
+    document.getElementById('btnLight').classList.toggle('active', theme === 'light');
+    document.getElementById('btnDark').classList.toggle('active', theme === 'dark');
+}
+(function() {
+    const saved = localStorage.getItem('rc-theme') || 'dark';
+    setTheme(saved);
+})();
+
+/* ── API ───────────────────────────────────────────────── */
 const API = window.location.origin;
-let refreshInterval;
 
 async function fetchJSON(url) {
     try {
@@ -185,6 +519,7 @@ async function fetchJSON(url) {
     } catch { return null; }
 }
 
+/* ── Health ─────────────────────────────────────────────── */
 async function refreshHealth() {
     const h = await fetchJSON(`${API}/api/health`);
     if (!h) return;
@@ -193,9 +528,13 @@ async function refreshHealth() {
     const dotRust = document.getElementById('dotRust');
     const dotMt5 = document.getElementById('dotMt5');
 
-    badge.textContent = h.dry_run ? 'DRY RUN' : h.status.toUpperCase();
-    badge.className = 'status-badge ' + (h.status === 'ok' ? 'status-ok' : 'status-err');
-    if (h.dry_run) badge.className = 'status-badge status-warn';
+    if (h.dry_run) {
+        badge.textContent = 'DRY RUN';
+        badge.className = 'badge badge-warn';
+    } else {
+        badge.textContent = h.status.toUpperCase();
+        badge.className = 'badge ' + (h.status === 'ok' ? 'badge-ok' : 'badge-err');
+    }
 
     document.getElementById('rustStatus').textContent = h.rust_engine;
     dotRust.className = 'dot ' + (h.rust_engine === 'connected' ? 'dot-green' : 'dot-red');
@@ -205,48 +544,60 @@ async function refreshHealth() {
 
     document.getElementById('tradesToday').textContent = h.trades_today;
     document.getElementById('uptime').textContent = formatUptime(h.uptime_seconds);
-    document.getElementById('modeLabel').textContent = h.dry_run ? '[PAPER MODE]' : '';
+
+    const modeWrap = document.getElementById('modeLabelWrap');
+    modeWrap.style.display = h.dry_run ? 'flex' : 'none';
 }
 
+/* ── Trades ─────────────────────────────────────────────── */
 async function refreshTrades() {
     const open = await fetchJSON(`${API}/api/trades/open`);
     const recent = await fetchJSON(`${API}/api/trades?limit=20`);
 
     if (open) {
         document.getElementById('openCount').textContent = open.length;
-        document.getElementById('openTrades').innerHTML = open.map(t => `
-            <tr>
-                <td>${t.signal_id?.slice(0,8) || '—'}</td>
-                <td>${t.symbol}</td>
-                <td class="${t.action?.includes('buy') ? 'action-buy' : 'action-sell'}">${t.action?.toUpperCase()}</td>
-                <td>${t.remaining_lot?.toFixed(2) || t.lot?.toFixed(2)}</td>
-                <td>${t.entry_price?.toFixed(5) || '—'}</td>
-                <td>${t.sl?.toFixed(5) || '—'}</td>
-                <td>${t.tp?.toFixed(5) || '—'}</td>
-                <td>${t.status}</td>
-                <td>${t.open_time?.slice(11,19) || ''}</td>
-            </tr>
-        `).join('');
+        if (open.length === 0) {
+            document.getElementById('openTrades').innerHTML = '<tr class="empty-row"><td colspan="9">No open trades</td></tr>';
+        } else {
+            document.getElementById('openTrades').innerHTML = open.map(t => `
+                <tr>
+                    <td class="signal-id">${t.signal_id?.slice(0,8) || '&mdash;'}</td>
+                    <td><strong>${t.symbol}</strong></td>
+                    <td class="${t.action?.includes('buy') ? 'action-buy' : 'action-sell'}">${t.action?.toUpperCase()}</td>
+                    <td>${(t.remaining_lot || t.lot)?.toFixed(2)}</td>
+                    <td>${t.entry_price?.toFixed(5) || '&mdash;'}</td>
+                    <td>${t.sl?.toFixed(5) || '&mdash;'}</td>
+                    <td>${t.tp?.toFixed(5) || '&mdash;'}</td>
+                    <td><span class="status-chip status-${t.status}">${t.status}</span></td>
+                    <td>${t.open_time?.slice(11,19) || ''}</td>
+                </tr>
+            `).join('');
+        }
     }
 
     if (recent) {
         const closed = recent.filter(t => t.status === 'closed');
         document.getElementById('recentCount').textContent = closed.length;
-        document.getElementById('recentTrades').innerHTML = closed.slice(0, 20).map(t => `
-            <tr>
-                <td>${t.signal_id?.slice(0,8) || '—'}</td>
-                <td>${t.symbol}</td>
-                <td class="${t.action?.includes('buy') ? 'action-buy' : 'action-sell'}">${t.action?.toUpperCase()}</td>
-                <td>${t.lot?.toFixed(2)}</td>
-                <td>${t.entry_price?.toFixed(5) || '—'}</td>
-                <td>${t.exit_price?.toFixed(5) || '—'}</td>
-                <td class="${(t.profit||0) >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${(t.profit||0).toFixed(2)}</td>
-                <td>${t.close_time?.slice(11,19) || ''}</td>
-            </tr>
-        `).join('');
+        if (closed.length === 0) {
+            document.getElementById('recentTrades').innerHTML = '<tr class="empty-row"><td colspan="8">No recent trades</td></tr>';
+        } else {
+            document.getElementById('recentTrades').innerHTML = closed.slice(0, 20).map(t => `
+                <tr>
+                    <td class="signal-id">${t.signal_id?.slice(0,8) || '&mdash;'}</td>
+                    <td><strong>${t.symbol}</strong></td>
+                    <td class="${t.action?.includes('buy') ? 'action-buy' : 'action-sell'}">${t.action?.toUpperCase()}</td>
+                    <td>${t.lot?.toFixed(2)}</td>
+                    <td>${t.entry_price?.toFixed(5) || '&mdash;'}</td>
+                    <td>${t.exit_price?.toFixed(5) || '&mdash;'}</td>
+                    <td class="${(t.profit||0) >= 0 ? 'pnl-positive' : 'pnl-negative'}">$${(t.profit||0).toFixed(2)}</td>
+                    <td>${t.close_time?.slice(11,19) || ''}</td>
+                </tr>
+            `).join('');
+        }
     }
 }
 
+/* ── Analytics ──────────────────────────────────────────── */
 async function refreshAnalytics() {
     const a = await fetchJSON(`${API}/api/analytics?days=30`);
     if (!a) return;
@@ -270,25 +621,27 @@ async function refreshAnalytics() {
     document.getElementById('cardExpect').textContent = `$${(wr.expectancy || 0).toFixed(2)}`;
 }
 
+/* ── Actions ────────────────────────────────────────────── */
 async function closeAll() {
-    if (!confirm('Close ALL open positions?')) return;
+    if (!confirm('Close ALL open positions? This cannot be undone.')) return;
     await fetch(`${API}/api/close-all`, { method: 'POST' });
     setTimeout(refreshTrades, 1000);
 }
 
 function formatUptime(s) {
-    if (!s) return '—';
+    if (!s) return '&mdash;';
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+/* ── Init ───────────────────────────────────────────────── */
 async function refreshAll() {
     await Promise.all([refreshHealth(), refreshTrades(), refreshAnalytics()]);
 }
 
 refreshAll();
-refreshInterval = setInterval(refreshAll, 5000);
+setInterval(refreshAll, 5000);
 </script>
 </body>
 </html>
