@@ -439,6 +439,14 @@
             </div>
 
             <div class="sidebar-section">
+                <div class="sidebar-title">Multi-Account</div>
+                <a class="sidebar-link" onclick="scrollToSection('multi-account')">Multi-Account Setup</a>
+                <a class="sidebar-link" onclick="scrollToSection('multi-instances')">Multiple Instances</a>
+                <a class="sidebar-link" onclick="scrollToSection('connection-types')">Connection Types</a>
+                <a class="sidebar-link" onclick="scrollToSection('magic-numbers')">Magic Numbers</a>
+            </div>
+
+            <div class="sidebar-section">
                 <div class="sidebar-title">Reference</div>
                 <a class="sidebar-link" onclick="scrollToSection('dashboard')">Dashboard Features</a>
                 <a class="sidebar-link" onclick="scrollToSection('metrics')">Performance Metrics</a>
@@ -778,6 +786,262 @@ my_token,closeall</pre>
 
                 <p><strong>For Plain Text Endpoint:</strong></p>
                 <pre>my_secret_token,buy,EURUSD,lot=0.10,sl=1.0850,tp=1.0950</pre>
+            </section>
+
+            <!-- Multi-Account Section -->
+            <section id="multi-account">
+                <h2>Multi-Account & Multi-Alert Setup</h2>
+
+                <p>PineConnector supports managing multiple MT5 accounts simultaneously with different connection types and multiple alert sources.</p>
+
+                <div class="callout">
+                    <div class="callout-title">💡 Key Concept</div>
+                    <p>Each PineConnector instance runs independently on a different port and connects to a separate MT5 account. All alerts route to a single webhook endpoint but are automatically routed to the correct instance based on magic numbers.</p>
+                </div>
+
+                <h3>Multi-Instance Architecture</h3>
+                <pre>TradingView Alerts (Multiple Strategies)
+         ↓
+    /webhook endpoint
+         ↓
+    Route by Magic Number
+         ↓
+    ┌────┬─────┬──────┐
+    ↓    ↓     ↓      ↓
+  Inst  Inst  Inst   Inst
+  #1    #2    #3     #N
+  (Live)(Demo)(Copy) (...)
+    ↓    ↓     ↓
+   MT5  MT5   MT5
+   Acc  Acc   Acc
+   #1   #2    #3</pre>
+
+                <h3>Running Multiple Instances</h3>
+                <pre># Instance 1: Live Trading (Port 8003)
+python run.py --port 8003 --config live.yaml
+
+# Instance 2: Demo Testing (Port 8004)
+python run.py --port 8004 --config demo.yaml
+
+# Instance 3: Copy Trading (Port 8005)
+python run.py --port 8005 --config copytrade.yaml</pre>
+
+                <p>Each instance has its own database, configuration, risk limits, and MT5 connection.</p>
+            </section>
+
+            <!-- Multi-Instances Section -->
+            <section id="multi-instances">
+                <h2>Multiple Instances Configuration</h2>
+
+                <h3>Instance Isolation</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Instance 1</th>
+                            <th>Instance 2</th>
+                            <th>Instance 3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Port</strong></td>
+                            <td>8003</td>
+                            <td>8004</td>
+                            <td>8005</td>
+                        </tr>
+                        <tr>
+                            <td><strong>MT5 Account</strong></td>
+                            <td>Live (123456789)</td>
+                            <td>Demo (987654321)</td>
+                            <td>Copy (555666777)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Database</strong></td>
+                            <td>trades_live.db</td>
+                            <td>trades_demo.db</td>
+                            <td>trades_copy.db</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Magic Range</strong></td>
+                            <td>1001-1999</td>
+                            <td>2001-2999</td>
+                            <td>3001-3999</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Risk Limit</strong></td>
+                            <td>$5000/day</td>
+                            <td>Unlimited</td>
+                            <td>$2000/day</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Purpose</strong></td>
+                            <td>Live Trading</td>
+                            <td>Testing</td>
+                            <td>Copy Trading</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>YAML Configuration Example</h3>
+                <pre>server:
+  port: 8003
+
+mt5:
+  account: 123456789
+  password: your_password
+  magic_base: 1000
+
+database:
+  url: sqlite:///./data/trades_live.db
+
+risk_management:
+  max_trades_per_day: 20
+  max_drawdown_percent: 10.0
+  daily_loss_limit: 5000.00</pre>
+            </section>
+
+            <!-- Connection Types Section -->
+            <section id="connection-types">
+                <h2>Connection Types for MT5</h2>
+
+                <h3>Type 1: Python MetaTrader5 Package</h3>
+                <p><strong>Best for:</strong> Local Windows machines with MT5 installed</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Latency</strong></td>
+                            <td>~50ms (direct DLL)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Setup</strong></td>
+                            <td>Direct DLL integration</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Requirements</strong></td>
+                            <td>Windows OS, MT5 installed locally, account logged in</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Use Case</strong></td>
+                            <td>High-frequency trading, precise execution</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Type 2: MQL5 Expert Advisor</h3>
+                <p><strong>Best for:</strong> Remote VPS, cloud servers, distributed setup</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Aspect</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Latency</strong></td>
+                            <td>100-200ms (network)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Setup</strong></td>
+                            <td>ZMQ-based network communication</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Requirements</strong></td>
+                            <td>MQL5 EA running in MT5, network connectivity</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Use Case</strong></td>
+                            <td>VPS deployment, remote accounts, scalability</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Communication Flow Comparison</h3>
+                <p><strong>Python Package (Direct):</strong></p>
+                <pre>Signal → FastAPI → Risk Gate → Trade Engine → MT5 Bridge → DLL → MT5 Terminal</pre>
+
+                <p><strong>MQL5 EA (Network):</strong></p>
+                <pre>Signal → FastAPI → Risk Gate → Trade Engine → ZMQ Network → MT5 EA → MT5 Terminal (remote)</pre>
+            </section>
+
+            <!-- Magic Numbers Section -->
+            <section id="magic-numbers">
+                <h2>Magic Numbers for Routing</h2>
+
+                <p>Magic numbers are 4-digit identifiers that route alerts to correct instances and identify which strategy made each trade.</p>
+
+                <h3>Magic Number Format: <code>XYYY</code></h3>
+                <ul>
+                    <li><strong>X</strong> = Instance (1 = Live, 2 = Demo, 3 = Copy, etc.)</li>
+                    <li><strong>YYY</strong> = Strategy (001 = Trend, 002 = Momentum, 003 = Range, etc.)</li>
+                </ul>
+
+                <h3>Example Magic Numbers</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Magic</th>
+                            <th>Instance</th>
+                            <th>Strategy</th>
+                            <th>Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1001</td>
+                            <td>1 (Live)</td>
+                            <td>Trend EMA</td>
+                            <td>Live trend trading</td>
+                        </tr>
+                        <tr>
+                            <td>1002</td>
+                            <td>1 (Live)</td>
+                            <td>Momentum RSI</td>
+                            <td>Live momentum trading</td>
+                        </tr>
+                        <tr>
+                            <td>2001</td>
+                            <td>2 (Demo)</td>
+                            <td>Trend EMA</td>
+                            <td>Testing trend strategy</td>
+                        </tr>
+                        <tr>
+                            <td>3001</td>
+                            <td>3 (Copy)</td>
+                            <td>Trend EMA</td>
+                            <td>Copy trading trend</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Benefits</h3>
+                <ul>
+                    <li><strong>Automatic Routing:</strong> Signals automatically go to correct instance</li>
+                    <li><strong>Trade Identification:</strong> Know which strategy made each trade</li>
+                    <li><strong>Selective Close:</strong> Close only specific strategy's trades</li>
+                    <li><strong>Analytics:</strong> Track performance per strategy</li>
+                    <li><strong>Risk Limits:</strong> Different risk per strategy</li>
+                </ul>
+
+                <h3>Example Alert with Magic Number</h3>
+                <pre>{
+  "action": "buy",
+  "symbol": "EURUSD",
+  "lot": 0.10,
+  "sl": 1.0850,
+  "tp": 1.0950,
+  "magic": 1001,
+  "comment": "Trend_EMA_Crossover",
+  "token": "live_token_xyz"
+}</pre>
+                <p>This alert will route to Instance #1 (magic 1001) on port 8003</p>
             </section>
 
             <!-- Dashboard Section -->
