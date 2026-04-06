@@ -21,6 +21,13 @@
       "runtimeArgs": ["-3", "run.py"],
       "cwd": "tools/backtester",
       "port": 8002
+    },
+    {
+      "name": "PineConnector",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3", "run.py"],
+      "cwd": "tools/pineconnector",
+      "port": 8003
     }
   ]
 }

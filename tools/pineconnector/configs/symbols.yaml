@@ -1,0 +1,38 @@
+# Symbol mapping: TradingView name -> MT5 broker name
+# Add your broker-specific mappings here
+
+mapping:
+  XAUUSD: XAUUSD
+  EURUSD: EURUSD
+  GBPUSD: GBPUSD
+  USDJPY: USDJPY
+  AUDUSD: AUDUSD
+  USDCAD: USDCAD
+  USDCHF: USDCHF
+  NZDUSD: NZDUSD
+  GBPJPY: GBPJPY
+  EURJPY: EURJPY
+  US30: US30
+  US500: US500
+  NAS100: NAS100
+  BTCUSD: BTCUSD
+  ETHUSD: ETHUSD
+
+# Pip size per symbol (used for TP/SL pip calculations)
+pip_sizes:
+  default: 0.0001
+  XAUUSD: 0.01
+  USDJPY: 0.01
+  EURJPY: 0.01
+  GBPJPY: 0.01
+  US30: 1.0
+  US500: 0.1
+  NAS100: 0.1
+  BTCUSD: 0.01
+  ETHUSD: 0.01
+
+# Minimum lot sizes
+min_lots:
+  default: 0.01
+  XAUUSD: 0.01
+  BTCUSD: 0.01
