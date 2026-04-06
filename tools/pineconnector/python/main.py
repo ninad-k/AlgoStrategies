@@ -379,8 +379,8 @@ async def analytics(days: int = 30) -> dict:
 
 # ─── Dashboard ────────────────────────────────────────────────────────
 
-@app.get("/", include_in_schema=False)
-def root() -> FileResponse | JSONResponse:
+@app.get("/", include_in_schema=False, response_model=None)
+def root():
     index = CLIENT_DIR / "index.html"
     if index.exists():
         return FileResponse(str(index))
