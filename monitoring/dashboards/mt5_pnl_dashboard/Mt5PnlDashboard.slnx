@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mt5PnlDashboard.Bridge/Mt5PnlDashboard.Bridge.csproj" />
+    <Project Path="src/Mt5PnlDashboard.Core/Mt5PnlDashboard.Core.csproj" />
+    <Project Path="src/Mt5PnlDashboard.Infrastructure/Mt5PnlDashboard.Infrastructure.csproj" />
+    <Project Path="src/Mt5PnlDashboard.ServiceDefaults/Mt5PnlDashboard.ServiceDefaults.csproj" />
+    <Project Path="src/Mt5PnlDashboard/Mt5PnlDashboard.csproj" />
+  </Folder>
+</Solution>
