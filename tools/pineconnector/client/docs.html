@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PineConnector Documentation - Rey Capital</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-light: #F0F4F8;
+            --bg-dark: #0b0d14;
+            --text-light: #1a202c;
+            --text-dark: #e2e8f0;
+            --accent-light: #1B4FBE;
+            --accent-dark: #4e8cff;
+            --border-light: #e0e7ff;
+            --border-dark: #1e293b;
+            --hover-light: #f3f4f6;
+            --hover-dark: #1e293b;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-light);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body.dark-mode {
+            background-color: var(--bg-dark);
+            color: var(--text-dark);
+        }
+
+        /* Navbar */
+        .navbar {
+            background: white;
+            border-bottom: 1px solid var(--border-light);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: background 0.3s, border-color 0.3s;
+        }
+
+        body.dark-mode .navbar {
+            background: #0f1419;
+            border-color: var(--border-dark);
+        }
+
+        .navbar-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: bold;
+            font-size: 1.25rem;
+            color: var(--accent-light);
+        }
+
+        .navbar-logo img {
+            height: 30px;
+            width: auto;
+        }
+
+        .navbar-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--hover-light);
+        }
+
+        body.dark-mode .theme-toggle:hover {
+            background: var(--hover-dark);
+        }
+
+        .back-btn {
+            background: var(--accent-light);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .back-btn:hover {
+            opacity: 0.9;
+        }
+
+        /* Main Container */
+        .container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            max-width: 1400px;
+            margin: 0 auto;
+            min-height: calc(100vh - 60px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: white;
+            border-right: 1px solid var(--border-light);
+            padding: 2rem 0;
+            overflow-y: auto;
+            max-height: calc(100vh - 60px);
+            transition: background 0.3s, border-color 0.3s;
+        }
+
+        body.dark-mode .sidebar {
+            background: #0f1419;
+            border-color: var(--border-dark);
+        }
+
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-title {
+            padding: 0 1.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6b7280;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        body.dark-mode .sidebar-title {
+            color: #9ca3af;
+        }
+
+        .sidebar-link {
+            display: block;
+            padding: 0.75rem 1.5rem;
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: 0.95rem;
+            border-left: 3px solid transparent;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        body.dark-mode .sidebar-link {
+            color: var(--text-dark);
+        }
+
+        .sidebar-link:hover {
+            background: var(--hover-light);
+            border-left-color: var(--accent-light);
+        }
+
+        body.dark-mode .sidebar-link:hover {
+            background: var(--hover-dark);
+        }
+
+        .sidebar-link.active {
+            color: var(--accent-light);
+            border-left-color: var(--accent-light);
+            background: var(--hover-light);
+            font-weight: 500;
+        }
+
+        body.dark-mode .sidebar-link.active {
+            background: var(--hover-dark);
+            color: var(--accent-dark);
+        }
+
+        /* Content */
+        .content {
+            padding: 3rem 4rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 60px);
+        }
+
+        .content h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent-light);
+        }
+
+        .content h2 {
+            font-size: 1.8rem;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: var(--accent-light);
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border-light);
+        }
+
+        body.dark-mode .content h2 {
+            border-color: var(--border-dark);
+        }
+
+        .content h3 {
+            font-size: 1.3rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-light);
+        }
+
+        body.dark-mode .content h3 {
+            color: var(--text-dark);
+        }
+
+        .content p {
+            margin-bottom: 1rem;
+            line-height: 1.8;
+        }
+
+        .content ul, .content ol {
+            margin-left: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        .content li {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            background: white;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        body.dark-mode table {
+            background: #0f1419;
+        }
+
+        th {
+            background: var(--accent-light);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-light);
+        }
+
+        body.dark-mode td {
+            border-color: var(--border-dark);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: var(--hover-light);
+        }
+
+        body.dark-mode tr:hover {
+            background: var(--hover-dark);
+        }
+
+        /* Code */
+        code {
+            background: #f3f4f6;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        body.dark-mode code {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+
+        pre {
+            background: #f3f4f6;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        body.dark-mode pre {
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .feature-card {
+            background: white;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        body.dark-mode .feature-card {
+            background: #0f1419;
+            border-color: var(--border-dark);
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent-light);
+            box-shadow: 0 4px 12px rgba(27, 79, 190, 0.1);
+        }
+
+        body.dark-mode .feature-card:hover {
+            box-shadow: 0 4px 12px rgba(78, 140, 255, 0.1);
+        }
+
+        .feature-card h3 {
+            color: var(--accent-light);
+            margin-bottom: 0.75rem;
+        }
+
+        /* Callout */
+        .callout {
+            background: #dbeafe;
+            border-left: 4px solid var(--accent-light);
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+
+        body.dark-mode .callout {
+            background: rgba(78, 140, 255, 0.1);
+        }
+
+        .callout-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+                position: fixed;
+                left: 0;
+                top: 60px;
+                width: 100%;
+                height: calc(100vh - 60px);
+                z-index: 99;
+                border-right: none;
+                border-bottom: 1px solid var(--border-light);
+            }
+
+            .sidebar.open {
+                display: block;
+            }
+
+            .content {
+                padding: 2rem;
+            }
+
+            .content h1 {
+                font-size: 1.8rem;
+            }
+
+            .content h2 {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-logo">
+            <img src="logo.png" alt="Rey Capital Logo" style="display:none;">
+            <span>PineConnector Docs</span>
+        </div>
+        <div class="navbar-controls">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
+            <a href="index.html" class="back-btn">← Back to Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">Getting Started</div>
+                <a class="sidebar-link active" onclick="scrollToSection('overview')">Overview</a>
+                <a class="sidebar-link" onclick="scrollToSection('features')">Core Features</a>
+                <a class="sidebar-link" onclick="scrollToSection('quick-start')">Quick Start</a>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Configuration</div>
+                <a class="sidebar-link" onclick="scrollToSection('signals')">Signal Parameters</a>
+                <a class="sidebar-link" onclick="scrollToSection('actions')">Trade Actions</a>
+                <a class="sidebar-link" onclick="scrollToSection('risk')">Risk Management</a>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Advanced</div>
+                <a class="sidebar-link" onclick="scrollToSection('partial-tp')">Partial Take Profit</a>
+                <a class="sidebar-link" onclick="scrollToSection('trailing')">Trailing Stops</a>
+                <a class="sidebar-link" onclick="scrollToSection('alerts')">Alert Formats</a>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Reference</div>
+                <a class="sidebar-link" onclick="scrollToSection('dashboard')">Dashboard Features</a>
+                <a class="sidebar-link" onclick="scrollToSection('metrics')">Performance Metrics</a>
+                <a class="sidebar-link" onclick="scrollToSection('scenarios')">Common Scenarios</a>
+            </div>
+        </aside>
+
+        <main class="content">
+            <h1 id="overview">PineConnector Documentation</h1>
+            <p style="color: #6b7280; margin-bottom: 2rem;">Complete guide to Rey Capital's production-grade trading automation platform</p>
+
+            <!-- Core Features Section -->
+            <section id="features">
+                <h2>Core Features</h2>
+
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>🚀 Hybrid Architecture</h3>
+                        <p>Python FastAPI backend + Rust Trade Engine for ultra-low latency execution with ZMQ inter-process communication.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📊 Partial Take Profits</h3>
+                        <p>Multi-level TP with 6-state FSM. Close positions gradually at TP1, TP2, TP3 with breakeven protection.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📈 Trailing Stops</h3>
+                        <p>Profit-based activation. SL moves automatically as price favors your position with step enforcement.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>⏱️ Time-Based Exit</h3>
+                        <p>Auto-close positions after specified duration. Perfect for intraday and scalping strategies.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🛡️ Risk Management</h3>
+                        <p>7 protective gates: dedup, lot sizing, daily limits, max open per symbol, cooldown, equity protection, daily PnL limits.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📱 Real-Time Dashboard</h3>
+                        <p>Live trade monitoring, Rey Capital branding, dark/light theme toggle, and comprehensive analytics.</p>
+                    </div>
+                </div>
+
+                <div class="callout">
+                    <div class="callout-title">💡 Pro Tip</div>
+                    <p>Start with dry-run mode to test your signals before trading with real money: <code>python run.py --dry-run</code></p>
+                </div>
+            </section>
+
+            <!-- Signal Parameters Section -->
+            <section id="signals">
+                <h2>Signal Parameters</h2>
+
+                <h3>Required Parameters</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>action</code></td>
+                            <td>string</td>
+                            <td>Trade action (buy, sell, closeall, etc.)</td>
+                            <td><code>buy</code></td>
+                        </tr>
+                        <tr>
+                            <td><code>symbol</code></td>
+                            <td>string</td>
+                            <td>Trading symbol</td>
+                            <td><code>EURUSD</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Optional Position Parameters</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Type</th>
+                            <th>Default</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>lot</code></td>
+                            <td>float</td>
+                            <td>0.01</td>
+                            <td>Trade volume in units</td>
+                        </tr>
+                        <tr>
+                            <td><code>sl</code></td>
+                            <td>float</td>
+                            <td>0</td>
+                            <td>Stop loss price (absolute)</td>
+                        </tr>
+                        <tr>
+                            <td><code>tp</code></td>
+                            <td>float</td>
+                            <td>0</td>
+                            <td>Take profit price (absolute)</td>
+                        </tr>
+                        <tr>
+                            <td><code>sl_pips</code></td>
+                            <td>float</td>
+                            <td>0</td>
+                            <td>Stop loss in pips (relative)</td>
+                        </tr>
+                        <tr>
+                            <td><code>tp_pips</code></td>
+                            <td>float</td>
+                            <td>0</td>
+                            <td>Take profit in pips (relative)</td>
+                        </tr>
+                        <tr>
+                            <td><code>comment</code></td>
+                            <td>string</td>
+                            <td>""</td>
+                            <td>Trade comment (visible in MT5)</td>
+                        </tr>
+                        <tr>
+                            <td><code>magic</code></td>
+                            <td>int</td>
+                            <td>0</td>
+                            <td>Magic number (strategy ID)</td>
+                        </tr>
+                        <tr>
+                            <td><code>time_exit_minutes</code></td>
+                            <td>int</td>
+                            <td>0</td>
+                            <td>Auto-close after N minutes</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Trade Actions Section -->
+            <section id="actions">
+                <h2>Trade Actions</h2>
+
+                <h3>Market Orders</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Description</th>
+                            <th>Required Params</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>buy</code></td>
+                            <td>Market buy (open long)</td>
+                            <td>symbol</td>
+                        </tr>
+                        <tr>
+                            <td><code>sell</code></td>
+                            <td>Market sell (open short)</td>
+                            <td>symbol</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Close Positions</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Description</th>
+                            <th>Effect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>closebuy</code></td>
+                            <td>Close all BUY positions</td>
+                            <td>Closes all long positions for symbol</td>
+                        </tr>
+                        <tr>
+                            <td><code>closesell</code></td>
+                            <td>Close all SELL positions</td>
+                            <td>Closes all short positions for symbol</td>
+                        </tr>
+                        <tr>
+                            <td><code>closeall</code></td>
+                            <td>Emergency close all</td>
+                            <td>Closes all positions immediately</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Risk Management Section -->
+            <section id="risk">
+                <h2>Risk Management Gates</h2>
+
+                <p>PineConnector includes 7 protective gates that validate every signal:</p>
+
+                <h3>1. Deduplication (Dedup)</h3>
+                <p>Prevents identical signals sent multiple times within 30 seconds.</p>
+                <pre>Matching: action + symbol + lot
+Status: "rejected" if duplicate found</pre>
+
+                <h3>2. Lot Size Gate</h3>
+                <p>Validates position size constraints (min 0.01, max 10.0)</p>
+
+                <h3>3. Daily Trade Limit</h3>
+                <p>Maximum 20 trades per day (reset daily at 00:00 UTC)</p>
+
+                <h3>4. Max Open Per Symbol</h3>
+                <p>Prevents over-concentration (max 5 concurrent positions per symbol)</p>
+
+                <h3>5. Cooldown Period</h3>
+                <p>Minimum time between trades for same symbol (0 = disabled)</p>
+
+                <h3>6. Equity Protection</h3>
+                <p>Stops trading if drawdown exceeds 10% of peak equity</p>
+
+                <h3>7. Daily PnL Limit</h3>
+                <p>Stops trading if daily loss exceeds $500</p>
+
+                <div class="callout">
+                    <div class="callout-title">⚠️ Important</div>
+                    <p>All risk gates must pass for a signal to be executed. If any gate rejects, you'll receive a rejection reason in the API response.</p>
+                </div>
+            </section>
+
+            <!-- Partial TP Section -->
+            <section id="partial-tp">
+                <h2>Partial Take Profit Configuration</h2>
+
+                <p>Automatically close portions of your position at different price levels with optional breakeven protection and trailing activation.</p>
+
+                <h3>JSON Format</h3>
+                <pre>{
+  "partial_tp": {
+    "tp1_pips": 10,
+    "tp1_percent": 50,
+    "tp2_pips": 20,
+    "tp2_percent": 30,
+    "tp3_pips": 40,
+    "tp3_percent": 100,
+    "move_sl_to_be_on_tp1": true,
+    "trail_after_tp2": false
+  }
+}</pre>
+
+                <h3>Plain Text Shorthand</h3>
+                <pre>buy,EURUSD,lot=0.10,sl=1.0850,tp1=10@50%,tp2=20@30%,tp3=40@20%</pre>
+
+                <h3>State Machine</h3>
+                <pre>Inactive
+    ↓ [Signal received]
+WaitingTP1
+    ↓ [TP1 price hit]
+TP1Hit (close 50%)
+    ↓
+WaitingTP2
+    ↓ [TP2 price hit]
+TP2Hit (close 30%)
+    ↓
+WaitingTP3
+    ↓ [TP3 price hit]
+Complete (close remaining 20%)</pre>
+            </section>
+
+            <!-- Trailing Stop Section -->
+            <section id="trailing">
+                <h2>Trailing Stop Configuration</h2>
+
+                <p>Automatically move SL upward as price moves in your favor, locking in profits.</p>
+
+                <h3>JSON Format</h3>
+                <pre>{
+  "trailing": {
+    "enabled": true,
+    "activation_pips": 20,
+    "distance_pips": 10,
+    "step_pips": 1
+  }
+}</pre>
+
+                <h3>How It Works</h3>
+                <ol>
+                    <li><strong>Activation</strong>: Once trade is +20 pips in profit, trailing becomes active</li>
+                    <li><strong>Tracking</strong>: SL moves up (for buy) or down (for sell) as price moves favorably</li>
+                    <li><strong>Distance</strong>: SL always stays 10 pips away from current price</li>
+                    <li><strong>Step</strong>: SL only moves if price movement ≥ 1 pip</li>
+                </ol>
+
+                <h3>Example: BUY Position</h3>
+                <pre>Entry: 1.0900
+SL: 1.0850
+Trailing: activation=20 pips, distance=10 pips
+
+Price: 1.0920 (+20 pips) → Trailing activates
+  SL: 1.0910 (price - 10 pips)
+
+Price: 1.0930 (+30 pips)
+  SL: 1.0920 (price - 10 pips, moved by 10 pips)</pre>
+            </section>
+
+            <!-- Alert Formats Section -->
+            <section id="alerts">
+                <h2>Alert Formats</h2>
+
+                <h3>JSON Format (TradingView JSON)</h3>
+                <pre>{
+  "token": "your_secret_token",
+  "action": "buy",
+  "symbol": "EURUSD",
+  "lot": 0.10,
+  "sl": 1.0850,
+  "tp": 1.0950,
+  "comment": "my_strategy",
+  "magic": 1001,
+  "partial_tp": {
+    "tp1_pips": 10,
+    "tp1_percent": 50
+  }
+}</pre>
+
+                <h3>Plain Text Format (Comma-Separated)</h3>
+                <pre>my_token,buy,EURUSD,lot=0.10,sl=1.0850,tp=1.0950
+my_token,sell,GBPUSD,lot=0.05,sl_pips=50,tp_pips=100
+my_token,buy,XAUUSD,lot=0.5,tp1=10@50%,tp2=20@30%
+my_token,closeall</pre>
+
+                <h3>TradingView Alert Examples</h3>
+                <p><strong>For JSON Endpoint:</strong></p>
+                <pre>{"action": "buy", "symbol": "EURUSD", "lot": 0.10, "sl": 1.0850, "tp": 1.0950}</pre>
+
+                <p><strong>For Plain Text Endpoint:</strong></p>
+                <pre>my_secret_token,buy,EURUSD,lot=0.10,sl=1.0850,tp=1.0950</pre>
+            </section>
+
+            <!-- Dashboard Section -->
+            <section id="dashboard">
+                <h2>Dashboard Features</h2>
+
+                <h3>Real-Time Monitoring</h3>
+                <ul>
+                    <li><strong>Status Indicators</strong>: OK/DRY RUN/ERROR badges</li>
+                    <li><strong>Trade Table</strong>: Symbol, action, volume, entry price, current P&L</li>
+                    <li><strong>Analytics Cards</strong>: Daily trades, win rate, daily PnL, max drawdown</li>
+                    <li><strong>System Health</strong>: Trade Engine, MT5 bridge, ZMQ connectivity</li>
+                </ul>
+
+                <h3>Theme Toggle</h3>
+                <ul>
+                    <li><strong>Light Theme</strong>: Clean white background, blue accents</li>
+                    <li><strong>Dark Theme</strong>: Deep background, bright blue accents</li>
+                    <li><strong>Persistent</strong>: Saved in browser localStorage</li>
+                </ul>
+
+                <h3>Auto-Update Intervals</h3>
+                <ul>
+                    <li>Status: Every 2 seconds</li>
+                    <li>Trade List: Every 3 seconds</li>
+                    <li>Analytics: Every 5 seconds</li>
+                </ul>
+            </section>
+
+            <!-- Metrics Section -->
+            <section id="metrics">
+                <h2>Performance Metrics</h2>
+
+                <h3>PnL Metrics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>total_pnl</code></td>
+                            <td>Gross profit/loss before commission</td>
+                        </tr>
+                        <tr>
+                            <td><code>net_pnl</code></td>
+                            <td>Profit/loss after commission</td>
+                        </tr>
+                        <tr>
+                            <td><code>daily_pnl</code></td>
+                            <td>Daily cumulative P&L</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Win Rate Metrics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>win_rate</code></td>
+                            <td>Percentage of winning trades (0-100)</td>
+                        </tr>
+                        <tr>
+                            <td><code>profit_factor</code></td>
+                            <td>Total Wins / Total Losses</td>
+                        </tr>
+                        <tr>
+                            <td><code>expectancy</code></td>
+                            <td>Average profit per trade</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Drawdown Metrics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>max_drawdown</code></td>
+                            <td>Largest peak-to-trough loss in currency</td>
+                        </tr>
+                        <tr>
+                            <td><code>max_drawdown_pct</code></td>
+                            <td>Max drawdown as percentage of peak</td>
+                        </tr>
+                        <tr>
+                            <td><code>current_drawdown</code></td>
+                            <td>Current drawdown from peak</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Scenarios Section -->
+            <section id="scenarios">
+                <h2>Common Trading Scenarios</h2>
+
+                <h3>Scalping Strategy (Short Duration)</h3>
+                <pre>buy,EURUSD,lot=0.5,sl=1.0880,tp=1.0920,time_exit_minutes=15</pre>
+                <p>Quick 40-pip entry/exit with 20-pip SL. Auto-closes after 15 minutes.</p>
+
+                <h3>Swing Trade (Breakeven Protection)</h3>
+                <pre>buy,EURUSD,lot=0.10,sl=1.0800,tp=1.1000,tp1=50@30%,tp2=100@70%,move_sl_to_be_on_tp1=true</pre>
+                <p>Close 30% at first target, move SL to breakeven, then close 70% at second target.</p>
+
+                <h3>Momentum Trade (Trailing Stop)</h3>
+                <pre>buy,XAUUSD,lot=0.5,sl=1900,tp=2000,trailing_enabled=true,trailing_activation=30,trailing_distance=15</pre>
+                <p>Let trend run with trailing stop. Activate after 30 pips profit, lock in 15 pips.</p>
+
+                <h3>Risk-Based Position Sizing</h3>
+                <pre>buy,EURUSD,risk_percent=2.0,sl=1.0850,tp=1.0950</pre>
+                <p>Automatically calculate lot size based on 2% risk of account equity.</p>
+            </section>
+
+            <!-- Quick Start Section -->
+            <section id="quick-start">
+                <h2>Quick Start Guide</h2>
+
+                <h3>1. Run the Platform</h3>
+                <pre>cd tools/pineconnector
+python run.py</pre>
+                <p>Server starts on <code>http://localhost:8003</code></p>
+
+                <h3>2. Test in Dry-Run Mode</h3>
+                <pre>python run.py --dry-run</pre>
+                <p>All signals processed but no real trades executed.</p>
+
+                <h3>3. Get Your Webhook URL</h3>
+                <pre>http://localhost:8003/webhook</pre>
+                <p>Add this to your TradingView alert notifications.</p>
+
+                <h3>4. Send Your First Signal</h3>
+                <pre>POST http://localhost:8003/webhook
+Content-Type: application/json
+X-Auth-Token: your_token
+
+{
+  "action": "buy",
+  "symbol": "EURUSD",
+  "lot": 0.10,
+  "sl": 1.0850,
+  "tp": 1.0950
+}</pre>
+
+                <h3>5. Monitor Trades</h3>
+                <p>Open <code>http://localhost:8003</code> to see real-time dashboard with all trades.</p>
+
+                <h3>6. Check API</h3>
+                <pre>GET http://localhost:8003/api/trades
+GET http://localhost:8003/api/health
+GET http://localhost:8003/api/analytics</pre>
+
+                <div class="callout">
+                    <div class="callout-title">📚 Full Documentation</div>
+                    <p>For detailed setup, architecture, and troubleshooting, see the documentation folder: <code>docs/pineconnector/</code></p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // Theme Management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-mode');
+            }
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            const button = document.querySelector('.theme-toggle');
+            button.textContent = isDark ? '☀️' : '🌙';
+        }
+
+        // Sidebar Navigation
+        function scrollToSection(sectionId) {
+            const element = document.getElementById(sectionId);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                // Update active link
+                document.querySelectorAll('.sidebar-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                event.target.classList.add('active');
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            const isDark = document.body.classList.contains('dark-mode');
+            document.querySelector('.theme-toggle').textContent = isDark ? '☀️' : '🌙';
+        });
+
+        // Update theme toggle on theme change
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'class') {
+                    const isDark = document.body.classList.contains('dark-mode');
+                    document.querySelector('.theme-toggle').textContent = isDark ? '☀️' : '🌙';
+                }
+            });
+        });
+
+        observer.observe(document.body, { attributes: true });
+    </script>
+</body>
+</html>

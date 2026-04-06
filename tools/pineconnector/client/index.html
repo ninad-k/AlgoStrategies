@@ -341,6 +341,10 @@
             font-size: 12px;
             font-weight: 500;
             transition: all 0.15s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
         .btn:hover { background: var(--surface2); border-color: var(--border-hover); }
         .btn-danger {
@@ -405,6 +409,7 @@
                     <button class="theme-btn" onclick="setTheme('light')" id="btnLight" title="Light mode">&#9788;</button>
                     <button class="theme-btn active" onclick="setTheme('dark')" id="btnDark" title="Dark mode">&#9790;</button>
                 </div>
+                <a href="docs.html" class="btn" title="View documentation">📚 Docs</a>
                 <button class="btn btn-danger" onclick="closeAll()">Close All</button>
             </div>
         </div>
