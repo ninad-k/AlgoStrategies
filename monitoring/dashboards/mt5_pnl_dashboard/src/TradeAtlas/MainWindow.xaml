@@ -1,0 +1,128 @@
+﻿<Window x:Class="TradeAtlas.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:TradeAtlas.ViewModels"
+        xmlns:dashboardViews="clr-namespace:TradeAtlas.Views.Dashboard"
+        xmlns:accountViews="clr-namespace:TradeAtlas.Views.AccountManager"
+        xmlns:strategyViews="clr-namespace:TradeAtlas.Views.StrategyManager"
+        xmlns:traderViews="clr-namespace:TradeAtlas.Views.ManualTraders"
+        xmlns:uncatViews="clr-namespace:TradeAtlas.Views.UncategorizedTrades"
+        xmlns:liveViews="clr-namespace:TradeAtlas.Views.LiveTrades"
+        xmlns:reportViews="clr-namespace:TradeAtlas.Views.Reports"
+        xmlns:settingsViews="clr-namespace:TradeAtlas.Views.Settings"
+        xmlns:helpViews="clr-namespace:TradeAtlas.Views.Help"
+        mc:Ignorable="d"
+        Title="{Binding Title}"
+        Icon="pack://application:,,,/Assets/ReyCapital_Icon.png"
+        Height="768" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel, IsDesignTimeCreatable=False}">
+
+    <Window.InputBindings>
+        <KeyBinding Gesture="Ctrl+D" Command="{Binding ShowDashboardCommand}" />
+        <KeyBinding Gesture="Ctrl+A" Command="{Binding ShowAccountManagerCommand}" />
+        <KeyBinding Gesture="Ctrl+S" Command="{Binding ShowStrategyManagerCommand}" />
+        <KeyBinding Gesture="Ctrl+T" Command="{Binding ShowManualTradersCommand}" />
+        <KeyBinding Gesture="Ctrl+U" Command="{Binding ShowUncategorizedTradesCommand}" />
+        <KeyBinding Gesture="Ctrl+L" Command="{Binding ShowLiveTradesCommand}" />
+        <KeyBinding Gesture="Ctrl+R" Command="{Binding ShowReportsCommand}" />
+        <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowSettingsCommand}" />
+        <KeyBinding Gesture="F1" Command="{Binding ShowHelpCommand}" />
+    </Window.InputBindings>
+
+    <Window.Resources>
+        <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+            <dashboardViews:DashboardView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:AccountManagerViewModel}">
+            <accountViews:AccountManagerView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:StrategyManagementViewModel}">
+            <strategyViews:StrategyManagementView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ManualTradersViewModel}">
+            <traderViews:ManualTradersView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:UncategorizedTradesViewModel}">
+            <uncatViews:UncategorizedTradesView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LiveTradesViewModel}">
+            <liveViews:LiveTradesView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
+            <reportViews:ReportsView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+            <settingsViews:SettingsView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:HelpViewModel}">
+            <helpViews:HelpView />
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Header Bar: REY CAPITAL branding + app title -->
+        <Border DockPanel.Dock="Top" Background="#004AAC" Padding="10,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <!-- Company Logo -->
+                <Image Grid.Column="0" Source="pack://application:,,,/Assets/ReyCapital_Logo_White.png"
+                       Height="36" VerticalAlignment="Center" Margin="0,0,14,0"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <!-- App Name + Tagline -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="TradeAtlas" FontSize="18" FontWeight="Bold"
+                               Foreground="White" />
+                    <TextBlock Text="REY CAPITAL · Smart Investments" FontSize="10"
+                               Foreground="#BDD4F5" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <!-- File: Dashboard + Exit -->
+            <MenuItem Header="_File">
+                <MenuItem Header="_Dashboard" Command="{Binding ShowDashboardCommand}" InputGestureText="Ctrl+D" />
+                <Separator />
+                <MenuItem Header="E_xit" Click="OnExitClick" InputGestureText="Alt+F4" />
+            </MenuItem>
+            <!-- Manage: Accounts, Strategies, Traders, Trades -->
+            <MenuItem Header="_Manage">
+                <MenuItem Header="_Account Manager" Command="{Binding ShowAccountManagerCommand}" InputGestureText="Ctrl+A" />
+                <MenuItem Header="_Strategy Manager" Command="{Binding ShowStrategyManagerCommand}" InputGestureText="Ctrl+S" />
+                <MenuItem Header="Manual _Traders" Command="{Binding ShowManualTradersCommand}" InputGestureText="Ctrl+T" />
+                <Separator />
+                <MenuItem Header="_Uncategorized Trades" Command="{Binding ShowUncategorizedTradesCommand}" InputGestureText="Ctrl+U" />
+                <MenuItem Header="_Live Trades" Command="{Binding ShowLiveTradesCommand}" InputGestureText="Ctrl+L" />
+            </MenuItem>
+            <!-- Reports -->
+            <MenuItem Header="_Reports" Command="{Binding ShowReportsCommand}" InputGestureText="Ctrl+R" />
+            <!-- Settings -->
+            <MenuItem Header="S_ettings" Command="{Binding ShowSettingsCommand}" InputGestureText="Ctrl+," />
+            <!-- Help -->
+            <MenuItem Header="_Help" Command="{Binding ShowHelpCommand}" InputGestureText="F1" />
+        </Menu>
+
+        <!-- Status Bar -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusMessage}" />
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock>
+                    <Run Text="Uncategorized: " />
+                    <Run Text="{Binding UncategorizedCount, Mode=OneWay}" />
+                </TextBlock>
+            </StatusBarItem>
+        </StatusBar>
+
+        <!-- Main Content -->
+        <ContentControl Content="{Binding CurrentView}" Margin="4" />
+    </DockPanel>
+</Window>
