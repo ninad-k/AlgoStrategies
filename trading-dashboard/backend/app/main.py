@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import ensure_schemas
-from app.routers import auth, upload, traders, strategies, accounts, attribution_rules, pnl, admin
+from app.routers import auth, upload, traders, strategies, accounts, attribution_rules, pnl, admin, execution
 
 app = FastAPI(title="Trading Dashboard API", version="1.0.0")
 
@@ -34,3 +34,4 @@ app.include_router(accounts.router, prefix="/api/v1/accounts", tags=["accounts"]
 app.include_router(attribution_rules.router, prefix="/api/v1/attribution-rules", tags=["attribution-rules"])
 app.include_router(pnl.router, prefix="/api/v1/pnl", tags=["pnl"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(execution.router, prefix="/api/v1/execution", tags=["execution"])

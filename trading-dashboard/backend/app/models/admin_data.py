@@ -104,3 +104,13 @@ class AuditLog(Base):
     entity_id = Column(Integer)
     metadata = Column(JSONB)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class ExecutionControl(Base):
+    """Singleton row (id=1): dashboard toggle for MT5 live order execution."""
+    __tablename__ = "execution_control"
+    __table_args__ = {"schema": "admin_data"}
+
+    id = Column(Integer, primary_key=True)
+    live_trading_enabled = Column(Boolean, nullable=False, default=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)

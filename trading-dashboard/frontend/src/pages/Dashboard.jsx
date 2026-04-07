@@ -9,6 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ErrorBanner from '../components/ui/ErrorBanner'
 import { getPnlSummary, getPnlByTrader, getPnlByStrategy, getTraderTrades } from '../api/pnl'
 import { useNavigate } from 'react-router-dom'
+import LiveTradingToggle from '../components/LiveTradingToggle'
 
 function daysAgo(n) {
   const d = new Date(); d.setDate(d.getDate() - n)
@@ -48,7 +49,10 @@ export default function Dashboard() {
   return (
     <AppShell>
       <TopBar title="Dashboard">
-        <DateRangePicker onChange={setFilters} />
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <LiveTradingToggle />
+          <DateRangePicker onChange={setFilters} />
+        </div>
       </TopBar>
       <div className="p-6 space-y-6">
         <ErrorBanner message={error} />
