@@ -1,0 +1,19 @@
+# MT5 Account Configuration for P&L Dashboard
+# Passwords use environment variable references for security
+accounts:
+  - login: 12345678
+    password: "${MT5_PASS_1}"
+    server: "BrokerName-Server"
+    path: "C:/Program Files/MetaTrader 5/terminal64.exe"
+    label: "Main Live"
+    trader: "Ninad"
+  - login: 87654321
+    password: "${MT5_PASS_2}"
+    server: "BrokerName-Demo"
+    path: "C:/Program Files/MetaTrader 5 Demo/terminal64.exe"
+    label: "Demo Testing"
+    trader: "Ninad"
+
+export_dir: "./data/mt5_exports"
+database_path: "./data/pnl_dashboard.db"
+start_date: "2020-01-01"

@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import uvicorn
 from dotenv import load_dotenv
-from pathlib import Path
 
 load_dotenv(Path(__file__).parent / ".env", override=True)
 

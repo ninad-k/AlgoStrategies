@@ -1,0 +1,55 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E8A1F4E1-33DE-445E-8AD2-D25F0C537951}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TradeAtlas", "src\TradeAtlas\TradeAtlas.csproj", "{6BA785C8-133F-4D9A-A182-1A310C199AEA}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TradeAtlas.Bridge", "src\TradeAtlas.Bridge\TradeAtlas.Bridge.csproj", "{922E14C0-DC7E-4519-A782-54D5C93B5D71}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TradeAtlas.Core", "src\TradeAtlas.Core\TradeAtlas.Core.csproj", "{232D8BC9-EE22-44A2-96F5-037816422ADB}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TradeAtlas.Infrastructure", "src\TradeAtlas.Infrastructure\TradeAtlas.Infrastructure.csproj", "{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D}"
+EndProject
+Project("{9A19103F-16F7-4658-BE54-9A1E7A4F7556}") = "TradeAtlas.ServiceDefaults", "src\TradeAtlas.ServiceDefaults\TradeAtlas.ServiceDefaults.csproj", "{FDF81267-7192-4B33-A875-4FFD488A6CA9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6BA785C8-133F-4D9A-A182-1A310C199AEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BA785C8-133F-4D9A-A182-1A310C199AEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BA785C8-133F-4D9A-A182-1A310C199AEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BA785C8-133F-4D9A-A182-1A310C199AEA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{922E14C0-DC7E-4519-A782-54D5C93B5D71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{922E14C0-DC7E-4519-A782-54D5C93B5D71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{922E14C0-DC7E-4519-A782-54D5C93B5D71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{922E14C0-DC7E-4519-A782-54D5C93B5D71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{232D8BC9-EE22-44A2-96F5-037816422ADB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{232D8BC9-EE22-44A2-96F5-037816422ADB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{232D8BC9-EE22-44A2-96F5-037816422ADB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{232D8BC9-EE22-44A2-96F5-037816422ADB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDF81267-7192-4B33-A875-4FFD488A6CA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDF81267-7192-4B33-A875-4FFD488A6CA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDF81267-7192-4B33-A875-4FFD488A6CA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDF81267-7192-4B33-A875-4FFD488A6CA9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{6BA785C8-133F-4D9A-A182-1A310C199AEA} = {E8A1F4E1-33DE-445E-8AD2-D25F0C537951}
+		{922E14C0-DC7E-4519-A782-54D5C93B5D71} = {E8A1F4E1-33DE-445E-8AD2-D25F0C537951}
+		{232D8BC9-EE22-44A2-96F5-037816422ADB} = {E8A1F4E1-33DE-445E-8AD2-D25F0C537951}
+		{3C902422-DA72-4AC8-9CAF-50FBE3EAE12D} = {E8A1F4E1-33DE-445E-8AD2-D25F0C537951}
+		{FDF81267-7192-4B33-A875-4FFD488A6CA9} = {E8A1F4E1-33DE-445E-8AD2-D25F0C537951}
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

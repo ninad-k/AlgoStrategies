@@ -1,0 +1,15 @@
+# Strategy name mapping by magic number
+# Used by classify_trades.py to identify automated strategies
+strategies:
+  20250101: "FairValueGap_Regime"
+  20250327: "PivotVwapEma"
+  889: "MACrossover_Filtered"
+
+# Comment patterns that indicate semi-manual trades
+# (magic=0 but placed via mobile app, modified SL/TP, etc.)
+comment_patterns:
+  semi_manual:
+    - pattern: "from mobile"
+    - pattern: "tp hit"
+    - pattern: "sl modified"
+    - pattern: "trailing"

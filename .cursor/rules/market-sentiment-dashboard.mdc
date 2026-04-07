@@ -1,0 +1,13 @@
+---
+description: Market Sentiment Dashboard — FastAPI app layout and run/deploy
+globs: monitoring/dashboards/market_sentiment/**/*
+alwaysApply: false
+---
+
+# Market Sentiment Dashboard
+
+- **Entry**: `run.py` (uvicorn `server.main:app`). Working directory must be `monitoring/dashboards/market_sentiment` so imports and `.env` resolve.
+- **Backend**: `server/` — `main.py` (routes), `analyzer.py` (LLM providers), `config.py`, `technical.py`, `data.py`, `models.py`; embedded scanner under `server/scanner/`.
+- **Frontend**: static `client/index.html` (served from `/`).
+- **Env**: `server/config.py` loads `.env` from the dashboard root; start from `.env.example`.
+- **Deploy**: Render spec is only at **repo root** `render.yaml` — do not duplicate under this folder.

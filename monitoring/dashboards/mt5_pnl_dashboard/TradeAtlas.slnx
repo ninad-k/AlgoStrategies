@@ -1,0 +1,9 @@
+﻿<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradeAtlas.Bridge/TradeAtlas.Bridge.csproj" />
+    <Project Path="src/TradeAtlas.Core/TradeAtlas.Core.csproj" />
+    <Project Path="src/TradeAtlas.Infrastructure/TradeAtlas.Infrastructure.csproj" />
+    <Project Path="src/TradeAtlas.ServiceDefaults/TradeAtlas.ServiceDefaults.csproj" />
+    <Project Path="src/TradeAtlas/TradeAtlas.csproj" />
+  </Folder>
+</Solution>
