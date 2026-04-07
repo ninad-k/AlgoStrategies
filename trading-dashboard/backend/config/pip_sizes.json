@@ -1,0 +1,18 @@
+{
+  "default": 0.0001,
+  "XAUUSD": 0.1,
+  "XAGUSD": 0.001,
+  "USDJPY": 0.01,
+  "EURJPY": 0.01,
+  "GBPJPY": 0.01,
+  "AUDJPY": 0.01,
+  "CADJPY": 0.01,
+  "CHFJPY": 0.01,
+  "NZDJPY": 0.01,
+  "US30": 1.0,
+  "US500": 0.1,
+  "NAS100": 0.1,
+  "GER40": 0.1,
+  "BTCUSD": 1.0,
+  "ETHUSD": 0.1
+}

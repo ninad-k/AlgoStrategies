@@ -22,5 +22,13 @@
       "cwd": "tools/backtester",
       "port": 8002
     }
+  ,
+    {
+      "name": "trading-dashboard-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "trading-dashboard/frontend",
+      "port": 3000
+    }
   ]
 }
