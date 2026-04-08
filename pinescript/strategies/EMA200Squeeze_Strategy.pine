@@ -1,0 +1,369 @@
+//@version=5
+strategy("200 EMA Squeeze Strategy", shorttitle="EMA200 Squeeze",
+         overlay=true, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=100, initial_capital=100000,
+         commission_type=strategy.commission.percent, commission_value=0.03,
+         slippage=2, calc_on_every_tick=false, pyramiding=0)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+// --- EMA Settings ---
+grpEMA = "EMA Settings"
+emaLen    = input.int(200, "EMA Length", minval=1, group=grpEMA)
+exitMode  = input.string("Candle Close", "Exit Mode",
+     options=["Candle Close", "Candle Touch"], group=grpEMA)
+
+// --- SuperTrend Trailing (Optional) ---
+grpST = "SuperTrend Trailing"
+useSTTrail   = input.bool(false, "Use SuperTrend to Trail Remaining Qty", group=grpST)
+stPeriod     = input.int(10,     "SuperTrend ATR Period",       minval=1, group=grpST)
+stMultiplier = input.float(3.0,  "SuperTrend Multiplier",       minval=0.1, step=0.1, group=grpST)
+
+// --- ADX Filter (Optional) ---
+grpADX = "ADX Filter"
+useADX       = input.bool(false, "Enable ADX Filter",          group=grpADX)
+adxPeriod    = input.int(14,     "ADX Period",                  minval=1, group=grpADX)
+adxThreshold = input.float(25.0, "ADX Minimum Threshold",       minval=1, step=1, group=grpADX)
+
+// --- Partial Profit Booking (Points from Entry) ---
+grpTP = "Partial Profit Booking (Points from Entry)"
+tp1Enable     = input.bool(true,   "Enable TP1",             group=grpTP)
+tp1Points     = input.int(30,      "TP1 Points from Entry",  minval=1, group=grpTP)
+tp1QtyPct     = input.float(20,    "TP1 Close Qty %",        minval=1, maxval=100, group=grpTP)
+tp2Enable     = input.bool(true,   "Enable TP2",             group=grpTP)
+tp2Points     = input.int(60,      "TP2 Points from Entry",  minval=1, group=grpTP)
+tp2QtyPct     = input.float(20,    "TP2 Close Qty %",        minval=1, maxval=100, group=grpTP)
+tp3Enable     = input.bool(true,   "Enable TP3",             group=grpTP)
+tp3Points     = input.int(90,      "TP3 Points from Entry",  minval=1, group=grpTP)
+tp3QtyPct     = input.float(20,    "TP3 Close Qty %",        minval=1, maxval=100, group=grpTP)
+
+// --- Trailing Stop Loss ---
+grpTSL = "Trailing Stop Loss"
+useTSL        = input.bool(false, "Enable Trailing SL",      group=grpTSL)
+tslTriggerPct = input.float(1.5,  "TSL Trigger Profit %",    minval=0.1, step=0.1, group=grpTSL)
+tslOffsetPct  = input.float(0.5,  "TSL Trail Offset %",      minval=0.1, step=0.1, group=grpTSL)
+
+// --- Display ---
+grpDisp = "Display Settings"
+showEMA       = input.bool(true,  "Plot EMA Line",           group=grpDisp)
+showSignals   = input.bool(true,  "Plot Entry/Exit Signals", group=grpDisp)
+showTPLines   = input.bool(true,  "Plot TP Level Lines",     group=grpDisp)
+showDashboard = input.bool(true,  "Show P&L Dashboard",      group=grpDisp)
+
+// --- Dashboard Position ---
+grpDash = "Dashboard"
+dashPosX = input.string("right", "Dashboard X Position", options=["left", "center", "right"], group=grpDash)
+dashPosY = input.string("top",   "Dashboard Y Position", options=["top", "middle", "bottom"], group=grpDash)
+
+// ============================================================================
+// EMA CALCULATION
+// ============================================================================
+ema = ta.ema(close, emaLen)
+
+// Point size for TP calculations
+pointSize = syminfo.mintick
+
+// ============================================================================
+// SUPERTREND CALCULATION
+// ============================================================================
+[stValue, stDir] = ta.supertrend(stMultiplier, stPeriod)
+stBullish = stDir < 0   // ta.supertrend returns -1 for bullish, 1 for bearish
+stBearish = stDir > 0
+
+// ============================================================================
+// ADX CALCULATION
+// ============================================================================
+[adxDiPlus, adxDiMinus, adxValue] = ta.dmi(adxPeriod, adxPeriod)
+
+// ============================================================================
+// ENTRY / EXIT CONDITIONS
+// ============================================================================
+
+// Entry: price must TOUCH/CROSS EMA (candle range spans EMA) + close decides direction
+// + previous bar on opposite side (breakout from consolidation, no false touches)
+emaTouched    = low <= ema and high >= ema
+prevBarBelow  = close[1] < ema[1]  // previous bar close below EMA
+prevBarAbove  = close[1] > ema[1]  // previous bar close above EMA
+buyCondition  = emaTouched and close > ema and prevBarBelow    // breakout UP
+sellCondition = emaTouched and close < ema and prevBarAbove    // breakout DOWN
+
+// ADX entry filter
+if useADX
+    if adxValue < adxThreshold
+        buyCondition  := false
+        sellCondition := false
+
+// Trade state tracking
+var int tradeState = 0   // 0=flat, 1=long, -1=short
+var float entryPrice = na
+var bool tp1Hit = false
+var bool tp2Hit = false
+var bool tp3Hit = false
+
+// Exit conditions based on selected exit mode
+bool longEmaExit  = false
+bool shortEmaExit = false
+
+if tradeState == 1
+    if exitMode == "Candle Close"
+        longEmaExit := close < ema
+    else if exitMode == "Candle Touch"
+        longEmaExit := low <= ema
+
+if tradeState == -1
+    if exitMode == "Candle Close"
+        shortEmaExit := close > ema
+    else if exitMode == "Candle Touch"
+        shortEmaExit := high >= ema
+
+buySignal  = tradeState == 0 and buyCondition
+sellSignal = tradeState == 0 and sellCondition
+
+longExit  = longEmaExit
+shortExit = shortEmaExit
+
+// SuperTrend trailing exit for remaining qty
+bool stTrailLongExit  = false
+bool stTrailShortExit = false
+if useSTTrail
+    if tradeState == 1 and stBearish
+        stTrailLongExit := true
+    if tradeState == -1 and stBullish
+        stTrailShortExit := true
+
+// ============================================================================
+// STRATEGY EXECUTION
+// ============================================================================
+
+// --- PARTIAL PROFIT BOOKING (LONG) ---
+if tradeState == 1 and not na(entryPrice)
+    float longTP1Price = entryPrice + tp1Points * pointSize
+    float longTP2Price = entryPrice + tp2Points * pointSize
+    float longTP3Price = entryPrice + tp3Points * pointSize
+
+    if tp1Enable and not tp1Hit and high >= longTP1Price
+        strategy.close("Long", comment="TP1", qty_percent=tp1QtyPct)
+        tp1Hit := true
+
+    if tp2Enable and not tp2Hit and high >= longTP2Price
+        strategy.close("Long", comment="TP2", qty_percent=tp2QtyPct)
+        tp2Hit := true
+
+    if tp3Enable and not tp3Hit and high >= longTP3Price
+        strategy.close("Long", comment="TP3", qty_percent=tp3QtyPct)
+        tp3Hit := true
+
+// --- PARTIAL PROFIT BOOKING (SHORT) ---
+if tradeState == -1 and not na(entryPrice)
+    float shortTP1Price = entryPrice - tp1Points * pointSize
+    float shortTP2Price = entryPrice - tp2Points * pointSize
+    float shortTP3Price = entryPrice - tp3Points * pointSize
+
+    if tp1Enable and not tp1Hit and low <= shortTP1Price
+        strategy.close("Short", comment="TP1", qty_percent=tp1QtyPct)
+        tp1Hit := true
+
+    if tp2Enable and not tp2Hit and low <= shortTP2Price
+        strategy.close("Short", comment="TP2", qty_percent=tp2QtyPct)
+        tp2Hit := true
+
+    if tp3Enable and not tp3Hit and low <= shortTP3Price
+        strategy.close("Short", comment="TP3", qty_percent=tp3QtyPct)
+        tp3Hit := true
+
+// --- SUPERTREND TRAILING EXIT for remaining qty ---
+if stTrailLongExit and tradeState == 1
+    strategy.close("Long", comment="ST Trail")
+    tradeState := 0
+    entryPrice := na
+
+if stTrailShortExit and tradeState == -1
+    strategy.close("Short", comment="ST Trail")
+    tradeState := 0
+    entryPrice := na
+
+// --- TRAILING STOP LOSS ---
+var float trailStopLong  = na
+var float trailStopShort = na
+
+if useTSL and tradeState == 1 and not na(entryPrice)
+    float triggerPrice = entryPrice * (1 + tslTriggerPct / 100)
+    if high >= triggerPrice
+        float newStop = high * (1 - tslOffsetPct / 100)
+        trailStopLong := na(trailStopLong) ? newStop : math.max(trailStopLong, newStop)
+    if not na(trailStopLong) and low <= trailStopLong
+        strategy.close("Long", comment="TSL")
+        tradeState := 0
+        entryPrice := na
+        trailStopLong := na
+
+if useTSL and tradeState == -1 and not na(entryPrice)
+    float triggerPrice = entryPrice * (1 - tslTriggerPct / 100)
+    if low <= triggerPrice
+        float newStop = low * (1 + tslOffsetPct / 100)
+        trailStopShort := na(trailStopShort) ? newStop : math.min(trailStopShort, newStop)
+    if not na(trailStopShort) and high >= trailStopShort
+        strategy.close("Short", comment="TSL")
+        tradeState := 0
+        entryPrice := na
+        trailStopShort := na
+
+// --- EMA EXIT + REVERSE: close current position, open opposite ---
+if longExit and tradeState == 1
+    strategy.close("Long", comment="Exit → Rev Short")
+    strategy.entry("Short", strategy.short, comment="REV")
+    entryPrice := close
+    tradeState := -1
+    tp1Hit := false
+    tp2Hit := false
+    tp3Hit := false
+    trailStopLong := na
+
+if shortExit and tradeState == -1
+    strategy.close("Short", comment="Exit → Rev Long")
+    strategy.entry("Long", strategy.long, comment="REV")
+    entryPrice := close
+    tradeState := 1
+    tp1Hit := false
+    tp2Hit := false
+    tp3Hit := false
+    trailStopShort := na
+
+// --- NEW ENTRIES (only when flat — no position and no reverse happened) ---
+if buySignal and tradeState == 0
+    strategy.entry("Long", strategy.long)
+    entryPrice := close
+    tradeState := 1
+    tp1Hit := false
+    tp2Hit := false
+    tp3Hit := false
+
+if sellSignal and tradeState == 0
+    strategy.entry("Short", strategy.short)
+    entryPrice := close
+    tradeState := -1
+    tp1Hit := false
+    tp2Hit := false
+    tp3Hit := false
+
+// ============================================================================
+// PLOTS
+// ============================================================================
+plot(showEMA ? ema : na, "EMA", color=color.yellow, linewidth=2)
+
+// SuperTrend line (only when ST trailing is active)
+showST = useSTTrail
+plot(showST ? stValue : na, "SuperTrend",
+     color=stBullish ? color.lime : color.red,
+     linewidth=2, style=plot.style_circles)
+
+// Entry signals
+plotshape(showSignals and buySignal,  title="BUY",  location=location.belowbar,
+     style=shape.labelup,   color=color.green, text="BUY",  textcolor=color.white, size=size.small)
+plotshape(showSignals and sellSignal, title="SELL", location=location.abovebar,
+     style=shape.labeldown, color=color.red,   text="SELL", textcolor=color.white, size=size.small)
+
+// Exit + Reverse signals
+plotshape(showSignals and longExit,  title="Exit Long → Rev Short",  location=location.abovebar,
+     style=shape.xcross, color=color.fuchsia, size=size.tiny, text="REV ↓")
+plotshape(showSignals and shortExit, title="Exit Short → Rev Long", location=location.belowbar,
+     style=shape.xcross, color=color.fuchsia, size=size.tiny, text="REV ↑")
+
+// SuperTrend trailing exit signals
+plotshape(showSignals and stTrailLongExit,  title="ST Trail Long",  location=location.abovebar,
+     style=shape.diamond, color=color.orange, size=size.tiny, text="ST")
+plotshape(showSignals and stTrailShortExit, title="ST Trail Short", location=location.belowbar,
+     style=shape.diamond, color=color.orange, size=size.tiny, text="ST")
+
+// TP level lines (points-based)
+float tpLine1 = na
+float tpLine2 = na
+float tpLine3 = na
+
+if showTPLines and tradeState == 1 and not na(entryPrice)
+    tpLine1 := tp1Enable and not tp1Hit ? entryPrice + tp1Points * pointSize : na
+    tpLine2 := tp2Enable and not tp2Hit ? entryPrice + tp2Points * pointSize : na
+    tpLine3 := tp3Enable and not tp3Hit ? entryPrice + tp3Points * pointSize : na
+else if showTPLines and tradeState == -1 and not na(entryPrice)
+    tpLine1 := tp1Enable and not tp1Hit ? entryPrice - tp1Points * pointSize : na
+    tpLine2 := tp2Enable and not tp2Hit ? entryPrice - tp2Points * pointSize : na
+    tpLine3 := tp3Enable and not tp3Hit ? entryPrice - tp3Points * pointSize : na
+
+plot(tpLine1, "TP1 Level", color=color.new(color.lime, 30),   style=plot.style_circles, linewidth=1)
+plot(tpLine2, "TP2 Level", color=color.new(color.blue, 30),   style=plot.style_circles, linewidth=1)
+plot(tpLine3, "TP3 Level", color=color.new(color.aqua, 30),   style=plot.style_circles, linewidth=1)
+
+// Trailing SL line
+plot(useTSL and tradeState == 1  ? trailStopLong  : na, "Trail SL Long",  color=color.fuchsia, style=plot.style_stepline, linewidth=1)
+plot(useTSL and tradeState == -1 ? trailStopShort : na, "Trail SL Short", color=color.fuchsia, style=plot.style_stepline, linewidth=1)
+
+// ============================================================================
+// P&L DASHBOARD
+// ============================================================================
+if showDashboard and barstate.islastconfirmedhistory
+
+    tblPosY = dashPosY == "top" ? position.top_right : dashPosY == "middle" ? position.middle_right : position.bottom_right
+    if dashPosX == "left"
+        tblPosY := dashPosY == "top" ? position.top_left : dashPosY == "middle" ? position.middle_left : position.bottom_left
+    if dashPosX == "center"
+        tblPosY := dashPosY == "top" ? position.top_center : dashPosY == "middle" ? position.middle_center : position.bottom_center
+
+    var table dash = table.new(tblPosY, 2, 14,
+         bgcolor=color.new(color.black, 20),
+         border_color=color.gray, border_width=1,
+         frame_color=color.gray, frame_width=2)
+
+    table.cell(dash, 0, 0, "200 EMA Squeeze", text_color=color.white, text_size=size.normal, bgcolor=color.new(#1565C0, 0), text_halign=text.align_center)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    float netProfit     = strategy.netprofit
+    float grossProfit   = strategy.grossprofit
+    float grossLoss     = strategy.grossloss
+    int   totalTrades   = strategy.closedtrades
+    int   winTrades     = strategy.wintrades
+    int   lossTrades    = strategy.losstrades
+    float winRate       = totalTrades > 0 ? (winTrades / totalTrades) * 100 : 0.0
+    float profitFactor  = grossLoss != 0 ? math.abs(grossProfit / grossLoss) : 0.0
+    float maxDD         = strategy.max_drawdown
+    float maxDDPct      = strategy.initial_capital > 0 ? (maxDD / strategy.initial_capital) * 100 : 0.0
+    float avgWin        = winTrades  > 0 ? grossProfit / winTrades  : 0.0
+    float avgLoss       = lossTrades > 0 ? math.abs(grossLoss) / lossTrades : 0.0
+    float avgRR         = avgLoss > 0 ? avgWin / avgLoss : 0.0
+    float netProfitPct  = strategy.initial_capital > 0 ? (netProfit / strategy.initial_capital) * 100 : 0.0
+    float openPnL       = strategy.openprofit
+
+    color netColor  = netProfit >= 0 ? color.lime : color.red
+    color openColor = openPnL  >= 0 ? color.lime : color.red
+    color wrColor   = winRate >= 50 ? color.lime : color.red
+    color pfColor   = profitFactor >= 1.5 ? color.lime : profitFactor >= 1.0 ? color.yellow : color.red
+    color ddColor   = maxDDPct <= 10 ? color.lime : maxDDPct <= 20 ? color.yellow : color.red
+    color rrColor   = avgRR >= 2 ? color.lime : avgRR >= 1 ? color.yellow : color.red
+
+    rowAdd(tbl, row, label, value, valColor) =>
+        table.cell(tbl, 0, row, label, text_color=color.silver, text_size=size.small, text_halign=text.align_left, bgcolor=color.new(color.black, 60))
+        table.cell(tbl, 1, row, value, text_color=valColor,     text_size=size.small, text_halign=text.align_right, bgcolor=color.new(color.black, 60))
+
+    rowAdd(dash, 1,  "Net Profit",      str.tostring(netProfit, format.mintick) + " (" + str.tostring(netProfitPct, "#.##") + "%)", netColor)
+    rowAdd(dash, 2,  "Open P&L",        str.tostring(openPnL, format.mintick),     openColor)
+    rowAdd(dash, 3,  "Gross Profit",    str.tostring(grossProfit, format.mintick),  color.lime)
+    rowAdd(dash, 4,  "Gross Loss",      str.tostring(math.abs(grossLoss), format.mintick), color.red)
+    rowAdd(dash, 5,  "Total Trades",    str.tostring(totalTrades),                 color.white)
+    rowAdd(dash, 6,  "Win / Loss",      str.tostring(winTrades) + " / " + str.tostring(lossTrades), color.white)
+    rowAdd(dash, 7,  "Win Rate",        str.tostring(winRate, "#.##") + "%",       wrColor)
+    rowAdd(dash, 8,  "Profit Factor",   str.tostring(profitFactor, "#.##"),        pfColor)
+    rowAdd(dash, 9,  "Avg Win",         str.tostring(avgWin, format.mintick),      color.lime)
+    rowAdd(dash, 10, "Avg Loss",        str.tostring(avgLoss, format.mintick),     color.red)
+    rowAdd(dash, 11, "Avg R:R",         str.tostring(avgRR, "#.##"),               rrColor)
+    rowAdd(dash, 12, "Max Drawdown",    str.tostring(maxDD, format.mintick) + " (" + str.tostring(maxDDPct, "#.##") + "%)", ddColor)
+    rowAdd(dash, 13, "Status",          tradeState == 1 ? "LONG" : tradeState == -1 ? "SHORT" : "FLAT",
+         tradeState == 1 ? color.lime : tradeState == -1 ? color.red : color.gray)
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+alertcondition(buySignal,  title="Buy Alert",       message="BUY signal confirmed")
+alertcondition(sellSignal, title="Sell Alert",       message="SELL signal confirmed")
+alertcondition(longExit,   title="Exit Long Alert",  message="LONG exit")
+alertcondition(shortExit,  title="Exit Short Alert",  message="SHORT exit")

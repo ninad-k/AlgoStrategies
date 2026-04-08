@@ -120,6 +120,7 @@ options/chain_data/*
 # IDE & OS
 # ===========================
 .idea/*
+**/.idea/
 !.idea/runConfigurations/
 .vscode/
 *.swp
