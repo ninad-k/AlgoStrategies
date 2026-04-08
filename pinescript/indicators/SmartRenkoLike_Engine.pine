@@ -1,0 +1,178 @@
+//@version=5
+indicator("Smart Renko-like Engine (Step Line)", shorttitle="SmartRenkoLike", overlay=true, max_lines_count=500, max_labels_count=50)
+
+// ============================================================================
+// INPUTS (mirrors screenshot grouping)
+// ============================================================================
+grpAsset = "ASSET"
+assetMode = input.string("Auto-Detect", "Asset Selection Mode", options=["Auto-Detect", "Manual"], group=grpAsset)
+manualAsset = input.string("XAUUSD/GOLD", "Manual Asset Pick", options=[
+     "BANKNIFTY", "SENSEX", "NIFTY OPTIONS", "BANKNIFTY OPTIONS", "SENSEX OPTIONS",
+     "STOCKS", "Stock Options",
+     "Crude Oil", "US Oil", "Natural Gas",
+     "XAUUSD/GOLD", "XAGUSD/SILVER", "BTCUSD",
+     "CRYPTO", "Custom"
+], group=grpAsset)
+
+grpBrick = "BRICK SIZE"
+brickCalc = input.string("ATR", "Brick Size Calculation", options=["ATR", "Percentage", "Fixed Box Size"], group=grpBrick)
+customPct = input.float(1.0, "Custom % (if Percentage selected)", minval=0.0001, step=0.1, group=grpBrick)
+fixedBoxPoints = input.float(50.0, "Fixed Box Size (Points)", minval=syminfo.mintick, step=syminfo.mintick, group=grpBrick)
+
+atrLen = input.int(14, "ATR Length", minval=1, group=grpBrick, inline="atr")
+atrMult = input.float(1.0, "ATR Mult", minval=0.01, step=0.05, group=grpBrick, inline="atr")
+
+roundTo = input.float(0.0, "Rounding Step (0 = mintick)", minval=0.0, step=0.01, group=grpBrick)
+
+grpEngine = "ENGINE"
+src = input.source(close, "Source", group=grpEngine)
+allowMultiBrick = input.bool(true, "Allow Multi-Brick Jumps", group=grpEngine)
+initMode = input.string("First Bar", "Initialization", options=["First Bar", "First Close Rounded"], group=grpEngine)
+
+grpTrend = "TREND"
+showEma10 = input.bool(true, "EMA 10", group=grpTrend)
+showEma30 = input.bool(true, "EMA 30", group=grpTrend)
+showSma150 = input.bool(true, "SMA 150 Close", group=grpTrend)
+showCloud = input.bool(true, "EMA Trend Cloud", group=grpTrend)
+
+renkoUpCol = input.color(color.new(#35C759, 0), "Renko Up Color", group=grpTrend, inline="rcol")
+renkoDnCol = input.color(color.new(#FF3B30, 0), "Renko Down Color", group=grpTrend, inline="rcol")
+renkoFlatCol = input.color(color.new(color.gray, 0), "Renko Flat Color", group=grpTrend, inline="rcol")
+
+cloudBull = input.color(color.new(#35C759, 85), "Cloud Bull", group=grpTrend, inline="ccol")
+cloudBear = input.color(color.new(#FF3B30, 85), "Cloud Bear", group=grpTrend, inline="ccol")
+
+// ============================================================================
+// ASSET DETECTION + PRESETS
+// ============================================================================
+f_normTicker(_t) =>
+    str.upper(str.replace_all(str.replace_all(_t, ":", ""), "/", ""))
+
+f_detectAsset() =>
+    t = f_normTicker(syminfo.tickerid)
+    // common gold symbols on TradingView: OANDA:XAUUSD, FX:XAUUSD, TVC:GOLD
+    isGold = str.contains(t, "XAUUSD") or str.contains(t, "GOLD")
+    isSilver = str.contains(t, "XAGUSD") or str.contains(t, "SILVER")
+    isBtc = str.contains(t, "BTCUSD") or str.contains(t, "XBTUSD") or str.contains(t, "BTC")
+    isCrude = str.contains(t, "USOIL") or str.contains(t, "WTI") or str.contains(t, "CRUDE")
+    isNg = str.contains(t, "NATGAS") or str.contains(t, "NG")
+    isNifty = str.contains(t, "NIFTY")
+    isBankNifty = str.contains(t, "BANKNIFTY")
+    isSensex = str.contains(t, "SENSEX")
+    isGold ? "XAUUSD/GOLD" :
+     isSilver ? "XAGUSD/SILVER" :
+     isBtc ? "BTCUSD" :
+     isCrude ? "US Oil" :
+     isNg ? "Natural Gas" :
+     isBankNifty ? "BANKNIFTY" :
+     isSensex ? "SENSEX" :
+     isNifty ? "BANKNIFTY" : // fallback; manual recommended for Indian indices/options
+     "Custom"
+
+asset = assetMode == "Auto-Detect" ? f_detectAsset() : manualAsset
+
+// Reasonable defaults (you can tune these later; the engine is generic).
+// Each preset provides: default ATR multiplier and a rounding step.
+f_presetAtrMult(_asset) =>
+    switch _asset
+        "XAUUSD/GOLD"      => 1.0
+        "XAGUSD/SILVER"    => 1.0
+        "BTCUSD"           => 1.0
+        "US Oil"           => 1.0
+        "Crude Oil"        => 1.0
+        "Natural Gas"      => 1.0
+        "BANKNIFTY"        => 1.0
+        "SENSEX"           => 1.0
+        "NIFTY OPTIONS"    => 1.0
+        "BANKNIFTY OPTIONS"=> 1.0
+        "SENSEX OPTIONS"   => 1.0
+        => 1.0
+
+f_presetRoundStep(_asset) =>
+    // If you set this to 0 it uses syminfo.mintick.
+    switch _asset
+        "XAUUSD/GOLD"   => 0.05
+        "XAGUSD/SILVER" => 0.01
+        "BTCUSD"        => 1.0
+        "US Oil"        => 0.01
+        "Crude Oil"     => 0.01
+        "Natural Gas"   => 0.001
+        "BANKNIFTY"     => 1.0
+        "SENSEX"        => 1.0
+        => 0.0
+
+atrMultEff = atrMult * f_presetAtrMult(asset)
+roundStepEff = roundTo > 0 ? roundTo : f_presetRoundStep(asset)
+roundStep = roundStepEff > 0 ? roundStepEff : syminfo.mintick
+
+f_roundToStep(_x, _step) =>
+    _step <= 0 ? _x : math.round(_x / _step) * _step
+
+// ============================================================================
+// BRICK SIZE
+// ============================================================================
+atrVal = ta.atr(atrLen)
+brickRaw =
+    switch brickCalc
+        "ATR" => atrVal * atrMultEff
+        "Percentage" => src * (customPct / 100.0)
+        "Fixed Box Size" => fixedBoxPoints
+        => atrVal * atrMultEff
+
+brickSize = math.max(f_roundToStep(brickRaw, roundStep), syminfo.mintick)
+
+// ============================================================================
+// NON-REPAINTING RENKO-LIKE STEP ENGINE
+// - Only moves when price crosses lastRenko +/- brickSize
+// - Updates based on confirmed bar close (no lookahead)
+// ============================================================================
+var float renko = na
+var int dir = 0 // 1 up, -1 down, 0 flat
+
+f_initRenko(_price) =>
+    initMode == "First Close Rounded" ? f_roundToStep(_price, brickSize) : _price
+
+if barstate.isfirst
+    renko := f_initRenko(src)
+    dir := 0
+else
+    upMove = src - renko
+    dnMove = renko - src
+    if upMove >= brickSize
+        bricks = allowMultiBrick ? math.floor(upMove / brickSize) : 1
+        renko += bricks * brickSize
+        dir := 1
+    else if dnMove >= brickSize
+        bricks = allowMultiBrick ? math.floor(dnMove / brickSize) : 1
+        renko -= bricks * brickSize
+        dir := -1
+    else
+        dir := nz(dir[1], 0)
+
+renkoColor = dir == 1 ? renkoUpCol : dir == -1 ? renkoDnCol : renkoFlatCol
+plot(renko, "Renko Line", color=renkoColor, linewidth=2, style=plot.style_stepline)
+
+// ============================================================================
+// OPTIONAL TREND OVERLAYS (matches screenshot toggles)
+// ============================================================================
+ema10 = ta.ema(close, 10)
+ema30 = ta.ema(close, 30)
+sma150 = ta.sma(close, 150)
+
+pEma10 = plot(showEma10 ? ema10 : na, "EMA 10", color=color.new(color.gray, 0), linewidth=1)
+pEma30 = plot(showEma30 ? ema30 : na, "EMA 30", color=color.new(#35C759, 0), linewidth=1)
+pSma150 = plot(showSma150 ? sma150 : na, "SMA 150 Close", color=color.new(#FF3B30, 0), linewidth=1)
+
+cloudOn = showCloud and showEma10 and showEma30
+fill(pEma10, pEma30, color=cloudOn ? (ema10 >= ema30 ? cloudBull : cloudBear) : na, title="EMA Trend Cloud")
+
+// ============================================================================
+// STATUS LINE / ALERT-FRIENDLY OUTPUTS
+// ============================================================================
+trendText = dir == 1 ? "Uptrend" : dir == -1 ? "Downtrend" : "Sideways"
+plotchar(barstate.islast, title="Trend", char=" ", editable=false, display=display.status_line)
+plot(barstate.islast ? brickSize : na, "Brick Size", display=display.status_line)
+
+alertcondition(dir == 1 and dir[1] != 1, title="Renko Uptrend", message="Renko-like engine turned UP on {{ticker}}. Brick={{plot(\"Brick Size\")}}")
+alertcondition(dir == -1 and dir[1] != -1, title="Renko Downtrend", message="Renko-like engine turned DOWN on {{ticker}}. Brick={{plot(\"Brick Size\")}}")
+
