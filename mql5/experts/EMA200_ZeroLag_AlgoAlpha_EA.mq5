@@ -6,7 +6,7 @@
 //|  entry orders are sent; otherwise only MT5 alerts fire.           |
 //+------------------------------------------------------------------+
 #property copyright "AlgoStrategies"
-#property version   "1.11"
+#property version   "1.12"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -366,6 +366,10 @@ bool OpenSell()
 }
 
 //+------------------------------------------------------------------+
+//| Entry: base ZL signal AND close vs EMA200 (same side).            |
+//| Exit:  mirror opposite entry — close long iff short entry, etc.   |
+//|        (no base-only exits without the EMA200 filter).            |
+//+------------------------------------------------------------------+
 bool GetStrategySignals(bool &buyEntry,
                         bool &sellEntry,
                         bool &buyExit,
@@ -499,8 +503,9 @@ bool GetStrategySignals(bool &buyEntry,
    buyEntry  = (baseBuySignal  && rates[bar].close > ema200Value);
    sellEntry = (baseSellSignal && rates[bar].close < ema200Value);
 
-   buyExit   = (baseSellSignal || rates[bar].close < ema200Value);
-   sellExit  = (baseBuySignal  || rates[bar].close > ema200Value);
+   // Symmetric with entries: exit long only on full short-entry setup, exit short only on full long-entry setup.
+   buyExit   = sellEntry;
+   sellExit  = buyEntry;
 
    return(true);
 }
