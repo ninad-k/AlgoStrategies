@@ -1,0 +1,78 @@
+﻿<Window x:Class="TradeSegregator.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Trade Segregator"
+        Height="640"
+        Width="1100"
+        MinHeight="480"
+        MinWidth="900">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open deal JSON…" Click="OpenBundle_Click" />
+                <MenuItem Header="_Save deal JSON…" Click="SaveBundle_Click" />
+                <Separator />
+                <MenuItem Header="Open _rules JSON…" Click="OpenRules_Click" />
+                <MenuItem Header="Save rules _CSV (for EA)…" Click="SaveRulesCsv_Click" />
+            </MenuItem>
+        </Menu>
+
+        <TabControl Margin="8">
+            <TabItem Header="Overview">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Margin="0,0,0,12">
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8">
+                            Import a bundle produced by the MT5 EA (<Bold>trade_segregator_deals.json</Bold> in MQL5/Files)
+                            and a rules file (<Bold>default-rules.json</Bold>). Re-run applies the rule engine to every deal.
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Margin="0,4">
+                            <TextBlock Text="Rules:" VerticalAlignment="Center" Width="120" />
+                            <TextBox x:Name="RulesPathBox" IsReadOnly="True" MinWidth="520" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,4">
+                            <TextBlock Text="Deal bundle:" VerticalAlignment="Center" Width="120" />
+                            <TextBox x:Name="BundlePathBox" IsReadOnly="True" MinWidth="520" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                            <Button Content="Re-run rule engine" Click="RerunRules_Click" Padding="12,6" Margin="0,0,8,0" />
+                            <CheckBox x:Name="PreserveManualBox" Content="Preserve manual category overrides when re-running" IsChecked="True" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid x:Name="AllDealsGrid"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              HeadersVisibility="Column" />
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Manual sort (uncategorized)">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Margin="0,0,0,8">
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,8">
+                            Rows listed here have an <Italic>effective</Italic> category of <Bold>uncategorized</Bold>.
+                            Pick a target category and apply to the selected deals.
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal">
+                            <ComboBox x:Name="TargetCategoryCombo"
+                                      Width="280"
+                                      Margin="0,0,8,0"
+                                      DisplayMemberPath="Label" />
+                            <Button Content="Apply to selected" Click="ApplyCategory_Click" Padding="12,6" Margin="0,0,8,0" />
+                            <Button Content="Clear manual override (selected)" Click="ClearManual_Click" Padding="12,6" />
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid x:Name="UncatGrid"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              SelectionMode="Extended"
+                              HeadersVisibility="Column" />
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

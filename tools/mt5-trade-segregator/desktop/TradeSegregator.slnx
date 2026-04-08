@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TradeSegregator.Core/TradeSegregator.Core.csproj" />
+    <Project Path="src/TradeSegregator.Desktop/TradeSegregator.Desktop.csproj" />
+  </Folder>
+</Solution>

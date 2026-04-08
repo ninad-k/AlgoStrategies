@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+echo "ReyConnector Python root: $ROOT"
+echo "Activate venv first: source .venv/bin/activate && pip install -e ."
+echo ""
+echo "Terminal 1 — Control API (5241):"
+echo "  cd \"$ROOT\" && uvicorn reyconnector.apps.control_api:app --host 0.0.0.0 --port 5241 --reload"
+echo ""
+echo "Terminal 2 — Webhook (5242):"
+echo "  cd \"$ROOT\" && uvicorn reyconnector.apps.webhook_ingest:app --host 0.0.0.0 --port 5242 --reload"
+echo ""
+echo "Terminal 3 — Gateway (5243):"
+echo "  cd \"$ROOT\" && uvicorn reyconnector.apps.gateway:app --host 0.0.0.0 --port 5243 --reload"
+echo ""
+echo "Portal (optional): cd \"$ROOT/../reyconnector/portal\" && npm start"

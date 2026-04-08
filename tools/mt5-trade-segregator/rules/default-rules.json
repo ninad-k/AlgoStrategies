@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "uncategorizedId": "uncategorized",
+  "categories": [
+    {
+      "id": "scalping",
+      "label": "Scalping",
+      "match": "all",
+      "conditions": [
+        { "field": "duration_minutes", "op": "lt", "value": 15 },
+        { "field": "profit", "op": "between", "min": -5, "max": 5 }
+      ]
+    },
+    {
+      "id": "intraday",
+      "label": "Intraday",
+      "match": "all",
+      "conditions": [
+        { "field": "duration_minutes", "op": "gte", "value": 15 },
+        { "field": "duration_minutes", "op": "lt", "value": 1440 }
+      ]
+    },
+    {
+      "id": "swing",
+      "label": "Swing",
+      "match": "all",
+      "conditions": [{ "field": "duration_minutes", "op": "gte", "value": 1440 }]
+    }
+  ]
+}
