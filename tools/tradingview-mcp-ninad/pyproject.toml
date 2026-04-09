@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradingview-mcp-ninad"
+version = "0.1.0"
+description = "MCP bridge for TradingView Desktop via Chrome DevTools Protocol"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.2.0",
+  "pychrome>=0.2.4",
+  "pydantic>=2.10.0",
+  "pydantic-settings>=2.6.0",
+  "tenacity>=9.0.0",
+  "structlog>=24.4.0",
+  "typer>=0.15.0",
+  "rich>=13.9.0",
+  "anyio>=4.6.0",
+  "httpx>=0.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.8.0",
+  "mypy>=1.13.0",
+  "pytest>=8.3.0",
+  "pytest-asyncio>=0.24.0",
+  "pytest-mock>=3.14.0",
+]
+
+[project.scripts]
+tv = "tradingview_mcp_ninad.cli.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Embedded JS payloads and the verbatim TOOL SELECTION GUIDE legitimately
+# exceed the 100-char line limit; reformatting them would either break the
+# protocol contract or make the JS unreadable.
+"src/tradingview_mcp_ninad/core/*.py" = ["E501"]
+"src/tradingview_mcp_ninad/tools/*.py" = ["E501"]
+"src/tradingview_mcp_ninad/instructions.py" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
