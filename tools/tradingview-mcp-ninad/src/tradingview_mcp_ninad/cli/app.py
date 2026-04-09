@@ -193,6 +193,86 @@ def check(
     _run(_check(source=source))
 
 
+# ── Trade execution commands ─────────────────────────────────────────────────
+
+
+@app.command()
+def trade(
+    symbol: Annotated[str, typer.Argument(help="Symbol to trade (e.g., BTCUSD, AAPL)")],
+    side: Annotated[str, typer.Argument(help="buy or sell")],
+    quantity: Annotated[float, typer.Argument(help="Quantity to trade")],
+    order_type: Annotated[str, typer.Option(help="market, limit, stop, stop_limit")] = "market",
+    price: Annotated[float | None, typer.Option(help="Limit/stop price")] = None,
+    stop_loss: Annotated[float | None, typer.Option("--sl", help="Stop loss price")] = None,
+    take_profit: Annotated[float | None, typer.Option("--tp", help="Take profit price")] = None,
+):
+    """Place a trade (paper mode by default)."""
+    from ..core.execution import execute_trade
+    _run(execute_trade(
+        symbol=symbol, side=side, quantity=quantity,
+        order_type=order_type, price=price,
+        stop_loss=stop_loss, take_profit=take_profit,
+    ))
+
+
+@app.command()
+def positions():
+    """List all open positions."""
+    from ..core.execution import get_positions
+    _run(get_positions())
+
+
+@app.command()
+def account():
+    """Get account balance, equity, and margin."""
+    from ..core.execution import get_account
+    _run(get_account())
+
+
+@app.command()
+def close_position(
+    ticket: Annotated[int, typer.Argument(help="Position ticket to close")],
+    reason: Annotated[str, typer.Option(help="Reason for closing")] = "",
+):
+    """Close a specific position."""
+    from ..core.execution import close_position as _close
+    _run(_close(ticket=ticket, reason=reason))
+
+
+@app.command()
+def set_mode(
+    mode: Annotated[str, typer.Argument(help="paper, paper_broker, or live")],
+    confirm: Annotated[bool, typer.Option(help="Required for live mode")] = False,
+):
+    """Switch execution mode."""
+    from ..core.execution import set_mode as _set_mode
+    raw = json.dumps(_set_mode(mode=mode, confirm=confirm), indent=2, default=str)
+    _json_out.print(Syntax(raw, "json", theme="monokai"))
+
+
+@app.command()
+def get_mode():
+    """Show current execution mode."""
+    from ..core.execution import get_mode as _get_mode
+    raw = json.dumps(_get_mode(), indent=2, default=str)
+    _json_out.print(Syntax(raw, "json", theme="monokai"))
+
+
+@app.command()
+def broker_status():
+    """Check which brokers are configured and connected."""
+    from ..core.execution import broker_status as _status
+    raw = json.dumps(_status(), indent=2, default=str)
+    _json_out.print(Syntax(raw, "json", theme="monokai"))
+
+
+@app.command()
+def trade_history():
+    """Show trade history for this session."""
+    from ..core.execution import get_trade_history
+    _run(get_trade_history())
+
+
 def main():
     """Entry point for the ``tv`` console script."""
     app()

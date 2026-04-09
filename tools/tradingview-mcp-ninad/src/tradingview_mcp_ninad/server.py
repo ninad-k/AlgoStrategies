@@ -20,6 +20,7 @@ from .tools import capture as capture_tools
 from .tools import chart as chart_tools
 from .tools import data as data_tools
 from .tools import drawing as drawing_tools
+from .tools import execution as execution_tools
 from .tools import health as health_tools
 from .tools import indicators as indicators_tools
 from .tools import morning as morning_tools
@@ -48,6 +49,7 @@ _TOOL_GROUPS = [
     ("pane", pane_tools),
     ("tab", tab_tools),
     ("ui", ui_tools),
+    ("execution", execution_tools),
 ]
 
 

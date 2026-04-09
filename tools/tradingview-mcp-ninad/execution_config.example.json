@@ -1,0 +1,37 @@
+{
+  "mode": "paper",
+  "paper_balance": 100000.0,
+  "paper_currency": "USD",
+  "max_position_size": 10000.0,
+  "max_open_positions": 5,
+  "require_confirmation_for_live": true,
+  "symbol_routing": {
+    "crypto": "binance",
+    "stocks": "alpaca",
+    "forex": "mt5",
+    "futures": "ibkr"
+  },
+  "brokers": {
+    "alpaca": {
+      "api_key": "",
+      "api_secret": "",
+      "paper": true
+    },
+    "mt5": {
+      "login": 0,
+      "password": "",
+      "server": "",
+      "path": ""
+    },
+    "binance": {
+      "api_key": "",
+      "api_secret": "",
+      "testnet": true
+    },
+    "ibkr": {
+      "host": "127.0.0.1",
+      "port": 7497,
+      "client_id": 1
+    }
+  }
+}
