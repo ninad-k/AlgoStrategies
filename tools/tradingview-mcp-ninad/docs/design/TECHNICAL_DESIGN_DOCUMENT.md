@@ -5,11 +5,12 @@
 | **Author** | Ninad K. |
 | **Created** | 2026-04-09 |
 | **Status** | Approved |
-| **Version** | 1.0 |
+| **Version** | 2.0 |
+| **Updated** | 2026-04-10 |
 
 ## 1. Overview
 
-This document describes the technical design of `tradingview-mcp-ninad`, a Python MCP server that enables AI-assisted analysis of TradingView Desktop charts through Claude Code. This project was conceived and designed by Ninad K. as an original idea to bridge local TradingView Desktop sessions with AI-powered trading workflows using the Model Context Protocol.
+This document describes the technical design of `tradingview-mcp-ninad`, a Python MCP server that enables AI-assisted analysis **and trade execution** from TradingView Desktop charts through Claude Code. This project was conceived and designed by Ninad K. as an original idea to bridge local TradingView Desktop sessions with AI-powered trading workflows using the Model Context Protocol.
 
 ## 2. Problem Statement
 
@@ -19,9 +20,11 @@ Traders using TradingView Desktop lack programmatic access to their chart data, 
 
 A local Python MCP server that:
 - Connects to TradingView Desktop via Chrome DevTools Protocol (CDP) on `localhost:9222`
-- Exposes 78 tools covering chart reading, Pine Script development, replay trading, and automated morning briefs
+- Exposes 90 tools covering chart reading, Pine Script development, replay trading, automated morning briefs, and **multi-broker trade execution**
+- Routes orders to 4 brokers: Alpaca (stocks/crypto), Binance (crypto), MT5 (forex/CFDs), IBKR (multi-asset)
+- Includes a built-in paper broker for zero-config testing
 - Communicates with Claude Code over stdio using the official MCP Python SDK (FastMCP)
-- Keeps all data local — zero external API dependencies beyond TradingView's own servers
+- Keeps chart data local — trade execution connects to broker APIs only when configured
 
 ## 4. Architecture
 
@@ -49,10 +52,11 @@ A local Python MCP server that:
 |---|---|---|
 | **Server Bootstrap** | `server.py` | FastMCP init, tool registration, stdio transport |
 | **Connection Layer** | `connection/` | CDP singleton, retry, target discovery, API path verification |
-| **Core Logic** | `core/` | 12 modules — all business logic as async functions |
-| **Tool Wrappers** | `tools/` | 15 modules — thin MCP-facing decorators that call core |
+| **Core Logic** | `core/` | 13 modules — all business logic as async functions |
+| **Tool Wrappers** | `tools/` | 16 modules — thin MCP-facing decorators that call core |
+| **Execution Layer** | `execution/` | BrokerProtocol, PaperBroker, 4 broker adapters, ExecutionManager |
 | **Rules Engine** | `rules/` | Pydantic v2 model for `rules.json` validation |
-| **CLI** | `cli/` | Typer-based `tv` command with 18 sub-commands |
+| **CLI** | `cli/` | Typer-based `tv` command with 26 sub-commands |
 | **Logging** | `logging_config.py` | structlog file-only sink (never stdout) |
 
 ### 4.3 Connection Lifecycle
@@ -117,6 +121,54 @@ morning_brief(rules_path)
               │ Claude applies bias_criteria to indicator values
               │ and generates the final brief
 ```
+
+## 5b. Trade Execution Architecture
+
+### Execution Flow
+
+```
+trade_execute(symbol="BTCUSD", side="buy", quantity=0.1)
+    │
+    ├── ExecutionManager.execute(intent)
+    │       ├── Check position limits (max_open_positions, max_position_size)
+    │       ├── Mode check:
+    │       │       ├── "paper" → PaperBroker.place_order()
+    │       │       ├── "paper_broker" → route to broker's testnet
+    │       │       └── "live" → route to broker's live API
+    │       └── _route(symbol) → classify asset class → pick broker
+    │               ├── BTCUSD → crypto → Binance
+    │               ├── AAPL → stocks → Alpaca
+    │               ├── EURUSD → forex → MT5
+    │               └── ES1! → futures → IBKR
+    │
+    └── Return FillResult { ok, ticket, price, quantity, broker }
+```
+
+### Broker Protocol
+
+Every broker adapter implements the same async interface:
+
+```python
+class BrokerProtocol(Protocol):
+    async def place_order(self, intent: OrderIntent) -> FillResult
+    async def close_position(self, ticket: int, reason: str) -> CloseResult
+    async def get_positions(self) -> list[Position]
+    async def get_account(self) -> Account
+    async def get_orders(self) -> list[dict]
+    async def cancel_order(self, order_id: str) -> dict
+    @property
+    def name(self) -> str
+```
+
+### Safety Guardrails
+
+| Guard | Implementation |
+|---|---|
+| Default paper mode | `ExecutionConfig.mode = "paper"` |
+| Live mode gate | `trade_set_mode("live")` requires `confirm=true` |
+| Position limits | `max_open_positions=5`, `max_position_size=10000` enforced in manager |
+| Trade logging | Every intent + result → `~/.tradingview-mcp-ninad/trades/` as JSONL |
+| Broker dependencies optional | `pip install 'tradingview-mcp-ninad[brokers]'` — base package works without them |
 
 ## 6. Key Design Decisions
 

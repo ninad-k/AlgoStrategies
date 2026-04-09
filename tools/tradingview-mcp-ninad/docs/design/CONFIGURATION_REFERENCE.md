@@ -38,6 +38,32 @@ Claude Code MCP server registration:
 }
 ```
 
+## Execution Configuration
+
+### execution_config.json
+
+- **Location search order:** `<project_root>/execution_config.json` → `~/.tradingview-mcp-ninad/execution_config.json`
+- **Falls back to:** safe defaults (paper mode, no broker keys)
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `mode` | str | `"paper"` | Execution mode: paper, paper_broker, live |
+| `paper_balance` | float | `100000.0` | Starting balance for built-in paper broker |
+| `paper_currency` | str | `"USD"` | Currency for paper broker |
+| `max_position_size` | float | `10000.0` | Max notional per position |
+| `max_open_positions` | int | `5` | Max simultaneous open positions |
+| `require_confirmation_for_live` | bool | `true` | Gate live mode behind confirm=true |
+| `symbol_routing.crypto` | str | `"binance"` | Broker for crypto symbols |
+| `symbol_routing.stocks` | str | `"alpaca"` | Broker for stock symbols |
+| `symbol_routing.forex` | str | `"mt5"` | Broker for forex symbols |
+| `symbol_routing.futures` | str | `"ibkr"` | Broker for futures symbols |
+| `brokers.alpaca.api_key` | str | `""` | Alpaca API key |
+| `brokers.alpaca.paper` | bool | `true` | Use Alpaca paper endpoint |
+| `brokers.binance.api_key` | str | `""` | Binance API key |
+| `brokers.binance.testnet` | bool | `true` | Use Binance testnet |
+| `brokers.mt5.login` | int | `0` | MT5 account number |
+| `brokers.ibkr.port` | int | `7497` | TWS port (7497=paper, 7496=live) |
+
 ## Connection Constants
 
 | Constant | Value | Location |

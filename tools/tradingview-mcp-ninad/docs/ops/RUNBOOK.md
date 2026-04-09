@@ -91,6 +91,34 @@ Expected healthy response:
 2. Call `ui_open_panel(panel="pine-editor")` first
 3. `pine_smart_compile` and `pine_set_source` auto-open it, but may fail on first attempt
 
+### Trade execution errors
+
+**Symptom:** `trade_execute` returns "No price available for SYMBOL"
+
+**Action:**
+1. Paper broker needs a price feed. Call `quote_get` first to establish a price.
+2. Or provide an explicit `price` parameter with a limit order.
+
+### Broker not connected
+
+**Symptom:** `trade_broker_status` shows `"connected": false`
+
+**Action:**
+1. Check `execution_config.json` has valid API keys for that broker
+2. For Alpaca: verify keys at https://app.alpaca.markets
+3. For Binance testnet: generate keys at https://testnet.binance.vision
+4. For IBKR: ensure TWS/Gateway is running on the configured port
+5. For MT5: ensure terminal is running and credentials are correct
+
+### Wrong execution mode
+
+**Symptom:** Trade placed on live broker when expecting paper
+
+**Action:**
+1. Always check mode first: `trade_get_mode`
+2. Switch back: `trade_set_mode(mode="paper")`
+3. Paper mode is the default — it only changes if explicitly switched
+
 ## Monitoring
 
 Since this is a local tool (not a production service), monitoring is limited to:
@@ -98,6 +126,7 @@ Since this is a local tool (not a production service), monitoring is limited to:
 - **Log tailing:** `tail -f ~/.tradingview-mcp-ninad/logs/server.log`
 - **Session files:** `ls ~/.tradingview-mcp-ninad/sessions/`
 - **Screenshot output:** `ls ~/.tradingview-mcp-ninad/screenshots/`
+- **Trade logs:** `ls ~/.tradingview-mcp-ninad/trades/`
 
 ## Restart Procedure
 

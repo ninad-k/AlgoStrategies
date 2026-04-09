@@ -56,6 +56,26 @@ Chain: `chart_get_state` → `data_get_study_values` → `data_get_pine_lines` +
 - `batch_run` — run screenshot/ohlcv/strategy across a list of symbols and timeframes
 - `morning_brief` — flagship workflow: scan watchlist, read indicators, apply `rules.json`
 
+## "Execute a trade"
+
+1. `trade_get_mode` — check current mode (paper/paper_broker/live)
+2. `trade_broker_status` — verify which brokers are connected
+3. `trade_execute` — place order: symbol, side (buy/sell), quantity, order_type (market/limit/stop/stop_limit), optional price/SL/TP
+4. `trade_positions` — list all open positions with P&L
+5. `trade_modify` — change SL/TP on an existing position
+6. `trade_close` / `trade_close_all` — close by ticket or close everything
+7. `trade_account` — balance, equity, free margin
+8. `trade_history` — session trade log
+9. `trade_set_mode` — switch modes (paper → paper_broker → live, live requires confirm=true)
+
+**Symbol routing:** crypto→Binance, stocks→Alpaca, forex→MT5, futures→IBKR
+
+**Safety:** Default is paper mode. Always call `trade_get_mode` before placing real trades.
+
+## "Full analysis → trade workflow"
+
+Chain: `morning_brief` → pick a symbol → `data_get_pine_lines` → identify level → `trade_execute` → `trade_positions` → monitor with `quote_get` → `trade_close`
+
 ## "Draw on the chart / Manage alerts"
 
 - `draw_shape` — horizontal lines, trend lines, rectangles, text
@@ -73,3 +93,6 @@ Chain: `chart_get_state` → `data_get_study_values` → `data_get_pine_lines` +
 - NEVER use `verbose=true` unless the user specifically asks for raw data
 - Call `chart_get_state` ONCE at start, reuse entity IDs throughout the session
 - Prefer `capture_screenshot` for visual context over pulling large datasets
+- ALWAYS call `trade_get_mode` before placing trades to confirm the execution mode
+- NEVER place live trades without explicit user confirmation
+- Use `trade_broker_status` to verify broker connectivity before routing orders

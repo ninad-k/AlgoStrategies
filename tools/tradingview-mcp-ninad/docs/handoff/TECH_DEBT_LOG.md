@@ -57,9 +57,33 @@
 **Proposed Fix:** Monitor TradingView updates. The fiber walk has been stable across many TV versions, but a major React upgrade could break it. No better alternative exists — TV doesn't expose the editor publicly.
 **Impact if not fixed:** All `pine_*` tools break if TV changes its React setup.
 
+### TD-007: Paper broker uses last-known price for market fills
+
+**Severity:** Low
+**Location:** `execution/paper_broker.py`
+**Description:** Market orders fill at the last price fed via `update_price()`. If no price has been fed for a symbol, the order fails. A real paper broker would query the exchange for current price.
+**Proposed Fix:** Auto-query `quote_get` from the chart when no price is cached. Would add a dependency from execution→core→connection which is currently avoided.
+**Impact if not fixed:** Users must call `quote_get` before their first paper trade on a symbol.
+
+### TD-008: Binance close_position not implemented
+
+**Severity:** Medium
+**Location:** `execution/brokers/binance_broker.py`
+**Description:** Binance spot doesn't have "positions" — only balances. The `close_position` method returns an error asking users to place an opposite order instead.
+**Proposed Fix:** Add internal position tracking in the Binance adapter (buy 0.1 BTC → track → sell 0.1 BTC to "close"). Alternatively, support Binance futures which do have positions.
+**Impact if not fixed:** `trade_close` doesn't work for Binance. Users must use `trade_execute` with the opposite side.
+
+### TD-009: ExecutionManager is a module-level singleton
+
+**Severity:** Low
+**Location:** `execution/manager.py`
+**Description:** `get_manager()` returns a module-level singleton. This works for the stdio server (one process per session) but makes unit testing harder since state persists across test cases.
+**Proposed Fix:** Accept the manager via dependency injection or add a `reset_manager()` function for tests.
+**Impact if not fixed:** Test isolation requires careful teardown.
+
 ## Resolved Debt
 
-*None yet — this is the initial release.*
+*None yet.*
 
 ---
 

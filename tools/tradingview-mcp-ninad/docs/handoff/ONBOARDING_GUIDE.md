@@ -76,6 +76,12 @@ pytest tests/integration -q   # Needs Chromium on port 9222
 | `connection/cdp_connection.py` | If CDP is acting up, start here |
 | `connection/api_resolver.py` | If TV updated and tools broke, update KNOWN_PATHS here |
 | `core/morning.py` | The flagship morning brief workflow |
+| `core/execution.py` | Trade execution core — calls ExecutionManager |
+| `execution/manager.py` | Routes orders to brokers, enforces limits |
+| `execution/paper_broker.py` | Built-in paper trading simulator |
+| `execution/protocol.py` | BrokerProtocol interface + data models |
+| `execution/config.py` | Pydantic config for execution_config.json |
+| `execution/brokers/*.py` | One adapter per broker (Alpaca, Binance, MT5, IBKR) |
 | `instructions.py` | The TOOL SELECTION GUIDE that steers the AI model |
 | `logging_config.py` | If logs are missing or stdout is corrupted |
 

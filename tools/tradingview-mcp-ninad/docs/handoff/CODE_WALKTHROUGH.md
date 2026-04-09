@@ -88,20 +88,43 @@ The JS IIFE runs in TradingView's page context, accesses the chart widget's inte
 TradingView → CDP WebSocket → pychrome → _evaluate_raw → evaluate → core.get_state → tools.chart_get_state → json_result → FastMCP → stdout JSON-RPC → Claude Code
 ```
 
+## How a Trade Flows Through the System
+
+```
+trade_execute(symbol="BTCUSD", side="buy", quantity=0.1)
+    │
+    ├── tools/execution.py → @server.tool wrapper, try/except
+    ├── core/execution.py → builds OrderIntent, calls get_manager()
+    ├── execution/manager.py → checks limits, routes by mode
+    │       ├── mode == "paper" → paper_broker.place_order()
+    │       └── mode != "paper" → _classify_symbol() → pick broker → broker.place_order()
+    ├── execution/paper_broker.py → fills at last known price, creates Position
+    └── Returns FillResult → json_result → FastMCP → stdout → Claude Code
+```
+
+Key difference from chart tools: execution does NOT go through CDP. It either uses the in-memory paper broker or calls broker APIs (Alpaca REST, Binance WS, MT5 C API, IBKR TWS).
+
 ## Module Dependency Graph
 
 ```
 server.py
     ├── instructions.py (TOOL_SELECTION_GUIDE string)
     ├── logging_config.py (structlog setup)
-    └── tools/*.py (15 modules)
-            └── core/*.py (12 modules)
-                    ├── connection/cdp_connection.py
-                    ├── connection/api_resolver.py
-                    └── connection/__init__.py (re-exports)
+    ├── tools/*.py (16 modules)
+    │       └── core/*.py (13 modules)
+    │               ├── connection/cdp_connection.py
+    │               ├── connection/api_resolver.py
+    │               └── connection/__init__.py (re-exports)
+    └── tools/execution.py → core/execution.py
+                                    └── execution/ (separate from connection/)
+                                            ├── manager.py (routing + limits)
+                                            ├── paper_broker.py (in-memory sim)
+                                            ├── protocol.py (BrokerProtocol interface)
+                                            ├── config.py (Pydantic config)
+                                            └── brokers/ (alpaca, binance, mt5, ibkr)
 ```
 
-## The Three Layers Explained
+## The Four Layers Explained
 
 ### Layer 1: `tools/*.py` — MCP Surface
 - One file per category (health, chart, data, ...)
@@ -121,6 +144,15 @@ server.py
 - `cdp_connection.py`: Singleton tab, retry, evaluate, disconnect
 - `api_resolver.py`: KNOWN_PATHS dict + verify-and-cache
 - `__init__.py`: Clean re-exports so callers do `from ..connection import evaluate`
+
+### Layer 4: `execution/*.py` — Trade Execution (independent of CDP)
+- `protocol.py`: BrokerProtocol interface + data models (OrderIntent, FillResult, Position, etc.)
+- `paper_broker.py`: In-memory simulator with P&L tracking, SL/TP, trade logging to disk
+- `manager.py`: ExecutionManager singleton — routes orders by symbol class, enforces limits, gates modes
+- `config.py`: Pydantic-validated `execution_config.json` (brokers, routing, safety)
+- `brokers/`: One adapter per broker, all implementing BrokerProtocol
+  - Each uses lazy imports so broker SDKs aren't required unless that broker is used
+  - All blocking calls wrapped in `asyncio.to_thread` for async compatibility
 
 ## Why JS Eval Strings Are Wrapped in IIFEs
 

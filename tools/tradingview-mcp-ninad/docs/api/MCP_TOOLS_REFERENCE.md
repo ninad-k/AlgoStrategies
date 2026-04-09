@@ -3,8 +3,8 @@
 | Field | Value |
 |---|---|
 | **Author** | Ninad K. |
-| **Version** | 1.0 |
-| **Total Tools** | 78 |
+| **Version** | 2.0 |
+| **Total Tools** | 90 |
 
 This document is the authoritative reference for every MCP tool exposed by the server. Tool names are stable API contracts — they must not change without a major version bump.
 
@@ -374,6 +374,92 @@ Manage chart tabs.
 
 ### `ui_click` / `ui_keyboard` / `ui_type_text` / `ui_hover` / `ui_mouse_click` / `ui_open_panel` / `ui_fullscreen` / `layout_list` / `layout_switch` / `ui_scroll` / `ui_find_element` / `ui_evaluate`
 Low-level UI interaction via CDP Input events and DOM manipulation.
+
+---
+
+## Trade Execution (12 tools)
+
+### `trade_execute`
+Place a trade (buy/sell) with the configured broker.
+
+- **Parameters:**
+  - `symbol` (str, required) — e.g., "BTCUSD", "AAPL", "EURUSD"
+  - `side` (str, required) — "buy" or "sell"
+  - `quantity` (float, required) — amount to trade
+  - `order_type` (str, optional) — "market" (default), "limit", "stop", "stop_limit"
+  - `price` (float, optional) — required for limit/stop orders
+  - `stop_loss` (float, optional) — stop loss price
+  - `take_profit` (float, optional) — take profit price
+  - `reason` (str, optional) — trade reason for logging
+- **Returns:** `{ success, ok, order_id, ticket, price, quantity, error, broker }`
+- **Routing:** crypto→Binance, stocks→Alpaca, forex→MT5, futures→IBKR (configurable)
+
+### `trade_close`
+Close a position by ticket number.
+
+- **Parameters:**
+  - `ticket` (int, required) — position ticket from `trade_positions`
+  - `reason` (str, optional)
+- **Returns:** `{ success, ok, ticket, exit_price, pnl, error, broker }`
+
+### `trade_close_all`
+Close all open positions across all brokers.
+
+- **Returns:** `{ success, closed, results }`
+
+### `trade_modify`
+Modify stop loss and/or take profit on an existing position.
+
+- **Parameters:**
+  - `ticket` (int, required)
+  - `stop_loss` (float, optional)
+  - `take_profit` (float, optional)
+- **Returns:** `{ success, ticket, stop_loss, take_profit }`
+
+### `trade_positions`
+List all open positions across all brokers.
+
+- **Returns:** `{ success, mode, count, positions: [{ ticket, symbol, side, quantity, entry_price, current_price, unrealized_pnl, stop_loss, take_profit, broker }] }`
+
+### `trade_orders`
+List all pending orders.
+
+- **Returns:** `{ success, mode, count, orders }`
+
+### `trade_cancel_order`
+Cancel a pending order by order ID.
+
+- **Parameters:**
+  - `order_id` (str, required)
+- **Returns:** `{ ok, order_id, broker }`
+
+### `trade_account`
+Get account balance, equity, and margin information.
+
+- **Returns:** `{ success, balance, equity, free_margin, currency, broker, mode }`
+
+### `trade_history`
+Get trade history for the current session.
+
+- **Returns:** `{ success, count, trades: [{ ticket, symbol, side, quantity, entry_price, exit_price, pnl, reason, closed_at }] }`
+
+### `trade_set_mode`
+Switch execution mode.
+
+- **Parameters:**
+  - `mode` (str, required) — "paper", "paper_broker", or "live"
+  - `confirm` (bool, optional) — required `true` for live mode
+- **Returns:** `{ success, previous_mode, current_mode }`
+
+### `trade_get_mode`
+Show current execution mode.
+
+- **Returns:** `{ success, mode }`
+
+### `trade_broker_status`
+Check which brokers are configured and their connection status.
+
+- **Returns:** `{ success, mode, paper: {...}, alpaca: {...}, binance: {...}, mt5: {...}, ibkr: {...} }`
 
 ---
 
