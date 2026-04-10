@@ -22,14 +22,16 @@ private:
     double m_tp1Pct;     // % of position to close at TP1 (default 50%)
     double m_tp2Pct;     // % at TP2 (default 25%)
     double m_tp3Pct;     // % at TP3 (default 25%)
+    double m_residualPct; // % to keep for trailing after all TPs (default 0 = close all at TP3)
     bool   m_tp1Hit;
     bool   m_tp2Hit;
+    bool   m_tp3Hit;
     int    m_forceExitHour;
     int    m_forceExitMinute;
 
 public:
     CTradeManager() : m_magic(20250327), m_tp1Pct(50), m_tp2Pct(25), m_tp3Pct(25),
-                      m_tp1Hit(false), m_tp2Hit(false),
+                      m_residualPct(0), m_tp1Hit(false), m_tp2Hit(false), m_tp3Hit(false),
                       m_forceExitHour(15), m_forceExitMinute(20) {}
 
     void Init(int magic, double slippage = 3)
@@ -46,6 +48,18 @@ public:
         m_tp3Pct = tp3;
     }
 
+    void SetResidualPct(double pct)
+    {
+        m_residualPct = pct;
+    }
+
+    bool AllTPsHit() const
+    {
+        if(m_residualPct > 0)
+            return m_tp1Hit && m_tp2Hit && m_tp3Hit;
+        return m_tp1Hit && m_tp2Hit;  // backward compat: TP3 closes all when residualPct=0
+    }
+
     void SetForceExitTime(int hour, int minute)
     {
         m_forceExitHour = hour;
@@ -56,6 +70,7 @@ public:
     {
         m_tp1Hit = false;
         m_tp2Hit = false;
+        m_tp3Hit = false;
     }
 
     //--- Open a long position
@@ -106,10 +121,27 @@ public:
             }
         }
 
-        // TP3: Close remaining at R3/S3
-        if(m_tp1Hit && m_tp2Hit && currentPrice >= tp3Level)
+        // TP3: Close remaining (or TP3 portion if residual configured)
+        if(m_tp1Hit && m_tp2Hit && !m_tp3Hit && currentPrice >= tp3Level)
         {
-            m_trade.PositionClose(symbol);
+            if(m_residualPct > 0)
+            {
+                // Partial close: only TP3 portion, leave residual for trailing
+                totalLots = GetPositionLots(symbol);
+                double tp3Ratio = m_tp3Pct / (m_tp3Pct + m_residualPct);
+                double closeLots = NormalizeLots(symbol, totalLots * tp3Ratio);
+                if(closeLots > 0)
+                {
+                    m_trade.PositionClosePartial(symbol, closeLots);
+                    m_tp3Hit = true;
+                }
+            }
+            else
+            {
+                // Original behavior: close everything at TP3
+                m_trade.PositionClose(symbol);
+                m_tp3Hit = true;
+            }
         }
     }
 
@@ -145,10 +177,25 @@ public:
             }
         }
 
-        // TP3: Close remaining at S3
-        if(m_tp1Hit && m_tp2Hit && currentPrice <= tp3Level)
+        // TP3: Close remaining (or TP3 portion if residual configured)
+        if(m_tp1Hit && m_tp2Hit && !m_tp3Hit && currentPrice <= tp3Level)
         {
-            m_trade.PositionClose(symbol);
+            if(m_residualPct > 0)
+            {
+                totalLots = GetPositionLots(symbol);
+                double tp3Ratio = m_tp3Pct / (m_tp3Pct + m_residualPct);
+                double closeLots = NormalizeLots(symbol, totalLots * tp3Ratio);
+                if(closeLots > 0)
+                {
+                    m_trade.PositionClosePartial(symbol, closeLots);
+                    m_tp3Hit = true;
+                }
+            }
+            else
+            {
+                m_trade.PositionClose(symbol);
+                m_tp3Hit = true;
+            }
         }
     }
 

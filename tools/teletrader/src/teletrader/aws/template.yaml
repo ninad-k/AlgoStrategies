@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: TeleTrader — Telegram signal auto-trader Lambda + DynamoDB
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.11
+
+Parameters:
+  TableName:
+    Type: String
+    Default: teletrader-signals
+
+Resources:
+  SignalsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: seq
+          AttributeType: N
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: seq
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  TeleTraderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: teletrader.aws.lambda_handler.handler
+      CodeUri: ../..
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: !Ref TableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SignalsTable
+      Events:
+        PostSignal:
+          Type: HttpApi
+          Properties:
+            Path: /signal
+            Method: POST
+        GetSignals:
+          Type: HttpApi
+          Properties:
+            Path: /signals
+            Method: GET
+        Health:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref SignalsTable
