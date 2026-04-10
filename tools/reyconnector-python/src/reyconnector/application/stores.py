@@ -4,7 +4,7 @@ from collections import deque
 from datetime import UTC, datetime
 from threading import Lock
 
-from reyconnector.contracts import ConnectionSummary, IncomingAlertEnvelope
+from reyconnector.contracts import ConnectionConfig, ConnectionSummary, IncomingAlertEnvelope
 
 
 class InMemoryConnectionStore:
@@ -17,6 +17,10 @@ class InMemoryConnectionStore:
             is_enabled=True,
             created_at_utc=datetime.now(UTC),
             last_seen_at_utc=None,
+            config=ConnectionConfig(
+                default_lots=0.10,
+                default_magic=100001,
+            ),
         )
         self._by_id[demo.id] = demo
 
@@ -27,6 +31,10 @@ class InMemoryConnectionStore:
     def get(self, cid: str) -> ConnectionSummary | None:
         with self._lock:
             return self._by_id.get(cid)
+
+    def upsert(self, conn: ConnectionSummary) -> None:
+        with self._lock:
+            self._by_id[conn.id] = conn
 
 
 class InMemorySignalLogStore:
