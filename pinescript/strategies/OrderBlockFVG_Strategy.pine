@@ -1,0 +1,331 @@
+//@version=5
+strategy("Order Block + FVG Strategy", shorttitle="OB-FVG",
+         overlay=true, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=100, initial_capital=100000,
+         commission_type=strategy.commission.percent, commission_value=0.01,
+         slippage=3, calc_on_every_tick=false, pyramiding=0)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+// --- Order Block Detection ---
+grpOB = "=== Order Block Detection ==="
+minBodyRatio   = input.float(0.6,  "Min Body/Range Ratio (Explosive Candle)", minval=0.1, maxval=1.0, step=0.05, group=grpOB)
+minMoveATR     = input.float(1.5,  "Min Candle 2 Size (x ATR)",              minval=0.5, step=0.1, group=grpOB)
+atrPeriod      = input.int(14,     "ATR Period",                              minval=1, group=grpOB)
+maxOBs         = input.int(10,     "Max Order Blocks to Track",              minval=1, maxval=50, group=grpOB)
+
+// --- Entry Settings ---
+grpEntry = "=== Entry Settings ==="
+entryMode      = input.string("OB 50%", "Entry Mode", options=["OB 50%", "FVG Zone", "Both"], group=grpEntry)
+obEntryLevel   = input.float(0.50,  "OB Entry Level (0.5 = 50%)",            minval=0.1, maxval=0.9, step=0.05, group=grpEntry)
+requireClose   = input.bool(true,   "Require Candle Close Confirmation",     group=grpEntry)
+
+// --- Risk Management ---
+grpRisk = "=== Risk Management ==="
+slMode         = input.string("ATR", "SL Mode", options=["ATR", "Fixed Points"], group=grpRisk)
+slATRMult      = input.float(0.5,   "SL ATR Padding Multiplier",            minval=0.1, step=0.1, group=grpRisk)
+slFixedPts     = input.float(150,   "SL Fixed Points",                       minval=10, step=10, group=grpRisk)
+
+// --- Take Profit ---
+grpTP = "=== Take Profit ==="
+tpRR           = input.float(2.0,   "TP Risk:Reward Ratio",                 minval=1.0, step=0.5, group=grpTP)
+
+// --- Filters ---
+grpFilter = "=== Filters ==="
+useHTFFilter   = input.bool(false,  "Use HTF EMA Trend Filter",             group=grpFilter)
+htfTF          = input.timeframe("60", "HTF Timeframe",                     group=grpFilter)
+htfEMALen      = input.int(50,      "HTF EMA Period",                        minval=5, group=grpFilter)
+cooldownBars   = input.int(3,       "Min Bars Between Trades",              minval=1, group=grpFilter)
+
+// --- Display ---
+grpDisp = "=== Display ==="
+showOBZones    = input.bool(true,   "Show Order Block Zones",               group=grpDisp)
+showFVGZones   = input.bool(false,  "Show FVG Zones",                       group=grpDisp)
+show50Line     = input.bool(true,   "Show 50% Level Line",                  group=grpDisp)
+showDashboard  = input.bool(true,   "Show Dashboard",                       group=grpDisp)
+bullOBColor    = input.color(color.new(color.blue, 80),   "Bullish OB Color",  group=grpDisp)
+bearOBColor    = input.color(color.new(color.red, 80),    "Bearish OB Color",  group=grpDisp)
+bullFVGColor   = input.color(color.new(color.green, 90),  "Bullish FVG Color", group=grpDisp)
+bearFVGColor   = input.color(color.new(color.orange, 90), "Bearish FVG Color", group=grpDisp)
+
+// --- Dashboard ---
+grpDash = "Dashboard"
+dashPosX = input.string("right", "Dashboard X", options=["left", "center", "right"], group=grpDash)
+dashPosY = input.string("top",   "Dashboard Y", options=["top", "middle", "bottom"], group=grpDash)
+
+// ============================================================================
+// CALCULATIONS
+// ============================================================================
+atrVal = ta.atr(atrPeriod)
+pointSize = syminfo.mintick
+
+// HTF EMA
+htfEMA = request.security(syminfo.tickerid, htfTF, ta.ema(close, htfEMALen))
+htfBias = useHTFFilter ? (close > htfEMA ? 1 : close < htfEMA ? -1 : 0) : 0
+
+// ============================================================================
+// ORDER BLOCK & FVG DETECTION
+// ============================================================================
+
+// Candle references: c1 = bar[3], c2 = bar[2] (explosive), c3 = bar[1]
+c1High  = high[3]
+c1Low   = low[3]
+c2High  = high[2]
+c2Low   = low[2]
+c2Open  = open[2]
+c2Close = close[2]
+c3High  = high[1]
+c3Low   = low[1]
+
+c2Body  = math.abs(c2Close - c2Open)
+c2Range = c2High - c2Low
+bodyRatio = c2Range > 0 ? c2Body / c2Range : 0.0
+
+isExplosive = bodyRatio >= minBodyRatio and c2Range >= minMoveATR * atrVal[2]
+
+// Bullish FVG: gap between candle 1 high and candle 3 low, candle 2 is bullish
+bullFVG = isExplosive and c3Low > c1High and c2Close > c2Open
+// Bearish FVG: gap between candle 3 high and candle 1 low, candle 2 is bearish
+bearFVG = isExplosive and c1Low > c3High and c2Close < c2Open
+
+// ============================================================================
+// ORDER BLOCK TRACKING (using arrays)
+// ============================================================================
+var float[] bullOBTop    = array.new_float(0)
+var float[] bullOBBot    = array.new_float(0)
+var float[] bullOBMid    = array.new_float(0)
+var bool[]  bullOBActive = array.new_bool(0)
+var bool[]  bullOBTraded = array.new_bool(0)
+var int[]   bullOBBar    = array.new_int(0)
+
+var float[] bearOBTop    = array.new_float(0)
+var float[] bearOBBot    = array.new_float(0)
+var float[] bearOBMid    = array.new_float(0)
+var bool[]  bearOBActive = array.new_bool(0)
+var bool[]  bearOBTraded = array.new_bool(0)
+var int[]   bearOBBar    = array.new_int(0)
+
+// Add new bullish OB
+if bullFVG
+    obMid = c1Low + (c1High - c1Low) * obEntryLevel
+    array.push(bullOBTop, c1High)
+    array.push(bullOBBot, c1Low)
+    array.push(bullOBMid, obMid)
+    array.push(bullOBActive, true)
+    array.push(bullOBTraded, false)
+    array.push(bullOBBar, bar_index - 3)
+    // Cap array size
+    if array.size(bullOBTop) > maxOBs
+        array.shift(bullOBTop),    array.shift(bullOBBot),    array.shift(bullOBMid)
+        array.shift(bullOBActive), array.shift(bullOBTraded), array.shift(bullOBBar)
+
+// Add new bearish OB
+if bearFVG
+    obMid = c1High - (c1High - c1Low) * obEntryLevel
+    array.push(bearOBTop, c1High)
+    array.push(bearOBBot, c1Low)
+    array.push(bearOBMid, obMid)
+    array.push(bearOBActive, true)
+    array.push(bearOBTraded, false)
+    array.push(bearOBBar, bar_index - 3)
+    if array.size(bearOBTop) > maxOBs
+        array.shift(bearOBTop),    array.shift(bearOBBot),    array.shift(bearOBMid)
+        array.shift(bearOBActive), array.shift(bearOBTraded), array.shift(bearOBBar)
+
+// ============================================================================
+// MITIGATE ORDER BLOCKS
+// ============================================================================
+// Bullish OB: invalidate if close < bottom
+for i = 0 to array.size(bullOBActive) - 1
+    if i < array.size(bullOBActive) and array.get(bullOBActive, i)
+        if close[1] < array.get(bullOBBot, i)
+            array.set(bullOBActive, i, false)
+
+// Bearish OB: invalidate if close > top
+for i = 0 to array.size(bearOBActive) - 1
+    if i < array.size(bearOBActive) and array.get(bearOBActive, i)
+        if close[1] > array.get(bearOBTop, i)
+            array.set(bearOBActive, i, false)
+
+// ============================================================================
+// ENTRY SIGNALS
+// ============================================================================
+var int lastTradeBar = 0
+cooldownOk = bar_index - lastTradeBar >= cooldownBars
+
+longSignal  = false
+shortSignal = false
+var float entrySL = 0.0
+var float entryTP = 0.0
+
+// Check bullish OBs for long entry
+if strategy.position_size == 0 and cooldownOk and (not useHTFFilter or htfBias >= 0)
+    for i = array.size(bullOBActive) - 1 to 0
+        if i >= 0 and i < array.size(bullOBActive)
+            if array.get(bullOBActive, i) and not array.get(bullOBTraded, i)
+                obMidVal = array.get(bullOBMid, i)
+                obBotVal = array.get(bullOBBot, i)
+                obTopVal = array.get(bullOBTop, i)
+
+                triggered = false
+                if entryMode == "OB 50%" or entryMode == "Both"
+                    if requireClose
+                        triggered := low[1] <= obMidVal and close[1] > obMidVal
+                    else
+                        triggered := low[1] <= obMidVal
+                if not triggered and (entryMode == "FVG Zone" or entryMode == "Both")
+                    if requireClose
+                        triggered := low[1] <= obTopVal and close[1] > obTopVal
+                    else
+                        triggered := low[1] <= obTopVal
+
+                if triggered
+                    slPadding = slMode == "ATR" ? atrVal * slATRMult : slFixedPts * pointSize
+                    entrySL := obBotVal - slPadding
+                    slDist  = close - entrySL
+                    entryTP := close + slDist * tpRR
+                    longSignal := true
+                    array.set(bullOBTraded, i, true)
+                    lastTradeBar := bar_index
+                    break
+
+// Check bearish OBs for short entry
+if strategy.position_size == 0 and cooldownOk and not longSignal and (not useHTFFilter or htfBias <= 0)
+    for i = array.size(bearOBActive) - 1 to 0
+        if i >= 0 and i < array.size(bearOBActive)
+            if array.get(bearOBActive, i) and not array.get(bearOBTraded, i)
+                obMidVal = array.get(bearOBMid, i)
+                obBotVal = array.get(bearOBBot, i)
+                obTopVal = array.get(bearOBTop, i)
+
+                triggered = false
+                if entryMode == "OB 50%" or entryMode == "Both"
+                    if requireClose
+                        triggered := high[1] >= obMidVal and close[1] < obMidVal
+                    else
+                        triggered := high[1] >= obMidVal
+                if not triggered and (entryMode == "FVG Zone" or entryMode == "Both")
+                    if requireClose
+                        triggered := high[1] >= obBotVal and close[1] < obBotVal
+                    else
+                        triggered := high[1] >= obBotVal
+
+                if triggered
+                    slPadding = slMode == "ATR" ? atrVal * slATRMult : slFixedPts * pointSize
+                    entrySL := obTopVal + slPadding
+                    slDist  = entrySL - close
+                    entryTP := close - slDist * tpRR
+                    shortSignal := true
+                    array.set(bearOBTraded, i, true)
+                    lastTradeBar := bar_index
+                    break
+
+// ============================================================================
+// STRATEGY EXECUTION
+// ============================================================================
+if longSignal
+    strategy.entry("OB Long", strategy.long)
+    strategy.exit("OB Long Exit", "OB Long", stop=entrySL, limit=entryTP)
+
+if shortSignal
+    strategy.entry("OB Short", strategy.short)
+    strategy.exit("OB Short Exit", "OB Short", stop=entrySL, limit=entryTP)
+
+// ============================================================================
+// VISUALIZATION — Draw OB zones and FVG zones
+// ============================================================================
+
+// Draw latest bullish OB
+if bullFVG and showOBZones
+    obBoxBull = box.new(bar_index - 3, c1High, bar_index, c1Low,
+                        border_color=color.blue, bgcolor=bullOBColor,
+                        border_width=1, extend=extend.right)
+    if show50Line
+        obMidLine = line.new(bar_index - 3, c1Low + (c1High - c1Low) * obEntryLevel,
+                             bar_index, c1Low + (c1High - c1Low) * obEntryLevel,
+                             color=color.white, style=line.style_dashed, width=1,
+                             extend=extend.right)
+
+if bullFVG and showFVGZones
+    fvgBoxBull = box.new(bar_index - 2, c3Low, bar_index, c1High,
+                         border_color=color.green, bgcolor=bullFVGColor,
+                         border_width=1)
+
+// Draw latest bearish OB
+if bearFVG and showOBZones
+    obBoxBear = box.new(bar_index - 3, c1High, bar_index, c1Low,
+                        border_color=color.red, bgcolor=bearOBColor,
+                        border_width=1, extend=extend.right)
+    if show50Line
+        obMidLine = line.new(bar_index - 3, c1High - (c1High - c1Low) * obEntryLevel,
+                             bar_index, c1High - (c1High - c1Low) * obEntryLevel,
+                             color=color.white, style=line.style_dashed, width=1,
+                             extend=extend.right)
+
+if bearFVG and showFVGZones
+    fvgBoxBear = box.new(bar_index - 2, c1Low, bar_index, c3High,
+                         border_color=color.orange, bgcolor=bearFVGColor,
+                         border_width=1)
+
+// Entry signals
+plotshape(longSignal,  "Long Signal",  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(shortSignal, "Short Signal", shape.triangledown,  location.abovebar, color.red,   size=size.small)
+
+// HTF EMA plot
+plot(useHTFFilter ? htfEMA : na, "HTF EMA", color.new(color.yellow, 50), 2)
+
+// ============================================================================
+// ALERT CONDITIONS
+// ============================================================================
+alertcondition(longSignal,  "OB Long Entry",  "Order Block Long Entry Signal")
+alertcondition(shortSignal, "OB Short Entry",  "Order Block Short Entry Signal")
+
+// ============================================================================
+// DASHBOARD
+// ============================================================================
+if showDashboard and barstate.islastconfirmedhistory
+    posX = dashPosX == "left" ? position.top_left : dashPosX == "center" ? position.top_center : position.top_right
+    posY = dashPosY == "top" ? posX : dashPosY == "middle" ? position.middle_right : position.bottom_right
+
+    var table dashTable = table.new(posX, 7, 2, bgcolor=color.new(color.black, 80),
+                                    border_width=1, border_color=color.gray)
+    table.cell(dashTable, 0, 0, "OB-FVG Strategy", text_color=color.white, text_size=size.small)
+    table.cell(dashTable, 1, 0, syminfo.ticker, text_color=color.yellow, text_size=size.small)
+
+    table.cell(dashTable, 0, 1, "Net Profit", text_color=color.gray, text_size=size.tiny)
+    netPnl = strategy.netprofit
+    table.cell(dashTable, 1, 1, str.tostring(netPnl, "#.##"),
+               text_color=netPnl >= 0 ? color.green : color.red, text_size=size.tiny)
+
+    table.cell(dashTable, 0, 2, "Win Rate", text_color=color.gray, text_size=size.tiny)
+    totalTrades = strategy.closedtrades
+    winTrades   = strategy.wintrades
+    winRate     = totalTrades > 0 ? winTrades / totalTrades * 100 : 0
+    table.cell(dashTable, 1, 2, str.tostring(winRate, "#.#") + "%",
+               text_color=winRate >= 50 ? color.green : color.red, text_size=size.tiny)
+
+    table.cell(dashTable, 0, 3, "Total Trades", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashTable, 1, 3, str.tostring(totalTrades), text_color=color.white, text_size=size.tiny)
+
+    table.cell(dashTable, 0, 4, "Profit Factor", text_color=color.gray, text_size=size.tiny)
+    pf = strategy.grossprofit > 0 and strategy.grossloss != 0 ? strategy.grossprofit / math.abs(strategy.grossloss) : 0
+    table.cell(dashTable, 1, 4, str.tostring(pf, "#.##"),
+               text_color=pf >= 1 ? color.green : color.red, text_size=size.tiny)
+
+    table.cell(dashTable, 0, 5, "Max DD", text_color=color.gray, text_size=size.tiny)
+    table.cell(dashTable, 1, 5, str.tostring(strategy.max_drawdown, "#.##"),
+               text_color=color.red, text_size=size.tiny)
+
+    table.cell(dashTable, 0, 6, "Active Bull OBs", text_color=color.gray, text_size=size.tiny)
+    activeBull = 0
+    for i = 0 to array.size(bullOBActive) - 1
+        if array.get(bullOBActive, i)
+            activeBull += 1
+    activeBear = 0
+    for i = 0 to array.size(bearOBActive) - 1
+        if array.get(bearOBActive, i)
+            activeBear += 1
+    table.cell(dashTable, 1, 6, str.tostring(activeBull) + " / " + str.tostring(activeBear) + " Bear",
+               text_color=color.white, text_size=size.tiny)
