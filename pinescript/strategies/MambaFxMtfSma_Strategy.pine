@@ -1,0 +1,155 @@
+//@version=5
+// Mamba FX–style MTF setup (HTF S/R context, SMA 8/50 sequence). Intended chart: 15m.
+// Validation: 15m chart on your symbol; Strategy Tester → Properties → set commission % and slippage (ticks/pips) to match the broker; compare periods and pairs — past results do not guarantee future performance.
+strategy("Mamba FX MTF SMA", shorttitle="Mamba MTF",
+         overlay=true, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=100, initial_capital=100000,
+         commission_type=strategy.commission.percent, commission_value=0.01,
+         slippage=3, calc_on_every_tick=false, pyramiding=1,
+         process_orders_on_close=true)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+grpTF = "=== Timeframes ==="
+htfInput        = input.timeframe("240", "Higher TF (S/R)", group=grpTF)
+
+grpSMA = "=== SMAs (execution chart) ==="
+smaFastLen      = input.int(8,  "SMA Fast", minval=1, group=grpSMA)
+smaSlowLen      = input.int(50, "SMA Slow", minval=2, group=grpSMA)
+
+grpSR = "=== HTF S/R (pivots) ==="
+pivotLeft       = input.int(5, "Pivot Left", minval=1, maxval=20, group=grpSR)
+pivotRight      = input.int(5, "Pivot Right", minval=1, maxval=20, group=grpSR)
+resLookback     = input.int(50, "HTF bars: hi/lo fallback for TP", minval=5, maxval=500, group=grpSR)
+
+grpRisk = "=== Stops & targets ==="
+slMode          = input.string("ATR buffer", "SL buffer mode", options=["ATR buffer", "Fixed points"], group=grpRisk)
+slAtrLen        = input.int(14, "ATR length", minval=1, group=grpRisk)
+slAtrMult       = input.float(0.15, "SL: ATR ×", minval=0.01, step=0.05, group=grpRisk)
+slFixedPts      = input.float(5.0, "SL: fixed points below/above SMA50", minval=syminfo.mintick, step=syminfo.mintick, group=grpRisk)
+tpFallbackRR    = input.float(2.0, "TP fallback R:R if no HTF level", minval=0.5, step=0.25, group=grpRisk)
+
+grpTrail = "=== Trailing (optional) ==="
+useTrail        = input.bool(true, "Enable Pine trailing after profit", group=grpTrail)
+trailActPts     = input.float(10.0, "Trail: activate after profit (points)", minval=syminfo.mintick, step=1, group=grpTrail)
+trailOffsetPts  = input.float(8.0, "Trail: offset behind price (points)", minval=syminfo.mintick, step=1, group=grpTrail)
+
+grpDisp = "=== Display ==="
+plotSMA         = input.bool(true, "Plot SMAs", group=grpDisp)
+plotSR          = input.bool(true, "Plot HTF S/R estimates", group=grpDisp)
+
+// ============================================================================
+// HTF: last confirmed pivot low / high + rolling hi/lo fallback for TP
+// ============================================================================
+f_htfPivotLevels(int L, int R, int rb) =>
+    pl = ta.pivotlow(low, L, R)
+    ph = ta.pivothigh(high, L, R)
+    sup = ta.valuewhen(not na(pl), pl, 0)
+    res = ta.valuewhen(not na(ph), ph, 0)
+    hiFallback = ta.highest(high, rb)
+    loFallback = ta.lowest(low, rb)
+    [sup, res, hiFallback, loFallback]
+
+[htfSup, htfRes, htfHiFb, htfLoFb] = request.security(syminfo.tickerid, htfInput, f_htfPivotLevels(pivotLeft, pivotRight, resLookback), lookahead=barmerge.lookahead_off)
+
+supLevel = not na(htfSup) ? htfSup : htfLoFb
+resLevel = not na(htfRes) ? htfRes : htfHiFb
+
+// ============================================================================
+// SMAs on execution timeframe
+// ============================================================================
+smaFast = ta.sma(close, smaFastLen)
+smaSlow = ta.sma(close, smaSlowLen)
+
+plot(plotSMA ? smaFast : na, "SMA Fast", color.new(color.teal, 0), 2)
+plot(plotSMA ? smaSlow : na, "SMA Slow", color.new(color.orange, 0), 2)
+plot(plotSR ? supLevel : na, "HTF support (est.)", color.new(color.green, 50), style=plot.style_linebr)
+plot(plotSR ? resLevel : na, "HTF resistance (est.)", color.new(color.red, 50), style=plot.style_linebr)
+
+// ============================================================================
+// Sequential breakout: SMA slow first, then SMA fast (mirror for shorts)
+// ============================================================================
+var bool longSeqWait = false
+var bool shortSeqWait = false
+
+if ta.crossover(close, smaSlow)
+    longSeqWait := true
+if ta.crossunder(close, smaSlow)
+    longSeqWait := false
+
+if ta.crossunder(close, smaSlow)
+    shortSeqWait := true
+if ta.crossover(close, smaSlow)
+    shortSeqWait := false
+
+longSignal = longSeqWait and ta.crossover(close, smaFast) and close > supLevel
+if longSignal
+    longSeqWait := false
+
+shortSignal = shortSeqWait and ta.crossunder(close, smaFast) and close < resLevel
+if shortSignal
+    shortSeqWait := false
+
+// ============================================================================
+// SL / TP at signal (bar close)
+// ============================================================================
+atrVal = ta.atr(slAtrLen)
+slBuf = slMode == "ATR buffer" ? atrVal * slAtrMult : slFixedPts
+
+riskLong = math.max(close - (smaSlow - slBuf), syminfo.mintick)
+riskShort = math.max((smaSlow + slBuf) - close, syminfo.mintick)
+
+tpLongPrice = (not na(htfRes) and htfRes > close) ? htfRes : (htfHiFb > close ? htfHiFb : close + riskLong * tpFallbackRR)
+tpShortPrice = (not na(htfSup) and htfSup < close) ? htfSup : (htfLoFb < close ? htfLoFb : close - riskShort * tpFallbackRR)
+
+slLong  = smaSlow - slBuf
+slShort = smaSlow + slBuf
+
+longOk  = longSignal  and strategy.position_size == 0 and slLong < close and tpLongPrice > close
+shortOk = shortSignal and strategy.position_size == 0 and slShort > close and tpShortPrice < close
+
+// ============================================================================
+// Capture TP limits at entry (do not drift with later bars)
+// ============================================================================
+var float longLimit  = na
+var float shortLimit = na
+
+if longOk
+    longLimit := tpLongPrice
+    strategy.entry("Long", strategy.long)
+
+if shortOk
+    shortLimit := tpShortPrice
+    strategy.entry("Short", strategy.short)
+
+if strategy.position_size[1] > 0 and strategy.position_size == 0
+    longLimit := na
+if strategy.position_size[1] < 0 and strategy.position_size == 0
+    shortLimit := na
+
+// ============================================================================
+// Exits: SL tracks SMA slow ± buffer; optional Pine trail after profit
+// ============================================================================
+if strategy.position_size > 0
+    dynLongSL = smaSlow - slBuf
+    if useTrail
+        strategy.exit("XL", "Long", stop=dynLongSL, limit=longLimit, trail_points=trailActPts, trail_offset=trailOffsetPts)
+    else
+        strategy.exit("XL", "Long", stop=dynLongSL, limit=longLimit)
+
+if strategy.position_size < 0
+    dynShortSL = smaSlow + slBuf
+    if useTrail
+        strategy.exit("XS", "Short", stop=dynShortSL, limit=shortLimit, trail_points=trailActPts, trail_offset=trailOffsetPts)
+    else
+        strategy.exit("XS", "Short", stop=dynShortSL, limit=shortLimit)
+
+// ============================================================================
+// Signals & alerts
+// ============================================================================
+plotshape(longOk, title="Long", style=shape.triangleup, location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="L")
+plotshape(shortOk, title="Short", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="S")
+
+alertcondition(longOk, title="Mamba long", message="Mamba MTF long {{ticker}} @ {{close}}")
+alertcondition(shortOk, title="Mamba short", message="Mamba MTF short {{ticker}} @ {{close}}")
