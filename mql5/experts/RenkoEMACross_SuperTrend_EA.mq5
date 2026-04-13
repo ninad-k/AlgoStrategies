@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                   RenkoEMACross_SuperTrend_EA.mq5 |
-//| EMA 9/15 crossover + SmartRenkoLikeStep direction + SuperTrend   |
+//| EMA 9/15 crossover + inline Renko direction + SuperTrend          |
 //| Triple confirmation entry, SuperTrend trailing & partial TP      |
 //| Optimized for XAUUSD M15 with 150-point fixed Renko bricks      |
 //+------------------------------------------------------------------+
 #property copyright "AlgoStrategies"
-#property version   "1.00"
+#property version   "2.00"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -45,14 +45,12 @@ input group "=== SuperTrend ==="
 input int     InpSTPeriod      = 10;                    // SuperTrend ATR Period
 input double  InpSTMultiplier  = 3.0;                   // SuperTrend Multiplier
 
-input group "=== SmartRenkoLikeStep Indicator ==="
-input bool          InpAutoDetectAsset = true;          // Asset Selection Mode (Auto-Detect)
-input string        InpManualAsset     = "XAUUSD/GOLD"; // Manual Asset Pick (label only)
+input group "=== Renko Engine (inline) ==="
 input BrickCalcMode InpBrickCalc       = BRICK_FIXED;   // Brick Size Calculation
-input int           InpATRLen          = 14;            // ATR Length
+input int           InpATRLen          = 14;            // ATR Length (for brick calc)
 input double        InpATRMult         = 1.0;           // ATR Mult
 input double        InpCustomPct       = 1.0;           // Custom % (if Percentage selected)
-input double        InpFixedBoxPoints  = 150.0;         // Fixed Box Size (Points) — 150 for GOLD
+input double        InpFixedBoxPoints  = 150.0;         // Fixed Box Size (Points) - 150 for GOLD
 input double        InpRoundingStep    = 0.0;           // Rounding Step (0 = tick size)
 input bool          InpAllowMultiBrick = true;          // Allow Multi-Brick Jumps
 input bool          InpInitRoundFirst  = false;         // Initialization: round first close to brick
@@ -81,10 +79,16 @@ input int     InpExitMinute        = 30;                // Force exit minute
 input group "=== Display ==="
 input bool    InpShowDashboard     = true;              // Show info dashboard on chart
 
-//--- Indicator handles
-int hRenko   = INVALID_HANDLE;
-int hEMAFast = INVALID_HANDLE;
-int hEMASlow = INVALID_HANDLE;
+//--- Indicator handles (EMA only, Renko is inline)
+int hEMAFast  = INVALID_HANDLE;
+int hEMASlow  = INVALID_HANDLE;
+int hRenkoATR = INVALID_HANDLE;   // ATR for Renko brick calculation
+
+//--- Renko engine state
+double g_RenkoLevel     = 0;
+double g_RenkoDir       = 0;     // -1, 0, 1
+double g_RenkoBrick     = 0;
+bool   g_RenkoInit      = false;
 
 //--- SuperTrend state (manual calculation)
 double g_ATR           = 0;
@@ -103,8 +107,8 @@ double g_PrevClose     = 0;
 //--- Trade state
 int      g_TradeState     = 0;     // 0=flat, 1=long, -1=short
 double   g_EntryPrice     = 0;
-double   g_EntryBrickSize = 0;     // Brick size at entry (fixed for TP calc)
-double   g_EntryLots      = 0;     // Original lot size at entry
+double   g_EntryBrickSize = 0;
+double   g_EntryLots      = 0;
 datetime g_LastBarTime    = 0;
 
 //--- Partial TP tracking
@@ -229,6 +233,58 @@ double CalcLotSize(const double slDistancePrice)
 }
 
 //+------------------------------------------------------------------+
+//| Inline Renko engine — updates g_RenkoLevel, g_RenkoDir, Brick   |
+//+------------------------------------------------------------------+
+void CalcRenko(double closePrice, double atrValue)
+{
+   const double tickSize = GetTickSize();
+   const double step = (InpRoundingStep > 0.0) ? InpRoundingStep : tickSize;
+
+   // Compute brick size
+   double brickRaw = 0.0;
+   if(InpBrickCalc == BRICK_ATR)
+      brickRaw = atrValue * InpATRMult;
+   else if(InpBrickCalc == BRICK_PERCENT)
+      brickRaw = closePrice * (InpCustomPct / 100.0);
+   else
+      brickRaw = InpFixedBoxPoints;
+
+   double brick = RoundToStep(brickRaw, step);
+   if(brick < tickSize) brick = tickSize;
+   g_RenkoBrick = brick;
+
+   // Initialize on first call
+   if(!g_RenkoInit)
+   {
+      g_RenkoLevel = InpInitRoundFirst ? RoundToStep(closePrice, brick) : closePrice;
+      g_RenkoDir   = 0;
+      g_RenkoInit  = true;
+      return;
+   }
+
+   // Step logic
+   double upMove = closePrice - g_RenkoLevel;
+   double dnMove = g_RenkoLevel - closePrice;
+
+   if(upMove >= brick)
+   {
+      int bricks = 1;
+      if(InpAllowMultiBrick)
+         bricks = (int)MathFloor(upMove / brick);
+      g_RenkoLevel += bricks * brick;
+      g_RenkoDir = 1;
+   }
+   else if(dnMove >= brick)
+   {
+      int bricks = 1;
+      if(InpAllowMultiBrick)
+         bricks = (int)MathFloor(dnMove / brick);
+      g_RenkoLevel -= bricks * brick;
+      g_RenkoDir = -1;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| SuperTrend calculation (manual Wilder's ATR)                     |
 //+------------------------------------------------------------------+
 void CalcSuperTrend(double highPrice, double lowPrice, double closePrice)
@@ -261,7 +317,7 @@ void CalcSuperTrend(double highPrice, double lowPrice, double closePrice)
    double upperBand = midPrice + InpSTMultiplier * g_ATR;
    double lowerBand = midPrice - InpSTMultiplier * g_ATR;
 
-   // Carry forward bands (don't widen against the trend)
+   // Carry forward bands
    if(!g_STInitialized)
    {
       g_STUpperBand = upperBand;
@@ -272,19 +328,16 @@ void CalcSuperTrend(double highPrice, double lowPrice, double closePrice)
    }
    else
    {
-      // Lower band: only allow it to move up
       if(lowerBand > g_PrevSTLower || g_PrevClose < g_PrevSTLower)
          g_STLowerBand = lowerBand;
       else
          g_STLowerBand = g_PrevSTLower;
 
-      // Upper band: only allow it to move down
       if(upperBand < g_PrevSTUpper || g_PrevClose > g_PrevSTUpper)
          g_STUpperBand = upperBand;
       else
          g_STUpperBand = g_PrevSTUpper;
 
-      // Direction
       if(g_PrevSTDir == 1)
          g_STDirection = closePrice < g_STLowerBand ? -1 : 1;
       else
@@ -323,7 +376,6 @@ void SyncTradeState()
    }
    else if(g_TradeState == 0)
    {
-      // Detect externally opened positions
       if(buyTicket > 0) g_TradeState = 1;
       else if(sellTicket > 0) g_TradeState = -1;
    }
@@ -395,12 +447,9 @@ void ManagePartialTP()
    // TP2
    if(!g_TP2Hit && g_TP1Hit && priceDist >= InpTP2BrickMult * g_EntryBrickSize)
    {
-      // Recalculate remaining volume after TP1
       if(PositionSelectByTicket(ticket))
          currentVolume = PositionGetDouble(POSITION_VOLUME);
-      double closeLots = NormalizeLot(currentVolume * InpTP2ClosePct / (InpTP2ClosePct + InpTP3ClosePct) / 100.0 * 100.0);
-      // Simplified: close proportional share of remaining
-      closeLots = NormalizeLot(g_EntryLots * InpTP2ClosePct / 100.0);
+      double closeLots = NormalizeLot(g_EntryLots * InpTP2ClosePct / 100.0);
       if(closeLots > 0 && closeLots <= currentVolume)
       {
          if(g_Trade.PositionClosePartial(ticket, closeLots))
@@ -446,7 +495,6 @@ void TrailStopBySuperTrend()
 
    if(g_TradeState == 1)
    {
-      // Long: only move SL up
       if(newSL > currentSL && newSL < SymbolInfoDouble(_Symbol, SYMBOL_BID))
       {
          g_Trade.PositionModify(ticket, newSL, currentTP);
@@ -454,7 +502,6 @@ void TrailStopBySuperTrend()
    }
    else
    {
-      // Short: only move SL down
       if((currentSL == 0 || newSL < currentSL) && newSL > SymbolInfoDouble(_Symbol, SYMBOL_ASK))
       {
          g_Trade.PositionModify(ticket, newSL, currentTP);
@@ -503,24 +550,15 @@ int OnInit()
    g_Trade.SetExpertMagicNumber(InpMagicNumber);
    g_Trade.SetDeviationInPoints(InpDeviationPts);
 
-   // SmartRenkoLikeStep indicator handle
-   hRenko = iCustom(_Symbol, PERIOD_CURRENT,
-                    "SmartRenkoLikeStep",
-                    InpAutoDetectAsset,
-                    InpManualAsset,
-                    (int)InpBrickCalc,
-                    InpATRLen,
-                    InpATRMult,
-                    InpCustomPct,
-                    InpFixedBoxPoints,
-                    InpRoundingStep,
-                    InpAllowMultiBrick,
-                    InpInitRoundFirst);
-
-   if(hRenko == INVALID_HANDLE)
+   // ATR handle for Renko brick calculation (only needed for ATR mode)
+   if(InpBrickCalc == BRICK_ATR)
    {
-      Print(InpComment, ": failed to create SmartRenkoLikeStep handle. err=", GetLastError());
-      return INIT_FAILED;
+      hRenkoATR = iATR(_Symbol, PERIOD_CURRENT, InpATRLen);
+      if(hRenkoATR == INVALID_HANDLE)
+      {
+         Print(InpComment, ": failed to create Renko ATR handle. err=", GetLastError());
+         return INIT_FAILED;
+      }
    }
 
    // EMA handles
@@ -538,6 +576,12 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Reset Renko state
+   g_RenkoInit  = false;
+   g_RenkoLevel = 0;
+   g_RenkoDir   = 0;
+   g_RenkoBrick = 0;
+
    // Reset SuperTrend state
    g_STInitialized = false;
    g_ATRBarCount   = 0;
@@ -554,7 +598,7 @@ int OnInit()
    g_TP2Hit = false;
    g_TP3Hit = false;
 
-   Print(InpComment, " initialized. Symbol=", _Symbol,
+   Print(InpComment, " v2.00 initialized (inline Renko). Symbol=", _Symbol,
          " TF=", EnumToString(Period()),
          " Magic=", InpMagicNumber,
          " EMA=", InpEMAFastPeriod, "/", InpEMASlowPeriod,
@@ -568,14 +612,14 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   if(hRenko   != INVALID_HANDLE) IndicatorRelease(hRenko);
-   if(hEMAFast != INVALID_HANDLE) IndicatorRelease(hEMAFast);
-   if(hEMASlow != INVALID_HANDLE) IndicatorRelease(hEMASlow);
+   if(hRenkoATR != INVALID_HANDLE) IndicatorRelease(hRenkoATR);
+   if(hEMAFast  != INVALID_HANDLE) IndicatorRelease(hEMAFast);
+   if(hEMASlow  != INVALID_HANDLE) IndicatorRelease(hEMASlow);
    Comment("");
 }
 
 //+------------------------------------------------------------------+
-//| OnTick — main logic                                              |
+//| OnTick - main logic                                              |
 //+------------------------------------------------------------------+
 void OnTick()
 {
@@ -595,15 +639,11 @@ void OnTick()
    if(!IsNewBar())
       return;
 
-   //--- Step 6: Copy indicator buffers (3 bars, series order)
-   double dirBuf[3], brickBuf[3], emaFastBuf[3], emaSlowBuf[3];
-   ArraySetAsSeries(dirBuf, true);
-   ArraySetAsSeries(brickBuf, true);
+   //--- Step 6: EMA buffers (3 bars, series order)
+   double emaFastBuf[3], emaSlowBuf[3];
    ArraySetAsSeries(emaFastBuf, true);
    ArraySetAsSeries(emaSlowBuf, true);
 
-   if(CopyBuffer(hRenko, 1, 0, 3, dirBuf)      < 3) return;
-   if(CopyBuffer(hRenko, 2, 0, 3, brickBuf)     < 3) return;
    if(CopyBuffer(hEMAFast, 0, 0, 3, emaFastBuf) < 3) return;
    if(CopyBuffer(hEMASlow, 0, 0, 3, emaSlowBuf) < 3) return;
 
@@ -612,11 +652,21 @@ void OnTick()
    double low1   = iLow(_Symbol, PERIOD_CURRENT, 1);
    double close1 = iClose(_Symbol, PERIOD_CURRENT, 1);
 
-   //--- Step 8-9: SuperTrend calculation for bar[1]
+   //--- Step 8: Renko engine on bar[1] close
+   double renkoATR = 0;
+   if(InpBrickCalc == BRICK_ATR && hRenkoATR != INVALID_HANDLE)
+   {
+      double atrBuf[1];
+      if(CopyBuffer(hRenkoATR, 0, 1, 1, atrBuf) < 1) return;
+      renkoATR = atrBuf[0];
+   }
+   CalcRenko(close1, renkoATR);
+
+   //--- Step 9: SuperTrend calculation for bar[1]
    CalcSuperTrend(high1, low1, close1);
 
    //--- Step 10: Skip if not ready
-   double brick = brickBuf[1];
+   double brick = g_RenkoBrick;
    if(brick <= 0 || !g_STInitialized)
    {
       DrawDashboard(0, emaFastBuf[1], emaSlowBuf[1], brick);
@@ -627,8 +677,8 @@ void OnTick()
    bool emaCrossUp = (emaFastBuf[2] <= emaSlowBuf[2] && emaFastBuf[1] > emaSlowBuf[1]);
    bool emaCrossDn = (emaFastBuf[2] >= emaSlowBuf[2] && emaFastBuf[1] < emaSlowBuf[1]);
 
-   //--- Step 12: Renko direction on bar[1]
-   int renkoDir = (int)MathRound(dirBuf[1]);
+   //--- Step 12: Renko direction (from inline engine)
+   int renkoDir = (int)MathRound(g_RenkoDir);
 
    //--- Step 13: SuperTrend flip exit
    if(InpExitOnSTFlip && g_TradeState != 0)
@@ -639,7 +689,7 @@ void OnTick()
          if(ticket > 0)
          {
             g_Trade.PositionClose(ticket);
-            Print(InpComment, ": SuperTrend flipped bearish — closed LONG");
+            Print(InpComment, ": SuperTrend flipped bearish - closed LONG");
          }
          g_TradeState = 0;
          g_TP1Hit = false;
@@ -652,7 +702,7 @@ void OnTick()
          if(ticket > 0)
          {
             g_Trade.PositionClose(ticket);
-            Print(InpComment, ": SuperTrend flipped bullish — closed SHORT");
+            Print(InpComment, ": SuperTrend flipped bullish - closed SHORT");
          }
          g_TradeState = 0;
          g_TP1Hit = false;
@@ -670,26 +720,24 @@ void OnTick()
 
    if(buySignal && buyTicket == 0)
    {
-      // Close opposite position first
       if(sellTicket > 0)
          g_Trade.PositionClose(sellTicket);
 
       double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
-      // Calculate SL (wider of SuperTrend and brick-based)
       double sl = 0;
       double slFromST    = InpSLUseSuperTrend ? g_SuperTrend : 0;
       double slFromBrick = InpSLUseBrick ? NormalizePrice(ask - InpSLBrickMult * brick) : 0;
 
       if(slFromST > 0 && slFromBrick > 0)
-         sl = MathMin(slFromST, slFromBrick);    // Wider = lower for longs
+         sl = MathMin(slFromST, slFromBrick);
       else if(slFromST > 0)
          sl = slFromST;
       else if(slFromBrick > 0)
          sl = slFromBrick;
 
       sl = NormalizePrice(sl);
-      double tp = 0;  // Managed by partial TP
+      double tp = 0;
       ApplyMinStops(true, ask, sl, tp);
 
       double slDist = ask - sl;
@@ -715,19 +763,17 @@ void OnTick()
    }
    else if(sellSignal && sellTicket == 0)
    {
-      // Close opposite position first
       if(buyTicket > 0)
          g_Trade.PositionClose(buyTicket);
 
       double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
 
-      // Calculate SL (wider of SuperTrend and brick-based)
       double sl = 0;
       double slFromST    = InpSLUseSuperTrend ? g_SuperTrend : 0;
       double slFromBrick = InpSLUseBrick ? NormalizePrice(bid + InpSLBrickMult * brick) : 0;
 
       if(slFromST > 0 && slFromBrick > 0)
-         sl = MathMax(slFromST, slFromBrick);    // Wider = higher for shorts
+         sl = MathMax(slFromST, slFromBrick);
       else if(slFromST > 0)
          sl = slFromST;
       else if(slFromBrick > 0)
