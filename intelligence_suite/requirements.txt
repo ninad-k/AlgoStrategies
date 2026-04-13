@@ -1,0 +1,56 @@
+# Intelligence Suite — Dependencies
+# ====================================
+
+# Core
+flask>=3.0
+flask-socketio>=5.3
+fastapi>=0.115.0
+uvicorn>=0.30.0
+pydantic>=2.0.0
+pyyaml>=6.0
+requests>=2.31
+python-dotenv>=1.0.0
+
+# Data & Analysis
+pandas>=2.0
+pandas_ta>=0.3
+numpy>=1.24
+scipy>=1.11
+statsmodels>=0.14
+hmmlearn>=0.3
+
+# ML / Pattern Recognition
+torch>=2.0
+torchvision>=0.15
+onnxruntime>=1.16
+lightgbm>=4.0
+scikit-learn>=1.3
+
+# Charting / Visualization
+plotly>=5.18
+matplotlib>=3.8
+
+# Scheduling
+schedule>=1.2
+apscheduler>=3.10
+
+# Async / WebSocket
+eventlet>=0.35
+websockets>=12.0
+
+# Sentiment / Scraping
+praw>=7.7
+feedparser>=6.0
+
+# Database
+sqlalchemy>=2.0
+
+# PDF / Report generation
+reportlab>=4.0
+jinja2>=3.1
+
+# Broker (optional — install as needed)
+# MetaTrader5>=5.0.45    # Windows only
+# ccxt>=4.0              # For Binance/crypto exchanges
+
+# Mobile App (see mobile_app/package.json for React Native deps)

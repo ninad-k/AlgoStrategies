@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rey Capital — Portfolio Heat Map</title>
+    <link rel="icon" href="/static/ReyCapital_Icon.png">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* ─── Theme Variables ─── */
+        [data-theme="dark"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --bg-card-hover: #1a1a1a;
+            --border: #222222;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #5a6370;
+            --accent: #0052CC;
+            --accent-light: #1a73e8;
+            --accent-glow: rgba(0,82,204,0.15);
+            --green: #3fb950;
+            --green-bg: rgba(63,185,80,0.12);
+            --red: #f85149;
+            --red-bg: rgba(248,81,73,0.12);
+            --orange: #d29922;
+            --orange-bg: rgba(210,153,34,0.12);
+            --purple: #bc8cff;
+            --shadow: 0 2px 8px rgba(0,0,0,0.5);
+            --treemap-stroke: #000000;
+        }
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f0f4f8;
+            --border: #d0d7de;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8b949e;
+            --accent: #0052CC;
+            --accent-light: #1a73e8;
+            --accent-glow: rgba(0,82,204,0.08);
+            --green: #1a7f37;
+            --green-bg: rgba(26,127,55,0.08);
+            --red: #cf222e;
+            --red-bg: rgba(207,34,46,0.08);
+            --orange: #bf8700;
+            --orange-bg: rgba(191,135,0,0.08);
+            --purple: #8250df;
+            --shadow: 0 1px 4px rgba(0,0,0,0.08);
+            --treemap-stroke: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* ─── Header ─── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header-left img { height: 28px; }
+        .header-left h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+
+        .badge { padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .badge-ok { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+        .badge-warn { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange); }
+
+        .btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+        /* ─── Summary Cards ─── */
+        .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .summary-card:hover { border-color: var(--accent); }
+        .summary-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .summary-card .value { font-size: 1.8rem; font-weight: 700; margin: 8px 0; }
+        .positive { color: var(--green); }
+        .negative { color: var(--red); }
+        .neutral { color: var(--accent-light); }
+
+        /* ─── Grid ─── */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .grid-full { grid-column: 1 / -1; }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .card:hover { border-color: var(--accent); }
+        .card h2 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* ─── Treemap ─── */
+        #treemap-container { width: 100%; height: 400px; }
+        #treemap-container svg { width: 100%; height: 100%; }
+        .treemap-label { font-size: 11px; fill: #fff; font-weight: 600; pointer-events: none; }
+        .treemap-value { font-size: 9px; fill: rgba(255,255,255,0.7); pointer-events: none; }
+
+        /* ─── VaR Gauges ─── */
+        .var-gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .gauge-card {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+        .gauge-card .method { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .gauge-card .var-value { font-size: 1.6rem; font-weight: 700; color: var(--red); margin: 8px 0; }
+        .gauge-card .var-pct { font-size: 0.9rem; color: var(--orange); }
+        .gauge-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+        .gauge-bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+        /* ─── Table ─── */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 14px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+        td { padding: 10px 14px; font-size: 12px; border-bottom: 1px solid var(--border); }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: var(--accent-glow); }
+
+        /* ─── Warnings ─── */
+        .warnings { margin-top: 10px; }
+        .warning-item {
+            background: var(--orange-bg);
+            border-left: 3px solid var(--orange);
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--orange);
+        }
+
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 13px; }
+        .update-time { font-size: 11px; color: var(--text-muted); }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+            .summary-row { grid-template-columns: repeat(2, 1fr); }
+            .var-gauges { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <img src="/static/ReyCapital_Logo_White.png" alt="Rey Capital" id="headerLogo">
+        <h1>Portfolio Heat Map</h1>
+    </div>
+    <div class="header-right">
+        <span class="badge badge-ok" id="conn-badge">Connected</span>
+        <button class="btn" onclick="toggleTheme()" id="themeBtn">&#9788;</button>
+        <button class="btn" onclick="loadAll()">&#8635; Refresh</button>
+        <span class="update-time" id="updateTime">—</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="summary-row" id="summary-row">
+        <div class="summary-card">
+            <div class="label">Equity</div>
+            <div class="value neutral" id="s-equity">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Open P&L</div>
+            <div class="value" id="s-pnl">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Positions</div>
+            <div class="value neutral" id="s-positions">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">HHI Risk</div>
+            <div class="value" id="s-hhi">--</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card grid-full">
+            <h2>Portfolio Heatmap</h2>
+            <div id="treemap-container"><div class="loading">Loading heatmap...</div></div>
+        </div>
+        <div class="card">
+            <h2>Value at Risk (VaR)</h2>
+            <div class="var-gauges" id="var-gauges"><div class="loading">Loading VaR...</div></div>
+        </div>
+        <div class="card">
+            <h2>Stress Test Scenarios</h2>
+            <div id="stress-table"><div class="loading">Loading stress tests...</div></div>
+        </div>
+    </div>
+
+    <div class="card" id="warnings-card" style="display:none;">
+        <h2>Risk Warnings</h2>
+        <div class="warnings" id="warnings-list"></div>
+    </div>
+</div>
+
+<script>
+    const API = '';
+
+    // ─── Theme ───
+    function initTheme() {
+        const t = localStorage.getItem('rcHeatmapTheme') || 'dark';
+        applyTheme(t);
+    }
+    function toggleTheme() {
+        const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        applyTheme(t);
+        localStorage.setItem('rcHeatmapTheme', t);
+    }
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        document.getElementById('themeBtn').innerHTML = t === 'dark' ? '&#9788;' : '&#9790;';
+        document.getElementById('headerLogo').src = t === 'dark'
+            ? '/static/ReyCapital_Logo_White.png'
+            : '/static/ReyCapital_Logo.png';
+    }
+    initTheme();
+
+    function fmt(n, decimals = 2) {
+        if (n == null) return '--';
+        return Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function renderTreemap(data) {
+        const container = document.getElementById('treemap-container');
+        container.innerHTML = '';
+        const width = container.clientWidth;
+        const height = 400;
+        const strokeColor = getComputedStyle(document.documentElement).getPropertyValue('--treemap-stroke').trim();
+
+        const root = d3.hierarchy(data.treemap).sum(d => d.value).sort((a, b) => b.value - a.value);
+        d3.treemap().size([width, height]).padding(3).round(true)(root);
+        const svg = d3.create('svg').attr('viewBox', `0 0 ${width} ${height}`);
+        const leaf = svg.selectAll('g').data(root.leaves()).join('g').attr('transform', d => `translate(${d.x0},${d.y0})`);
+        leaf.append('rect')
+            .attr('width', d => d.x1 - d.x0).attr('height', d => d.y1 - d.y0).attr('rx', 4)
+            .attr('fill', d => {
+                const p = d.data.profit || 0;
+                return p > 0 ? 'rgba(63,185,80,0.7)' : p < 0 ? 'rgba(248,81,73,0.7)' : 'rgba(99,110,114,0.4)';
+            })
+            .attr('stroke', strokeColor).attr('stroke-width', 1);
+        leaf.append('text').attr('class', 'treemap-label').attr('x', 6).attr('y', 18).text(d => (d.x1 - d.x0) > 50 ? d.data.name : '');
+        leaf.append('text').attr('class', 'treemap-value').attr('x', 6).attr('y', 32).text(d => {
+            if ((d.x1 - d.x0) < 70) return '';
+            return `$${fmt(d.data.value, 0)} | P&L: $${fmt(d.data.profit, 0)}`;
+        });
+        leaf.append('title').text(d => `${d.data.name}\nValue: $${fmt(d.data.value)}\nP&L: $${fmt(d.data.profit)}\nDir: ${d.data.direction}`);
+        container.appendChild(svg.node());
+    }
+
+    function renderVaR(data) {
+        const container = document.getElementById('var-gauges');
+        const methods = ['historical', 'parametric', 'monte_carlo'];
+        const labels = { historical: 'Historical', parametric: 'Parametric', monte_carlo: 'Monte Carlo' };
+        container.innerHTML = methods.map(m => {
+            const d = data[m] || {};
+            const pct = Math.abs(d.var_pct || 0) * 100;
+            const barWidth = Math.min(pct * 10, 100);
+            const color = pct > 3 ? 'var(--red)' : pct > 1.5 ? 'var(--orange)' : 'var(--green)';
+            return `<div class="gauge-card">
+                <div class="method">${labels[m]}</div>
+                <div class="var-value">$${fmt(d.var_amount)}</div>
+                <div class="var-pct">${pct.toFixed(2)}%</div>
+                <div class="gauge-bar"><div class="fill" style="width:${barWidth}%;background:${color}"></div></div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderStress(data) {
+        const container = document.getElementById('stress-table');
+        const scenarios = data.scenarios || {};
+        let html = '<table><thead><tr><th>Scenario</th><th>Shock</th><th>Impact</th><th>Impact %</th><th>Surviving Equity</th></tr></thead><tbody>';
+        for (const [name, s] of Object.entries(scenarios)) {
+            const cls = s.portfolio_impact < 0 ? 'negative' : 'positive';
+            html += `<tr><td>${name.replace(/_/g, ' ')}</td><td>${s.base_shock_pct}%</td><td class="${cls}">$${fmt(s.portfolio_impact)}</td><td class="${cls}">${s.impact_pct}%</td><td>$${fmt(s.surviving_equity)}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        if (data.worst_case && data.worst_case.scenario) {
+            html += `<div style="margin-top:10px;font-size:12px;color:var(--red);">Worst case: <strong>${data.worst_case.scenario.replace(/_/g, ' ')}</strong> ($${fmt(data.worst_case.impact)})</div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    async function loadAll() {
+        try {
+            const [pRes, vRes, sRes, hRes] = await Promise.all([
+                fetch(API + '/api/portfolio'), fetch(API + '/api/var'),
+                fetch(API + '/api/stress'), fetch(API + '/api/heatmap'),
+            ]);
+            const portfolio = await pRes.json(), varData = await vRes.json(), stressData = await sRes.json(), heatmapData = await hRes.json();
+            const acct = portfolio.account || {}, analysis = portfolio.analysis || {};
+            document.getElementById('s-equity').textContent = '$' + fmt(acct.equity);
+            const pnlEl = document.getElementById('s-pnl');
+            pnlEl.textContent = '$' + fmt(acct.profit);
+            pnlEl.className = 'value ' + (acct.profit >= 0 ? 'positive' : 'negative');
+            document.getElementById('s-positions').textContent = analysis.position_count || 0;
+            const hhiEl = document.getElementById('s-hhi');
+            hhiEl.textContent = fmt(analysis.concentration_risk, 0);
+            hhiEl.className = 'value ' + (analysis.concentration_risk > 2500 ? 'negative' : 'positive');
+            const warnings = analysis.warnings || [];
+            const warnCard = document.getElementById('warnings-card');
+            if (warnings.length > 0) {
+                warnCard.style.display = 'block';
+                document.getElementById('warnings-list').innerHTML = warnings.map(w => `<div class="warning-item">${w}</div>`).join('');
+            } else { warnCard.style.display = 'none'; }
+            renderTreemap(heatmapData);
+            renderVaR(varData);
+            renderStress(stressData);
+            document.getElementById('conn-badge').textContent = 'Connected';
+            document.getElementById('conn-badge').className = 'badge badge-ok';
+            document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
+        } catch (err) {
+            console.error('Load failed:', err);
+            document.getElementById('conn-badge').textContent = 'Error';
+            document.getElementById('conn-badge').className = 'badge badge-warn';
+        }
+    }
+
+    loadAll();
+    setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

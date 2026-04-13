@@ -1,0 +1,119 @@
+# Intelligence Suite — Docker Compose Stack
+# =============================================
+# Run with: docker-compose up -d
+
+version: "3.9"
+
+services:
+  # ---- Main Trading Engine ----
+  trading_engine:
+    build:
+      context: ../../
+      dockerfile: intelligence_suite/deployment/Dockerfile
+    container_name: intelligence_suite_engine
+    restart: unless-stopped
+    ports:
+      - "8060:8060"
+    volumes:
+      - engine_logs:/app/logs
+      - engine_data:/app/data
+      - ./config_override.yaml:/app/intelligence_suite/config.yaml:ro
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_URL=redis://redis:6379/0
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - suite_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8060/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---- Heatmap Dashboard ----
+  dashboard_heatmap:
+    build:
+      context: ../../
+      dockerfile: intelligence_suite/deployment/Dockerfile
+    container_name: intelligence_suite_heatmap
+    restart: unless-stopped
+    command: ["python", "-m", "intelligence_suite.heatmap_dashboard.server"]
+    ports:
+      - "8061:8061"
+    volumes:
+      - engine_logs:/app/logs:ro
+    environment:
+      - PYTHONPATH=/app
+      - HEATMAP_PORT=8061
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - suite_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8061/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---- Multi-Account Aggregator ----
+  dashboard_multi_account:
+    build:
+      context: ../../
+      dockerfile: intelligence_suite/deployment/Dockerfile
+    container_name: intelligence_suite_multi_account
+    restart: unless-stopped
+    command: ["python", "-m", "intelligence_suite.multi_account.server"]
+    ports:
+      - "8062:8062"
+    volumes:
+      - engine_logs:/app/logs:ro
+    environment:
+      - PYTHONPATH=/app
+      - MULTI_ACCOUNT_PORT=8062
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - suite_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8062/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---- Redis (caching & pub/sub) ----
+  redis:
+    image: redis:7-alpine
+    container_name: intelligence_suite_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - suite_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  engine_logs:
+    driver: local
+  engine_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  suite_net:
+    driver: bridge

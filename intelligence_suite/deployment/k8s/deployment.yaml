@@ -1,0 +1,115 @@
+# Intelligence Suite — Kubernetes Deployment
+# =============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intelligence-suite
+  namespace: trading
+  labels:
+    app: intelligence-suite
+    component: trading-engine
+    version: "1.0.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intelligence-suite
+      component: trading-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: intelligence-suite
+        component: trading-engine
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8060"
+        prometheus.io/path: "/api/health"
+    spec:
+      serviceAccountName: intelligence-suite
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: trading-engine
+          image: ghcr.io/algostrategies/intelligence-suite:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http-main
+              containerPort: 8060
+              protocol: TCP
+            - name: http-heatmap
+              containerPort: 8061
+              protocol: TCP
+            - name: http-multi
+              containerPort: 8062
+              protocol: TCP
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: intelligence-suite-config
+                  key: log_level
+            - name: TRADING_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: intelligence-suite-config
+                  key: trading_mode
+            - name: REDIS_URL
+              value: "redis://redis-svc:6379/0"
+            - name: OLLAMA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: intelligence-suite-config
+                  key: ollama_url
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http-main
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http-main
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/intelligence_suite/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: logs
+              mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: config-volume
+          configMap:
+            name: intelligence-suite-config
+        - name: logs
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: data
+          emptyDir:
+            sizeLimit: 500Mi
+      terminationGracePeriodSeconds: 30

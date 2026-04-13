@@ -1,0 +1,93 @@
+# Intelligence Suite — Kubernetes ConfigMap
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intelligence-suite-config
+  namespace: trading
+  labels:
+    app: intelligence-suite
+data:
+  log_level: "INFO"
+  trading_mode: "paper"
+  ollama_url: "http://ollama-svc:11434"
+  config.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8060
+
+    data_source: "mt5"
+
+    mt5_data:
+      timeframe: "1m"
+      n_bars: 500
+      poll_interval_seconds: 60
+
+    models:
+      gemma:
+        url: "http://ollama-svc:11434/api/generate"
+        model: "gemma4"
+        temperature: 0.1
+        timeout: 120
+        num_predict: 8192
+        weight: 0.4
+        enabled: true
+      llama:
+        url: "http://ollama-svc:11434/api/generate"
+        model: "llama3.1"
+        temperature: 0.1
+        timeout: 120
+        num_predict: 4096
+        weight: 0.35
+        enabled: true
+      onnx:
+        model_path: "pattern_recognition/saved_models/lightgbm_model.onnx"
+        weight: 0.25
+        enabled: true
+
+    ensemble:
+      voting_method: "weighted_average"
+      min_agreement: 2
+      veto_confidence: 0.85
+      dynamic_weights: true
+
+    trading:
+      mode: "paper"
+      confidence_threshold: 0.65
+      max_position_size_pct: 1.0
+      max_open_trades: 5
+      cooldown_minutes: 3
+      allowed_symbols:
+        - "BTCUSD"
+        - "ETHUSD"
+        - "LTCUSD"
+        - "XRPUSD"
+        - "SOLUSD"
+
+    risk_management:
+      stop_loss_atr_multiplier: 1.0
+      take_profit_atr_multiplier: 1.5
+      max_daily_loss_pct: 5.0
+      max_drawdown_pct: 10.0
+
+    broker:
+      name: "mt5"
+      mt5:
+        login: 0
+        password: ""
+        server: ""
+        magic: 240412
+
+    heatmap:
+      port: 8061
+      var_confidence: 0.95
+      monte_carlo_simulations: 10000
+
+    multi_account:
+      port: 8062
+      accounts: []
+
+    logging:
+      level: "INFO"
+      trade_log: "logs/trades.json"
+      decision_log: "logs/ensemble_decisions.json"

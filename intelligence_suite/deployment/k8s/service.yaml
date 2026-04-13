@@ -1,0 +1,58 @@
+# Intelligence Suite — Kubernetes Services
+# ===========================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligence-suite-svc
+  namespace: trading
+  labels:
+    app: intelligence-suite
+spec:
+  type: ClusterIP
+  selector:
+    app: intelligence-suite
+    component: trading-engine
+  ports:
+    - name: http-main
+      port: 8060
+      targetPort: http-main
+      protocol: TCP
+    - name: http-heatmap
+      port: 8061
+      targetPort: http-heatmap
+      protocol: TCP
+    - name: http-multi
+      port: 8062
+      targetPort: http-multi
+      protocol: TCP
+---
+# NodePort service for external access during development
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligence-suite-nodeport
+  namespace: trading
+  labels:
+    app: intelligence-suite
+    access: external
+spec:
+  type: NodePort
+  selector:
+    app: intelligence-suite
+    component: trading-engine
+  ports:
+    - name: http-main
+      port: 8060
+      targetPort: http-main
+      nodePort: 30060
+      protocol: TCP
+    - name: http-heatmap
+      port: 8061
+      targetPort: http-heatmap
+      nodePort: 30061
+      protocol: TCP
+    - name: http-multi
+      port: 8062
+      targetPort: http-multi
+      nodePort: 30062
+      protocol: TCP

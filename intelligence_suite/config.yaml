@@ -1,0 +1,160 @@
+# Intelligence Suite — Master Configuration
+# =============================================
+
+server:
+  host: "0.0.0.0"
+  port: 8060
+
+data_source: "mt5"  # or "paper" for testing without MT5
+
+mt5_data:
+  timeframe: "1m"
+  n_bars: 500
+  poll_interval_seconds: 60
+
+# ── AI Models (Ollama) ──
+models:
+  gemma:
+    url: "http://localhost:11434/api/generate"
+    model: "gemma4"
+    temperature: 0.1
+    timeout: 120
+    num_predict: 8192
+    weight: 0.4
+    enabled: true
+
+  llama:
+    url: "http://localhost:11434/api/generate"
+    model: "llama3.1"
+    temperature: 0.1
+    timeout: 120
+    num_predict: 4096
+    weight: 0.35
+    enabled: true
+
+  onnx:
+    model_path: "pattern_recognition/saved_models/lightgbm_model.onnx"
+    weight: 0.25
+    enabled: true
+
+# ── Ensemble ──
+ensemble:
+  voting_method: "weighted_average"  # weighted_average | majority_vote | veto
+  min_agreement: 2                    # min models agreeing for non-HOLD
+  veto_confidence: 0.85               # if any model says HOLD with this confidence, veto
+  dynamic_weights: true               # adjust weights based on per-model win rate
+
+# ── Trading ──
+trading:
+  mode: "paper"
+  confidence_threshold: 0.65
+  max_position_size_pct: 1.0
+  max_open_trades: 5
+  cooldown_minutes: 3
+  allowed_symbols:
+    - "BTCUSD"
+    - "ETHUSD"
+    - "LTCUSD"
+    - "XRPUSD"
+    - "SOLUSD"
+
+# ── Risk Management ──
+risk_management:
+  stop_loss_atr_multiplier: 1.0
+  take_profit_atr_multiplier: 1.5
+  max_daily_loss_pct: 5.0
+  max_drawdown_pct: 10.0
+
+# ── Broker ──
+broker:
+  name: "mt5"
+  mt5:
+    login: 0
+    password: ""
+    server: ""
+    magic: 240412
+  binance:
+    api_key: ""
+    api_secret: ""
+
+# ── Adaptive Learning ──
+adaptive:
+  enabled: true
+  review_every_n_trades: 3
+  weekly_review: true
+  min_trades_for_adaptation: 3
+  max_confidence_threshold: 0.85
+  min_confidence_threshold: 0.50
+  cooldown_on_streak_loss: 3
+  cooldown_duration_minutes: 15
+
+# ── Regime Detector ──
+regime:
+  enabled: true
+  method: "rule_based"  # rule_based | hmm
+  update_interval_bars: 20
+
+# ── Sentiment Bridge ──
+sentiment:
+  enabled: true
+  update_interval_minutes: 15
+  sources:
+    reddit:
+      enabled: true
+      subreddits: ["cryptocurrency", "Bitcoin", "ethtrader"]
+      post_limit: 25
+    rss:
+      enabled: true
+      feeds:
+        - "https://cointelegraph.com/rss"
+        - "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    fear_greed:
+      enabled: true
+      url: "https://api.alternative.me/fng/"
+
+# ── Volume Profile ──
+volume_profile:
+  enabled: true
+  tpo_period_minutes: 30
+  value_area_pct: 70
+
+# ── Correlation Engine ──
+correlation:
+  enabled: true
+  rolling_window: 60
+  lag_max_minutes: 30
+  update_interval_minutes: 5
+  pairs:
+    - ["BTCUSD", "ETHUSD"]
+    - ["BTCUSD", "SOLUSD"]
+    - ["ETHUSD", "SOLUSD"]
+
+# ── Pattern Recognition ──
+pattern_recognition:
+  enabled: true
+  window_size: 64
+  confidence_threshold: 0.7
+
+# ── Heatmap Dashboard ──
+heatmap:
+  port: 8061
+  var_confidence: 0.95
+  monte_carlo_simulations: 10000
+
+# ── Multi-Account ──
+multi_account:
+  port: 8062
+  accounts: []
+  # - login: 12345
+  #   password: "xxx"
+  #   server: "MetaQuotes-Demo"
+  #   label: "Main"
+
+# ── Logging ──
+logging:
+  level: "INFO"
+  trade_log: "logs/trades.json"
+  decision_log: "logs/ensemble_decisions.json"
+  outcome_log: "logs/trade_outcomes.json"
+  adaptive_context: "logs/adaptive_context.txt"
+  parameter_adjustments: "logs/parameter_adjustments.json"

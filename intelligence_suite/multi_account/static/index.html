@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rey Capital — Multi-Account Aggregator</title>
+    <link rel="icon" href="/static/ReyCapital_Icon.png">
+    <style>
+        /* ─── Theme Variables ─── */
+        [data-theme="dark"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --bg-card-hover: #1a1a1a;
+            --border: #222222;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #5a6370;
+            --accent: #0052CC;
+            --accent-light: #1a73e8;
+            --accent-glow: rgba(0,82,204,0.15);
+            --green: #3fb950;
+            --green-bg: rgba(63,185,80,0.12);
+            --red: #f85149;
+            --red-bg: rgba(248,81,73,0.12);
+            --orange: #d29922;
+            --orange-bg: rgba(210,153,34,0.12);
+            --shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f0f4f8;
+            --border: #d0d7de;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8b949e;
+            --accent: #0052CC;
+            --accent-light: #1a73e8;
+            --accent-glow: rgba(0,82,204,0.08);
+            --green: #1a7f37;
+            --green-bg: rgba(26,127,55,0.08);
+            --red: #cf222e;
+            --red-bg: rgba(207,34,46,0.08);
+            --orange: #bf8700;
+            --orange-bg: rgba(191,135,0,0.08);
+            --shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* ─── Header ─── */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: var(--shadow);
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header-left img { height: 28px; }
+        .header-left h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+
+        .badge { padding: 3px 10px; border-radius: 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .badge-ok { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+        .badge-warn { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange); }
+        .badge-off { background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border); }
+
+        .btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 5px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        .update-time { font-size: 11px; color: var(--text-muted); }
+
+        /* ─── Summary ─── */
+        .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .summary-card:hover { border-color: var(--accent); }
+        .summary-card .label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+        .summary-card .value { font-size: 1.8rem; font-weight: 700; margin: 8px 0; }
+        .positive { color: var(--green); }
+        .negative { color: var(--red); }
+        .neutral { color: var(--accent-light); }
+
+        /* ─── Grid ─── */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+        .grid-full { grid-column: 1 / -1; }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .card:hover { border-color: var(--accent); }
+        .card h2 {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* ─── Account Cards ─── */
+        .account-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+        .acct-card {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        .acct-card:hover { border-color: var(--accent); }
+        .acct-card .acct-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .acct-card .acct-label { font-weight: 700; font-size: 14px; }
+        .acct-card .acct-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; }
+        .acct-card .acct-row .acct-key { color: var(--text-muted); }
+
+        /* ─── Table ─── */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 14px; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); }
+        td { padding: 10px 14px; font-size: 12px; border-bottom: 1px solid var(--border); }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: var(--accent-glow); }
+
+        .loading { text-align: center; padding: 30px; color: var(--text-muted); font-size: 13px; }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+            .summary-row { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-left">
+        <img src="/static/ReyCapital_Logo_White.png" alt="Rey Capital" id="headerLogo">
+        <h1>Multi-Account Aggregator</h1>
+    </div>
+    <div class="header-right">
+        <span class="badge badge-ok" id="conn-badge">OK</span>
+        <button class="btn" onclick="toggleTheme()" id="themeBtn">&#9788;</button>
+        <button class="btn" onclick="loadAll()">&#8635; Refresh</button>
+        <span class="update-time" id="updateTime">—</span>
+    </div>
+</div>
+
+<div class="container">
+    <div class="summary-row">
+        <div class="summary-card">
+            <div class="label">Total Equity</div>
+            <div class="value neutral" id="s-equity">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Total P&L</div>
+            <div class="value" id="s-pnl">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Accounts</div>
+            <div class="value neutral" id="s-accounts">--</div>
+        </div>
+        <div class="summary-card">
+            <div class="label">Open Positions</div>
+            <div class="value neutral" id="s-positions">--</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Account Balances</h2>
+            <div class="account-cards" id="accounts-container"><div class="loading">Loading accounts...</div></div>
+        </div>
+        <div class="card">
+            <h2>Risk Allocations</h2>
+            <div id="allocations-container"><div class="loading">Loading allocations...</div></div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card grid-full">
+            <h2>All Positions</h2>
+            <div id="positions-table"><div class="loading">Loading positions...</div></div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>P&L by Account</h2>
+            <div id="pnl-account"><div class="loading">Loading...</div></div>
+        </div>
+        <div class="card">
+            <h2>P&L by Symbol</h2>
+            <div id="pnl-symbol"><div class="loading">Loading...</div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API = '';
+
+    // ─── Theme ───
+    function initTheme() {
+        const t = localStorage.getItem('rcMultiTheme') || 'dark';
+        applyTheme(t);
+    }
+    function toggleTheme() {
+        const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        applyTheme(t);
+        localStorage.setItem('rcMultiTheme', t);
+    }
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        document.getElementById('themeBtn').innerHTML = t === 'dark' ? '&#9788;' : '&#9790;';
+        document.getElementById('headerLogo').src = t === 'dark'
+            ? '/static/ReyCapital_Logo_White.png'
+            : '/static/ReyCapital_Logo.png';
+    }
+    initTheme();
+
+    function fmt(n, d = 2) {
+        if (n == null) return '--';
+        return Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+
+    function renderAccounts(data) {
+        const container = document.getElementById('accounts-container');
+        const balances = data.balances || {};
+        const accounts = data.accounts || [];
+        let html = '', totalEquity = 0;
+        for (const [label, bal] of Object.entries(balances)) {
+            if (bal.error) continue;
+            totalEquity += bal.equity || 0;
+            const profitClass = (bal.profit || 0) >= 0 ? 'positive' : 'negative';
+            const status = accounts.find(a => a.label === label);
+            const connected = status ? status.connected : false;
+            html += `<div class="acct-card">
+                <div class="acct-header">
+                    <span class="acct-label">${label}</span>
+                    <span class="badge ${connected ? 'badge-ok' : 'badge-off'}">${connected ? 'ON' : 'OFF'}</span>
+                </div>
+                <div class="acct-row"><span class="acct-key">Balance</span><span>$${fmt(bal.balance)}</span></div>
+                <div class="acct-row"><span class="acct-key">Equity</span><span>$${fmt(bal.equity)}</span></div>
+                <div class="acct-row"><span class="acct-key">Profit</span><span class="${profitClass}">$${fmt(bal.profit)}</span></div>
+                <div class="acct-row"><span class="acct-key">Free Margin</span><span>$${fmt(bal.free_margin)}</span></div>
+                <div class="acct-row"><span class="acct-key">Leverage</span><span>1:${bal.leverage || '-'}</span></div>
+            </div>`;
+        }
+        container.innerHTML = html || '<div class="loading">No accounts configured</div>';
+        document.getElementById('s-equity').textContent = '$' + fmt(totalEquity);
+        document.getElementById('s-accounts').textContent = Object.keys(balances).length;
+    }
+
+    function renderAllocations(data) {
+        const container = document.getElementById('allocations-container');
+        const allocs = data.allocations || {};
+        let html = '<table><thead><tr><th>Account</th><th>Weight</th><th>Risk $</th><th>Risk %</th></tr></thead><tbody>';
+        for (const [label, a] of Object.entries(allocs)) {
+            html += `<tr><td>${label}</td><td>${(a.weight * 100).toFixed(1)}%</td><td>$${fmt(a.risk_amount)}</td><td>${fmt(a.risk_pct_of_account)}%</td></tr>`;
+        }
+        html += '</tbody></table>';
+        html += `<div style="margin-top:10px;font-size:12px;color:var(--text-muted);">Total risk: $${fmt(data.total_risk_amount)} (${data.total_risk_pct}%) | Method: ${data.allocation_method}</div>`;
+        container.innerHTML = html;
+    }
+
+    function renderPositions(data) {
+        const container = document.getElementById('positions-table');
+        const positions = data.positions || [];
+        document.getElementById('s-positions').textContent = positions.length;
+        let html = '<table><thead><tr><th>Account</th><th>Symbol</th><th>Type</th><th>Volume</th><th>Entry</th><th>Current</th><th>P&L</th><th>SL</th><th>TP</th></tr></thead><tbody>';
+        for (const p of positions) {
+            const cls = p.profit >= 0 ? 'positive' : 'negative';
+            html += `<tr><td>${p.account_id}</td><td><strong>${p.symbol}</strong></td><td>${p.type}</td><td>${p.volume}</td><td>${fmt(p.price_open, 4)}</td><td>${fmt(p.price_current, 4)}</td><td class="${cls}">$${fmt(p.profit)}</td><td>${fmt(p.sl, 4)}</td><td>${fmt(p.tp, 4)}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    function renderPnL(data) {
+        const acctC = document.getElementById('pnl-account');
+        const perAcct = data.per_account_pnl || {};
+        let aHtml = '<table><thead><tr><th>Account</th><th>P&L</th><th>Swap</th><th>Positions</th></tr></thead><tbody>';
+        for (const [label, a] of Object.entries(perAcct)) {
+            aHtml += `<tr><td>${label}</td><td class="${a.pnl >= 0 ? 'positive' : 'negative'}">$${fmt(a.pnl)}</td><td>$${fmt(a.swap)}</td><td>${a.positions}</td></tr>`;
+        }
+        aHtml += '</tbody></table>';
+        acctC.innerHTML = aHtml;
+
+        const symC = document.getElementById('pnl-symbol');
+        const perSym = data.per_symbol_pnl || {};
+        let sHtml = '<table><thead><tr><th>Symbol</th><th>P&L</th><th>Volume</th><th>Positions</th></tr></thead><tbody>';
+        for (const [sym, s] of Object.entries(perSym)) {
+            sHtml += `<tr><td><strong>${sym}</strong></td><td class="${s.pnl >= 0 ? 'positive' : 'negative'}">$${fmt(s.pnl)}</td><td>${s.volume}</td><td>${s.positions}</td></tr>`;
+        }
+        sHtml += '</tbody></table>';
+        symC.innerHTML = sHtml;
+
+        const pnlEl = document.getElementById('s-pnl');
+        pnlEl.textContent = '$' + fmt(data.total_pnl);
+        pnlEl.className = 'value ' + (data.total_pnl >= 0 ? 'positive' : 'negative');
+    }
+
+    async function loadAll() {
+        try {
+            const [acctRes, posRes, pnlRes, allocRes] = await Promise.all([
+                fetch(API + '/api/accounts'), fetch(API + '/api/positions'),
+                fetch(API + '/api/pnl'), fetch(API + '/api/allocations'),
+            ]);
+            renderAccounts(await acctRes.json());
+            renderPositions(await posRes.json());
+            renderPnL(await pnlRes.json());
+            renderAllocations(await allocRes.json());
+            document.getElementById('conn-badge').textContent = 'OK';
+            document.getElementById('conn-badge').className = 'badge badge-ok';
+            document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
+        } catch (err) {
+            console.error('Load failed:', err);
+            document.getElementById('conn-badge').textContent = 'Error';
+            document.getElementById('conn-badge').className = 'badge badge-warn';
+        }
+    }
+
+    loadAll();
+    setInterval(loadAll, 30000);
+</script>
+</body>
+</html>
