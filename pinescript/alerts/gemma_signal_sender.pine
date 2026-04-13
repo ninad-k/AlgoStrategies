@@ -1,0 +1,56 @@
+//@version=6
+indicator("Gemma 4 Signal Sender", overlay=true)
+
+// ─── INPUTS ───
+rsiLen     = input.int(14, "RSI Length")
+macdFast   = input.int(12, "MACD Fast")
+macdSlow   = input.int(26, "MACD Slow")
+macdSignal = input.int(9,  "MACD Signal")
+emaFast    = input.int(20, "EMA Fast")
+emaSlow    = input.int(50, "EMA Slow")
+atrLen     = input.int(14, "ATR Length")
+bbLen      = input.int(20, "BB Length")
+bbMult     = input.float(2.0, "BB Multiplier")
+
+// ─── CALCULATIONS ───
+rsiVal = ta.rsi(close, rsiLen)
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+emaFastVal = ta.ema(close, emaFast)
+emaSlowVal = ta.ema(close, emaSlow)
+atrVal     = ta.atr(atrLen)
+[bbUpper, bbBasis, bbLower] = ta.bb(close, bbLen, bbMult)
+vwapVal    = ta.vwap(hlc3)
+
+// ─── TREND DETECTION ───
+trendDir = emaFastVal > emaSlowVal ? "BULLISH" : "BEARISH"
+emaCross = ta.crossover(emaFastVal, emaSlowVal) ? "GOLDEN_CROSS" : ta.crossunder(emaFastVal, emaSlowVal) ? "DEATH_CROSS" : "NONE"
+
+// ─── VOLUME ANALYSIS ───
+volSma    = ta.sma(volume, 20)
+volTrend  = volume > volSma * 1.5 ? "HIGH" : volume > volSma ? "ABOVE_AVG" : "BELOW_AVG"
+
+// ─── BB POSITION ───
+bbPos = close > bbUpper ? "ABOVE_UPPER" : close < bbLower ? "BELOW_LOWER" : "INSIDE"
+
+// ─── BUILD JSON PAYLOAD ───
+payload = str.format(
+  '\{"symbol":"{0}","exchange":"{1}","timeframe":"{2}","close":{3},"open":{4},"high":{5},"low":{6},"volume":{7},"rsi":{8},"macd":{9},"macd_signal":{10},"macd_hist":{11},"ema_fast":{12},"ema_slow":{13},"atr":{14},"bb_upper":{15},"bb_lower":{16},"bb_pos":"{17}","vwap":{18},"trend":"{19}","ema_cross":"{20}","vol_trend":"{21}"\}',
+  syminfo.ticker, syminfo.exchange, timeframe.period,
+  math.round(close, 2), math.round(open, 2), math.round(high, 2), math.round(low, 2),
+  math.round(volume, 0),
+  math.round(rsiVal, 2),
+  math.round(macdLine, 4), math.round(signalLine, 4), math.round(histLine, 4),
+  math.round(emaFastVal, 2), math.round(emaSlowVal, 2),
+  math.round(atrVal, 2),
+  math.round(bbUpper, 2), math.round(bbLower, 2), bbPos,
+  math.round(vwapVal, 2),
+  trendDir, emaCross, volTrend)
+
+// ─── SEND ALERT EVERY BAR (REALTIME) ───
+if barstate.isrealtime and barstate.isconfirmed
+    alert(payload, alert.freq_once_per_bar)
+
+// ─── PLOTS ───
+plot(emaFastVal, "EMA Fast", color=color.blue, linewidth=2)
+plot(emaSlowVal, "EMA Slow", color=color.orange, linewidth=2)
+plot(vwapVal, "VWAP", color=color.purple, style=plot.style_circles)

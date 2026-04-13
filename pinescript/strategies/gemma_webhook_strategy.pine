@@ -1,0 +1,179 @@
+//@version=6
+strategy("Gemma 4 Webhook Strategy", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=2, commission_type=strategy.commission.percent, commission_value=0.05, slippage=2, initial_capital=100000, pyramiding=0)
+
+// ═══════════════════════════════════════════════════════════════
+//  GEMMA 4 WEBHOOK STRATEGY
+//  Sends comprehensive market data to your Python + Gemma 4 server.
+//  Gemma analyzes and decides BUY/SELL/HOLD.
+//
+//  SETUP:
+//  1. Add this strategy to your TradingView chart
+//  2. Create Alert → Condition: this strategy
+//  3. Webhook URL: https://<your-ngrok-url>/webhook
+//  4. Message: {{strategy.order.alert_message}}
+// ═══════════════════════════════════════════════════════════════
+
+// ─── INPUTS ──────────────────────────────────────────────────
+grp_trend = "Trend Settings"
+emaFastLen  = input.int(20, "EMA Fast Length", group=grp_trend)
+emaSlowLen  = input.int(50, "EMA Slow Length", group=grp_trend)
+ema200Len   = input.int(200, "EMA 200 Length", group=grp_trend)
+
+grp_mom = "Momentum Settings"
+rsiLen      = input.int(14, "RSI Length", group=grp_mom)
+rsiOB       = input.int(70, "RSI Overbought", group=grp_mom)
+rsiOS       = input.int(30, "RSI Oversold", group=grp_mom)
+macdFast    = input.int(12, "MACD Fast", group=grp_mom)
+macdSlow    = input.int(26, "MACD Slow", group=grp_mom)
+macdSignal  = input.int(9,  "MACD Signal", group=grp_mom)
+
+grp_vol = "Volatility Settings"
+atrLen      = input.int(14, "ATR Length", group=grp_vol)
+bbLen       = input.int(20, "BB Length", group=grp_vol)
+bbMult      = input.float(2.0, "BB Multiplier", group=grp_vol)
+
+grp_risk = "Risk Management"
+slATRMult   = input.float(1.5, "Stop Loss ATR Multiplier", group=grp_risk, step=0.1)
+tpATRMult   = input.float(2.5, "Take Profit ATR Multiplier", group=grp_risk, step=0.1)
+
+grp_filter = "Trade Filters"
+useEMA200   = input.bool(true, "Use EMA 200 Trend Filter", group=grp_filter)
+useVolFilter = input.bool(true, "Use Volume Filter", group=grp_filter)
+volMultiplier = input.float(1.2, "Min Volume Multiplier", group=grp_filter, step=0.1)
+
+grp_session = "Session Filter"
+useSession  = input.bool(false, "Use Session Filter", group=grp_session)
+sessionStart = input.session("0930-1530", "Trading Session", group=grp_session)
+
+// ─── CALCULATIONS ────────────────────────────────────────────
+// Trend
+emaFast   = ta.ema(close, emaFastLen)
+emaSlow   = ta.ema(close, emaSlowLen)
+ema200    = ta.ema(close, ema200Len)
+trendUp   = emaFast > emaSlow
+trendStr  = trendUp ? "BULLISH" : "BEARISH"
+
+// EMA Crosses
+goldenCross = ta.crossover(emaFast, emaSlow)
+deathCross  = ta.crossunder(emaFast, emaSlow)
+emaCrossStr = goldenCross ? "GOLDEN_CROSS" : deathCross ? "DEATH_CROSS" : "NONE"
+
+// Momentum
+rsiVal = ta.rsi(close, rsiLen)
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+macdBullCross = ta.crossover(macdLine, signalLine)
+macdBearCross = ta.crossunder(macdLine, signalLine)
+
+// Volatility
+atrVal = ta.atr(atrLen)
+[bbUpper, bbBasis, bbLower] = ta.bb(close, bbLen, bbMult)
+bbWidth = (bbUpper - bbLower) / bbBasis * 100
+bbPosStr = close > bbUpper ? "ABOVE_UPPER" : close < bbLower ? "BELOW_LOWER" : "INSIDE"
+
+// Volume
+volSma    = ta.sma(volume, 20)
+volRatio  = volume / volSma
+volStr    = volRatio > 1.5 ? "HIGH" : volRatio > 1.0 ? "ABOVE_AVG" : "BELOW_AVG"
+
+// VWAP
+vwapVal   = ta.vwap(hlc3)
+
+// Stochastic RSI
+stochK    = ta.sma(ta.stoch(rsiVal, rsiVal, rsiVal, 14), 3)
+stochD    = ta.sma(stochK, 3)
+
+// ADX (trend strength)
+[diPlus, diMinus, adxVal] = ta.dmi(14, 14)
+
+// ─── SIGNAL GENERATION (also used for backtest) ─────────────
+// Buy conditions
+buySignal = goldenCross or (macdBullCross and rsiVal < 45) or (rsiVal < rsiOS and trendUp)
+sellSignal = deathCross or (macdBearCross and rsiVal > 55) or (rsiVal > rsiOB and not trendUp)
+
+// Filters
+ema200Filter = useEMA200 ? (buySignal ? close > ema200 : close < ema200) : true
+volFilter    = useVolFilter ? volRatio > volMultiplier : true
+sessionOK    = useSession ? not na(time(timeframe.period, sessionStart)) : true
+
+filteredBuy  = buySignal and ema200Filter and volFilter and sessionOK
+filteredSell = sellSignal and ema200Filter and volFilter and sessionOK
+
+// ─── SL / TP ────────────────────────────────────────────────
+slDist = atrVal * slATRMult
+tpDist = atrVal * tpATRMult
+
+longSL  = close - slDist
+longTP  = close + tpDist
+shortSL = close + slDist
+shortTP = close - tpDist
+
+// ─── STRATEGY EXECUTION (for backtesting) ────────────────────
+if filteredBuy and strategy.position_size == 0
+    strategy.entry("Long", strategy.long, alert_message=_buildPayload("BUY"))
+    strategy.exit("Long Exit", "Long", stop=longSL, limit=longTP)
+
+if filteredSell and strategy.position_size == 0
+    strategy.entry("Short", strategy.short, alert_message=_buildPayload("SELL"))
+    strategy.exit("Short Exit", "Short", stop=shortSL, limit=shortTP)
+
+// Close on opposite signal
+if filteredSell and strategy.position_size > 0
+    strategy.close("Long", alert_message=_buildPayload("CLOSE_LONG"))
+
+if filteredBuy and strategy.position_size < 0
+    strategy.close("Short", alert_message=_buildPayload("CLOSE_SHORT"))
+
+// ─── WEBHOOK PAYLOAD BUILDER ─────────────────────────────────
+_buildPayload(action) =>
+    str.format('\{"action":"{0}","symbol":"{1}","exchange":"{2}","tf":"{3}","close":{4},"open":{5},"high":{6},"low":{7},"volume":{8},"rsi":{9},"macd":{10},"macd_signal":{11},"macd_hist":{12},"ema_fast":{13},"ema_slow":{14},"ema200":{15},"atr":{16},"bb_upper":{17},"bb_lower":{18},"bb_pos":"{19}","bb_width":{20},"vwap":{21},"trend":"{22}","ema_cross":"{23}","vol_trend":"{24}","vol_ratio":{25},"adx":{26},"di_plus":{27},"di_minus":{28},"stoch_k":{29},"stoch_d":{30},"sl":{31},"tp":{32}\}',
+      action, syminfo.ticker, syminfo.exchange, timeframe.period,
+      math.round(close, 2), math.round(open, 2), math.round(high, 2), math.round(low, 2),
+      math.round(volume, 0), math.round(rsiVal, 2),
+      math.round(macdLine, 4), math.round(signalLine, 4), math.round(histLine, 4),
+      math.round(emaFast, 2), math.round(emaSlow, 2), math.round(ema200, 2),
+      math.round(atrVal, 2),
+      math.round(bbUpper, 2), math.round(bbLower, 2), bbPosStr, math.round(bbWidth, 2),
+      math.round(vwapVal, 2), trendStr, emaCrossStr, volStr, math.round(volRatio, 2),
+      math.round(adxVal, 2), math.round(diPlus, 2), math.round(diMinus, 2),
+      math.round(stochK, 2), math.round(stochD, 2),
+      math.round(buySignal ? longSL : shortSL, 2),
+      math.round(buySignal ? longTP : shortTP, 2))
+
+// ─── PLOTS ───────────────────────────────────────────────────
+plot(emaFast, "EMA Fast", color=color.new(color.blue, 0), linewidth=2)
+plot(emaSlow, "EMA Slow", color=color.new(color.orange, 0), linewidth=2)
+plot(ema200, "EMA 200", color=color.new(color.gray, 50), linewidth=1)
+plot(vwapVal, "VWAP", color=color.new(color.purple, 60), style=plot.style_circles)
+
+// SL/TP levels
+plot(strategy.position_size > 0 ? longSL : na, "Long SL", color=color.red, style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size > 0 ? longTP : na, "Long TP", color=color.green, style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size < 0 ? shortSL : na, "Short SL", color=color.red, style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size < 0 ? shortTP : na, "Short TP", color=color.green, style=plot.style_linebr, linewidth=1)
+
+// Signal markers
+plotshape(filteredBuy and strategy.position_size == 0, "Buy Signal", shape.triangleup, location.belowbar, color.new(color.green, 0), size=size.small)
+plotshape(filteredSell and strategy.position_size == 0, "Sell Signal", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.small)
+
+// ─── INFO TABLE ──────────────────────────────────────────────
+var table infoTable = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 80), border_width=1)
+
+if barstate.islast
+    table.cell(infoTable, 0, 0, "Gemma 4 Trader", text_color=color.white, text_size=size.normal)
+    table.cell(infoTable, 1, 0, "━━━━━━━━━━", text_color=color.gray)
+    table.cell(infoTable, 0, 1, "Trend", text_color=color.gray)
+    table.cell(infoTable, 1, 1, trendStr, text_color=trendUp ? color.green : color.red)
+    table.cell(infoTable, 0, 2, "RSI", text_color=color.gray)
+    table.cell(infoTable, 1, 2, str.tostring(rsiVal, "#.##"), text_color=rsiVal > rsiOB ? color.red : rsiVal < rsiOS ? color.green : color.white)
+    table.cell(infoTable, 0, 3, "MACD Hist", text_color=color.gray)
+    table.cell(infoTable, 1, 3, str.tostring(histLine, "#.####"), text_color=histLine > 0 ? color.green : color.red)
+    table.cell(infoTable, 0, 4, "ADX", text_color=color.gray)
+    table.cell(infoTable, 1, 4, str.tostring(adxVal, "#.##"), text_color=adxVal > 25 ? color.green : color.orange)
+    table.cell(infoTable, 0, 5, "BB Position", text_color=color.gray)
+    table.cell(infoTable, 1, 5, bbPosStr, text_color=color.white)
+    table.cell(infoTable, 0, 6, "Volume", text_color=color.gray)
+    table.cell(infoTable, 1, 6, volStr + " (" + str.tostring(volRatio, "#.##") + "x)", text_color=volRatio > 1.5 ? color.green : color.white)
+    table.cell(infoTable, 0, 7, "ATR", text_color=color.gray)
+    table.cell(infoTable, 1, 7, str.tostring(atrVal, "#.##"), text_color=color.white)
+    table.cell(infoTable, 0, 8, "Position", text_color=color.gray)
+    table.cell(infoTable, 1, 8, strategy.position_size > 0 ? "LONG" : strategy.position_size < 0 ? "SHORT" : "FLAT", text_color=strategy.position_size > 0 ? color.green : strategy.position_size < 0 ? color.red : color.gray)

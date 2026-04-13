@@ -22,6 +22,27 @@ STRATEGY_FILTER = set(filter(None, os.environ.get("STRAT_FILTER", "").split(",")
 
 STRAT_RE = re.compile(r"\(([A-Za-z0-9_]+)")  # first parenthesised tag
 
+# Known non-parenthesised strategy names (order matters: first match wins)
+NAMED_STRATEGIES = [
+    ("QuantumGold", "QuantumGold"),
+    ("EMA Cross",   "EMACross"),
+]
+
+def classify_strategy(comment: str) -> str:
+    if not comment:
+        return "Other"
+    m = STRAT_RE.search(comment)
+    if m:
+        return m.group(1)
+    if comment.startswith("QQ["):
+        return "QQGrid"
+    for prefix, label in NAMED_STRATEGIES:
+        if comment.startswith(prefix):
+            return label
+    if "Flask" in comment:
+        return "Flask"
+    return "Other"
+
 def parse_dt(v):
     if isinstance(v, datetime):
         return v
@@ -98,17 +119,7 @@ def parse_report(path):
         net = profit + commission + swap
 
         comment = orders_comment.get(position_id, "")
-        m = STRAT_RE.search(comment)
-        if m:
-            strategy = m.group(1)
-        elif comment.startswith("QQ["):
-            strategy = "QQGrid"
-        elif "Flask" in comment:
-            strategy = "Flask"
-        elif comment.startswith("EMA Cross"):
-            strategy = "EMACross"
-        else:
-            strategy = "Other"
+        strategy = classify_strategy(comment)
 
         trades.append({
             "open_time": open_time,

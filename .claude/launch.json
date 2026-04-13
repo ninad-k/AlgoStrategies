@@ -29,6 +29,14 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "trading-dashboard/frontend",
       "port": 3000
+    },
+    {
+      "name": "Rey Capital AI Bot",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["run.py", "--mode", "paper"],
+      "cwd": "execution/gemma_trader",
+      "port": 8050,
+      "autoPort": true
     }
   ]
 }
