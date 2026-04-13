@@ -52,7 +52,8 @@ int atrHandle = INVALID_HANDLE;
 //+------------------------------------------------------------------+
 string DetectAssetLabel()
 {
-   string s = StringToUpper(_Symbol);
+   string s = _Symbol;
+   StringToUpper(s);
    if(StringFind(s, "XAU") >= 0 || StringFind(s, "GOLD") >= 0) return "XAUUSD/GOLD";
    if(StringFind(s, "XAG") >= 0 || StringFind(s, "SILVER") >= 0) return "XAGUSD/SILVER";
    if(StringFind(s, "BTC") >= 0) return "BTCUSD";
