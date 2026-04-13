@@ -2,7 +2,6 @@
 //| Advanced Multi-Strategy Signal Confirmation Library               |
 //| Candlestick patterns, multi-indicator confluence, volatility,    |
 //| multi-timeframe alignment, dynamic S/R detection                 |
-//| Source: Sidoine1991/KolaTradeboT                                 |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

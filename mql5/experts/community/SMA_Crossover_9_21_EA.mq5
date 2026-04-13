@@ -3,7 +3,6 @@
 //| Entry: fast SMA crosses slow SMA on new bar                      |
 //| Exit: reverse crossover closes position, opens opposite          |
 //| SL/TP: fixed price offset from entry                             |
-//| Source: LucasMarianoVieira/MT5-MA-Crossover-Bot                  |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

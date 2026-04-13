@@ -5,7 +5,6 @@ FVG detection + market structure shift + OTE Fibonacci entry.
 Scoring system: 14-point checklist, min 6 to trade.
 ML layer: SVM/DT/RF ensemble for signal confirmation.
 New York session Silver Bullet window (7-11 AM NY).
-Source: Gokul004GitHub/Algorithmic-Trading-Bot
 """
 
 import MetaTrader5 as mt5

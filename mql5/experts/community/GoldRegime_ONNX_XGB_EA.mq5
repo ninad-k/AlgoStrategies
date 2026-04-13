@@ -6,7 +6,6 @@
 //|        bear_prob > threshold AND bearish regime -> SELL           |
 //| SL: ATR-based (2.0x), adaptive position sizing by account tier   |
 //| Designed for XAUUSD H1                                           |
-//| Source: lucasmos/GoldRegime_X                                    |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"
@@ -140,6 +139,11 @@ int OnInit()
       // Set input shape [1, 4] for 4 features
       long inputShape[] = {1, 4};
       OnnxSetInputShape(hONNX, 0, inputShape);
+      // Output 0: label [1] int64, Output 1: probabilities [1,3] float
+      long labelShape[] = {1};
+      OnnxSetOutputShape(hONNX, 0, labelShape);
+      long probShape[] = {1, 3};
+      OnnxSetOutputShape(hONNX, 1, probShape);
       Print("ONNX model loaded: ", InpONNXPath);
    }
 
@@ -199,19 +203,20 @@ void OnTick()
 
    if(hONNX != INVALID_HANDLE)
    {
-      // Run ONNX inference
-      float features[4];
-      features[0] = (float)hmmState;
-      features[1] = (float)rsiDelta;
-      features[2] = (float)atrNorm;
-      features[3] = (float)logReturn;
+      // Run ONNX inference — XGBoost outputs: [0]=label(int64), [1]=probs(float[1,3])
+      float features[1][4];
+      features[0][0] = (float)hmmState;
+      features[0][1] = (float)rsiDelta;
+      features[0][2] = (float)atrNorm;
+      features[0][3] = (float)logReturn;
 
-      float output[3]; // 3 classes: Bull, Bear, Chop
-      if(OnnxRun(hONNX, ONNX_DEFAULT, features, output))
+      long   labels[1];
+      float  probs[1][3]; // [Bull=0, Bear=1, Chop=2]
+      if(OnnxRun(hONNX, ONNX_DEFAULT, features, labels, probs))
       {
-         bullProb = output[0];
-         bearProb = output[1];
-         double chopProb = output[2];
+         bullProb = probs[0][0];
+         bearProb = probs[0][1];
+         double chopProb = probs[0][2];
          isChop = (chopProb > bullProb && chopProb > bearProb);
       }
    }

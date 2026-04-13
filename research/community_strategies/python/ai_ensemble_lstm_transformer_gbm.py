@@ -4,7 +4,6 @@ Ensemble of BiLSTM (40%), Transformer (35%), LightGBM (25%).
 80+ technical features, multi-timeframe context.
 Confluence scoring: RSI, MACD, ADX, Bollinger, DI, candle direction.
 Risk: 1% per trade, 1:3 R:R, daily drawdown limits.
-Source: adnanqadir12-bit/mt5-ai-trading-bot
 """
 
 import numpy as np

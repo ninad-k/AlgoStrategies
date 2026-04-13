@@ -1,7 +1,6 @@
 //+------------------------------------------------------------------+
 //| Smart Money Concepts (SMC/ICT) Library                           |
 //| FVG, BOS, Order Blocks, Liquidity Sweeps, OTE, Kill Zones       |
-//| Source: Sidoine1991/KolaTradeboT                                 |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

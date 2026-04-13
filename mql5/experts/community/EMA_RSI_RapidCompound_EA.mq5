@@ -3,7 +3,6 @@
 //| Entry: EMA crossover confirmed by RSI momentum                  |
 //| Compounding: lot size increases 1.5x after each profit target   |
 //| Up to 5 compound levels, resets on loss                          |
-//| Source: Sidoine1991/KolaTradeboT (F_INX_RapidCompound)          |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

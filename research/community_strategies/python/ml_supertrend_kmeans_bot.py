@@ -3,7 +3,6 @@ ML SuperTrend with K-Means Clustering — MT5 Trading Bot
 Computes multiple SuperTrend variants across ATR factor range (1.0-5.0),
 clusters them by performance using KMeans, trades the best cluster's signal.
 Volume confirmation filter. ATR-based SL/TP with trailing stop.
-Source: xPOURY4/ML-SuperTrend-MT5
 """
 
 import MetaTrader5 as mt5

@@ -4,7 +4,6 @@
 //|        with hourly direction                                     |
 //| Exit: price bounces threshold from minute extreme                |
 //| Designed for NAS100/NDAQ100 on M1 timeframe                     |
-//| Source: Gero0Nikolov/MT5-TradingBot-Admiral (1M-Slicer)         |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

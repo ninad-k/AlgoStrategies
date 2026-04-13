@@ -3,7 +3,6 @@ EMA Crossover with Multi-Timeframe Context — MT5 Python Bot
 EMA(10)/EMA(50) crossover on H1, with H4/D1 trend alignment metadata.
 ATR-based SL (2x) and TP (3x), risk-percentage position sizing.
 Circuit breaker, daily/weekly trade caps, cooldown between trades.
-Source: linuzri/mt5-trading
 """
 
 import MetaTrader5 as mt5

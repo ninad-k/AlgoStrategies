@@ -7,7 +7,6 @@ SMC/ICT 5-Condition Checklist Backtester
 5. FVG confirmation near entry (optional)
 
 Risk: fixed USD per trade. SL at 100% Fib, TP at 0% (or custom R:R).
-Source: Edish1-glitch/mt5-smc-bot
 """
 
 import numpy as np

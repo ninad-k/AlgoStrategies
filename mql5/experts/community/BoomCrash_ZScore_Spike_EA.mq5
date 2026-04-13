@@ -3,7 +3,6 @@
 //| Detects statistical price spikes using Z-score analysis          |
 //| Boom symbols: BUY only | Crash symbols: SELL only                |
 //| SL/TP: ATR-based (1.5x SL, 3x TP)                              |
-//| Source: Sidoine1991/KolaTradeboT                                 |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

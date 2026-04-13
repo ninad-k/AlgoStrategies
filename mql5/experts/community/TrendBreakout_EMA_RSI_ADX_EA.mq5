@@ -4,7 +4,6 @@
 //| Exit: reverse signal or trailing stop                            |
 //| Sessions: London (8-11) and New York (13-17) only                |
 //| SL/TP: ATR-based (1.5x SL, configurable R:R)                    |
-//| Source: Sidoine1991/KolaTradeboT (RoboCop_v2)                    |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"

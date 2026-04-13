@@ -7,7 +7,6 @@ Gold Regime Detection — HMM + XGBoost Pipeline
            SELL if bear_prob > threshold AND Bear regime
            HOLD in Chop regime
 ATR-based position sizing and stop losses.
-Source: lucasmos/GoldRegime_X
 """
 
 import numpy as np

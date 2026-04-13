@@ -4,7 +4,6 @@
 //| Entry: trend alignment + liquidity sweep + FVG zone              |
 //| Sessions: London and New York kill zones                         |
 //| SL/TP: ATR-based with 1.8x multiplier                           |
-//| Source: Sidoine1991/KolaTradeboT (FVG_Kill_PRO)                 |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
 #property version   "1.00"
