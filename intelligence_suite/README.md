@@ -1,4 +1,4 @@
-# Intelligence Suite
+# ReySentinel
 
 Self-contained trading intelligence platform with multi-model ensemble, market analysis, and deployment infrastructure.
 

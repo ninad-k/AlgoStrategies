@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Trade Reconciler
+ReySentinel — Trade Reconciler
 ========================================
 Compares backtest expected trades with live executed trades to detect
 drift, slippage, and execution quality issues.

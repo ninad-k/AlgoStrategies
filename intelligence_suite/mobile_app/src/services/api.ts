@@ -1,5 +1,5 @@
 /**
- * Intelligence Suite Mobile — API Service
+ * ReySentinel Mobile — API Service
  * ==========================================
  * Axios client for communicating with the trading engine backend.
  */
@@ -17,7 +17,7 @@ import type {
 } from "../types";
 
 const DEFAULT_BASE_URL = "http://localhost:8060";
-const STORAGE_KEY_API_URL = "@intelligence_suite/api_url";
+const STORAGE_KEY_API_URL = "@reysentinel/api_url";
 
 class ApiService {
   private client: AxiosInstance;

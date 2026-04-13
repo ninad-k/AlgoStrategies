@@ -1,5 +1,5 @@
 """
-Shared Pydantic models used across the Intelligence Suite.
+Shared Pydantic models used across ReySentinel.
 """
 
 from datetime import datetime

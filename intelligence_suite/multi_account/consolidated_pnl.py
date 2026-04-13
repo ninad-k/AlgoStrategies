@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Consolidated P&L
+ReySentinel — Consolidated P&L
 ========================================
 Merges profit/loss data across multiple accounts for unified reporting.
 """

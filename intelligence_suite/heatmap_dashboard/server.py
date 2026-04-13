@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Heatmap Dashboard Server
+ReySentinel — Heatmap Dashboard Server
 ================================================
 FastAPI application serving portfolio heatmap, VaR, and stress-test data.
 """

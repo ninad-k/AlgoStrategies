@@ -25,7 +25,7 @@ class RedditScraper:
             self.reddit = praw.Reddit(
                 client_id=os.getenv("REDDIT_CLIENT_ID", ""),
                 client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
-                user_agent=os.getenv("REDDIT_USER_AGENT", "intelligence-suite/1.0"),
+                user_agent=os.getenv("REDDIT_USER_AGENT", "reysentinel/1.0"),
             )
             logger.info(f"Reddit scraper initialized for r/{', r/'.join(self.subreddits)}")
         except ImportError:

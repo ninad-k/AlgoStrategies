@@ -1,5 +1,5 @@
 /**
- * Intelligence Suite Mobile — Type Definitions
+ * ReySentinel Mobile — Type Definitions
  * ===============================================
  */
 

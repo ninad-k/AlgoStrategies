@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Risk Manager
+ReySentinel — Risk Manager
 ====================================
 Validates trades, tracks outcomes, manages cooldowns,
 and dynamically adjusts confidence thresholds.

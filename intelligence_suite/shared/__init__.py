@@ -1,1 +1,1 @@
-"""Shared utilities for the Intelligence Suite."""
+"""Shared utilities for ReySentinel."""

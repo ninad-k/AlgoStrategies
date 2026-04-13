@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Unified Entry Point
+ReySentinel — Unified Entry Point
 ==========================================
 Launches selected modules: ensemble trading engine, dashboards, and services.
 
@@ -204,7 +204,7 @@ def run_multi_account_dashboard(config: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Intelligence Suite — Trading Engine")
+    parser = argparse.ArgumentParser(description="ReySentinel — Trading Engine")
     parser.add_argument("--config", default="config.yaml", help="Config file path")
     parser.add_argument("--mode", choices=["paper", "live"], help="Trading mode override")
     parser.add_argument("--modules", nargs="*", default=None,
@@ -229,7 +229,7 @@ def main():
     logger = logging.getLogger("app")
 
     logger.info("=" * 60)
-    logger.info("  Intelligence Suite v1.0.0")
+    logger.info("  ReySentinel v1.0.0")
     logger.info(f"  Mode: {config.get('trading', {}).get('mode', 'paper')}")
     logger.info("=" * 60)
 

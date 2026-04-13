@@ -1,16 +1,16 @@
-# Intelligence Suite — Kubernetes Services
+# ReySentinel — Kubernetes Services
 # ===========================================
 apiVersion: v1
 kind: Service
 metadata:
-  name: intelligence-suite-svc
+  name: reysentinel-svc
   namespace: trading
   labels:
-    app: intelligence-suite
+    app: reysentinel
 spec:
   type: ClusterIP
   selector:
-    app: intelligence-suite
+    app: reysentinel
     component: trading-engine
   ports:
     - name: http-main
@@ -30,15 +30,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: intelligence-suite-nodeport
+  name: reysentinel-nodeport
   namespace: trading
   labels:
-    app: intelligence-suite
+    app: reysentinel
     access: external
 spec:
   type: NodePort
   selector:
-    app: intelligence-suite
+    app: reysentinel
     component: trading-engine
   ports:
     - name: http-main

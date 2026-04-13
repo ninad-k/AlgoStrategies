@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Broker Abstraction
+ReySentinel — Broker Abstraction
 ==========================================
 Executes trades on MT5, Binance, or paper mode.
 Adapted from execution/gemma_trader/broker_bridge.py.
@@ -20,7 +20,7 @@ class BaseBroker(ABC):
     @abstractmethod
     def place_order(self, symbol: str, action: str, qty: float,
                     sl: float, tp: float, magic: int = 240411,
-                    comment: str = "intelligence-suite") -> dict:
+                    comment: str = "reysentinel") -> dict:
         pass
 
     @abstractmethod
@@ -40,7 +40,7 @@ class PaperBroker(BaseBroker):
 
     def place_order(self, symbol: str, action: str, qty: float,
                     sl: float, tp: float, magic: int = 240411,
-                    comment: str = "intelligence-suite") -> dict:
+                    comment: str = "reysentinel") -> dict:
         order = {
             "order_id": f"PAPER-{len(self.order_history) + 1:04d}",
             "symbol": symbol, "action": action, "qty": qty,
@@ -109,7 +109,7 @@ class MT5Broker(BaseBroker):
 
     def place_order(self, symbol: str, action: str, qty: float,
                     sl: float, tp: float, magic: int = 240411,
-                    comment: str = "intelligence-suite") -> dict:
+                    comment: str = "reysentinel") -> dict:
         if not self.connected:
             return {"status": "error", "reason": "not connected"}
 
@@ -202,7 +202,7 @@ class BinanceBroker(BaseBroker):
 
     def place_order(self, symbol: str, action: str, qty: float,
                     sl: float, tp: float, magic: int = 240411,
-                    comment: str = "intelligence-suite") -> dict:
+                    comment: str = "reysentinel") -> dict:
         if not self.exchange:
             return {"status": "error", "reason": "not connected"}
         try:

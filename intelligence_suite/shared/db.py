@@ -1,5 +1,5 @@
 """
-Intelligence Suite — SQLite Helper
+ReySentinel — SQLite Helper
 =====================================
 Shared database utilities for audit logs, backtest results, etc.
 """
@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = "logs/intelligence_suite.db"
+DEFAULT_DB_PATH = "logs/reysentinel.db"
 
 
 class Database:

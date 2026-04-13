@@ -1,5 +1,5 @@
 """
-Intelligence Suite — AlgoStrategies
+ReySentinel — AlgoStrategies
 =====================================
 Self-contained trading intelligence platform with:
 - Multi-Model Ensemble (Gemma 4 + LLaMA + ONNX)

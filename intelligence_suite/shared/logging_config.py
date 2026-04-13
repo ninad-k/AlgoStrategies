@@ -1,5 +1,5 @@
 """
-Unified logging configuration for the Intelligence Suite.
+Unified logging configuration for ReySentinel.
 """
 
 import logging
@@ -26,7 +26,7 @@ def setup_logging(level: str = "INFO", log_dir: str = "logs") -> None:
 
     # File handler
     fh = logging.FileHandler(
-        Path(log_dir) / "intelligence_suite.log", encoding="utf-8"
+        Path(log_dir) / "reysentinel.log", encoding="utf-8"
     )
     fh.setFormatter(logging.Formatter(log_format, datefmt=date_format))
     root.addHandler(fh)

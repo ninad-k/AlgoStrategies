@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Intelligence Suite — One-Click Deploy Script
+# ReySentinel — One-Click Deploy Script
 # ================================================
 # Usage: ./deploy.sh [up|down|restart|logs|status]
 
@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
-PROJECT_NAME="intelligence_suite"
+PROJECT_NAME="reysentinel"
 
 # Colors for output
 RED='\033[0;31m'
@@ -44,13 +44,13 @@ compose_cmd() {
 }
 
 cmd_up() {
-    log_info "Building and starting Intelligence Suite..."
+    log_info "Building and starting ReySentinel..."
     compose_cmd up -d --build
     log_info "Waiting for services to be healthy..."
     sleep 5
     cmd_status
     echo ""
-    log_info "Intelligence Suite is running!"
+    log_info "ReySentinel is running!"
     log_info "  Main Engine:       http://localhost:8060"
     log_info "  Heatmap Dashboard: http://localhost:8061"
     log_info "  Multi-Account:     http://localhost:8062"
@@ -58,13 +58,13 @@ cmd_up() {
 }
 
 cmd_down() {
-    log_info "Stopping Intelligence Suite..."
+    log_info "Stopping ReySentinel..."
     compose_cmd down
     log_info "All services stopped."
 }
 
 cmd_restart() {
-    log_info "Restarting Intelligence Suite..."
+    log_info "Restarting ReySentinel..."
     compose_cmd restart
     sleep 3
     cmd_status

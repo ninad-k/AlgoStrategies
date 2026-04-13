@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Multi-Account Manager
+ReySentinel — Multi-Account Manager
 =============================================
 Manages connections to multiple MT5 accounts and aggregates
 positions, balances, and status across all accounts.

@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Audit Logger SQLAlchemy Schema
+ReySentinel — Audit Logger SQLAlchemy Schema
 ======================================================
 Defines ORM models for audit entries and reconciliation results.
 """

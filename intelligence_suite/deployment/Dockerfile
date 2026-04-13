@@ -1,4 +1,4 @@
-# Intelligence Suite — Multi-stage Docker Build
+# ReySentinel — Multi-stage Docker Build
 # ================================================
 # Production-ready container for the trading engine and dashboards.
 
@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.11-slim AS runtime
 
 LABEL maintainer="AlgoStrategies Team"
-LABEL description="Intelligence Suite — AI-Powered Trading Engine"
+LABEL description="ReySentinel — AI-Powered Trading Engine"
 
 WORKDIR /app
 

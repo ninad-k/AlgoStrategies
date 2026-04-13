@@ -1,5 +1,5 @@
 /**
- * Intelligence Suite Mobile — Root Component
+ * ReySentinel Mobile — Root Component
  * =============================================
  * React Navigation stack with bottom tab navigator.
  */

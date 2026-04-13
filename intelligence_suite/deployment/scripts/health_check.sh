@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Intelligence Suite — Health Check Script
+# ReySentinel — Health Check Script
 # ===========================================
 # Checks all service endpoints and reports status.
 # Usage: ./health_check.sh [host]
@@ -38,7 +38,7 @@ check_endpoint() {
 }
 
 echo "============================================"
-echo " Intelligence Suite — Health Check"
+echo " ReySentinel — Health Check"
 echo " Host: $HOST"
 echo " Time: $(date -Iseconds)"
 echo "============================================"

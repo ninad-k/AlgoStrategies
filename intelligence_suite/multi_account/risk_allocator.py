@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Risk Allocator
+ReySentinel — Risk Allocator
 ======================================
 Distributes risk budget across multiple accounts based on balance
 proportions or manually specified weights.

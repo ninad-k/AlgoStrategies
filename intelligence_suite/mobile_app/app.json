@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Intelligence Suite",
-    "slug": "intelligence-suite-mobile",
+    "name": "ReySentinel",
+    "slug": "reysentinel-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,14 +14,14 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.algostrategies.intelligencesuite"
+      "bundleIdentifier": "com.algostrategies.reysentinel"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a1a2e"
       },
-      "package": "com.algostrategies.intelligencesuite"
+      "package": "com.algostrategies.reysentinel"
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -1,17 +1,17 @@
-# Intelligence Suite — Horizontal Pod Autoscaler
+# ReySentinel — Horizontal Pod Autoscaler
 # =================================================
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: intelligence-suite-hpa
+  name: reysentinel-hpa
   namespace: trading
   labels:
-    app: intelligence-suite
+    app: reysentinel
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: intelligence-suite
+    name: reysentinel
   minReplicas: 1
   maxReplicas: 3
   metrics:

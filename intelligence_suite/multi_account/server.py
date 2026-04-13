@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Multi-Account Aggregator Server
+ReySentinel — Multi-Account Aggregator Server
 =======================================================
 FastAPI application for managing multiple MT5 accounts with
 consolidated positions, P&L, and risk allocation.

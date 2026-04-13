@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Technical Indicator Engine
+ReySentinel — Technical Indicator Engine
 =================================================
 30+ indicators computed from OHLCV data using pandas_ta.
 Adapted from execution/gemma_trader/local_trader.py.

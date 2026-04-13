@@ -158,7 +158,7 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>About</Text>
         <View style={styles.infoCard}>
-          <InfoRow label="App" value="Intelligence Suite Mobile" />
+          <InfoRow label="App" value="ReySentinel Mobile" />
           <InfoRow label="Version" value="1.0.0" />
           <InfoRow label="Engine" value="AI Ensemble Trading" />
         </View>

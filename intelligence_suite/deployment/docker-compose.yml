@@ -1,4 +1,4 @@
-# Intelligence Suite — Docker Compose Stack
+# ReySentinel — Docker Compose Stack
 # =============================================
 # Run with: docker-compose up -d
 
@@ -10,7 +10,7 @@ services:
     build:
       context: ../../
       dockerfile: intelligence_suite/deployment/Dockerfile
-    container_name: intelligence_suite_engine
+    container_name: reysentinel_engine
     restart: unless-stopped
     ports:
       - "8060:8060"
@@ -41,7 +41,7 @@ services:
     build:
       context: ../../
       dockerfile: intelligence_suite/deployment/Dockerfile
-    container_name: intelligence_suite_heatmap
+    container_name: reysentinel_heatmap
     restart: unless-stopped
     command: ["python", "-m", "intelligence_suite.heatmap_dashboard.server"]
     ports:
@@ -65,7 +65,7 @@ services:
     build:
       context: ../../
       dockerfile: intelligence_suite/deployment/Dockerfile
-    container_name: intelligence_suite_multi_account
+    container_name: reysentinel_multi_account
     restart: unless-stopped
     command: ["python", "-m", "intelligence_suite.multi_account.server"]
     ports:
@@ -87,7 +87,7 @@ services:
   # ---- Redis (caching & pub/sub) ----
   redis:
     image: redis:7-alpine
-    container_name: intelligence_suite_redis
+    container_name: reysentinel_redis
     restart: unless-stopped
     ports:
       - "6379:6379"

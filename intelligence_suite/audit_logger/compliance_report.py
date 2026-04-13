@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Compliance Reporter
+ReySentinel — Compliance Reporter
 ===========================================
 Generates CSV exports and summary statistics for regulatory compliance
 and internal audit review.

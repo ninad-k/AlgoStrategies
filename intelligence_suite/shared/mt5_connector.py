@@ -1,5 +1,5 @@
 """
-Intelligence Suite — MT5 Connector
+ReySentinel — MT5 Connector
 ====================================
 Fetches live candle data and manages positions via MetaTrader 5.
 Adapted from execution/gemma_trader/mt5_data_feed.py.

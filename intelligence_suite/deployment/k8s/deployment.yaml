@@ -1,19 +1,19 @@
-# Intelligence Suite — Kubernetes Deployment
+# ReySentinel — Kubernetes Deployment
 # =============================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: intelligence-suite
+  name: reysentinel
   namespace: trading
   labels:
-    app: intelligence-suite
+    app: reysentinel
     component: trading-engine
     version: "1.0.0"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: intelligence-suite
+      app: reysentinel
       component: trading-engine
   strategy:
     type: RollingUpdate
@@ -23,7 +23,7 @@ spec:
   template:
     metadata:
       labels:
-        app: intelligence-suite
+        app: reysentinel
         component: trading-engine
         version: "1.0.0"
       annotations:
@@ -31,14 +31,14 @@ spec:
         prometheus.io/port: "8060"
         prometheus.io/path: "/api/health"
     spec:
-      serviceAccountName: intelligence-suite
+      serviceAccountName: reysentinel
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
       containers:
         - name: trading-engine
-          image: ghcr.io/algostrategies/intelligence-suite:latest
+          image: ghcr.io/algostrategies/reysentinel:latest
           imagePullPolicy: Always
           ports:
             - name: http-main
@@ -56,19 +56,19 @@ spec:
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:
-                  name: intelligence-suite-config
+                  name: reysentinel-config
                   key: log_level
             - name: TRADING_MODE
               valueFrom:
                 configMapKeyRef:
-                  name: intelligence-suite-config
+                  name: reysentinel-config
                   key: trading_mode
             - name: REDIS_URL
               value: "redis://redis-svc:6379/0"
             - name: OLLAMA_URL
               valueFrom:
                 configMapKeyRef:
-                  name: intelligence-suite-config
+                  name: reysentinel-config
                   key: ollama_url
           resources:
             requests:
@@ -105,7 +105,7 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: intelligence-suite-config
+            name: reysentinel-config
         - name: logs
           emptyDir:
             sizeLimit: 1Gi

@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Stress Tester
+ReySentinel — Stress Tester
 =====================================
 Runs predefined stress-test scenarios against the portfolio.
 """

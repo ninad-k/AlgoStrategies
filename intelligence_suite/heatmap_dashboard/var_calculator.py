@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Value at Risk (VaR) Calculator
+ReySentinel — Value at Risk (VaR) Calculator
 =====================================================
 Provides Historical, Parametric (Normal), and Monte Carlo VaR methods.
 """

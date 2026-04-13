@@ -1,4 +1,4 @@
-# Intelligence Suite — Dependencies
+# ReySentinel — Dependencies
 # ====================================
 
 # Core

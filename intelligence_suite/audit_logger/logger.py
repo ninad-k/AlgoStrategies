@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Audit Logger
+ReySentinel — Audit Logger
 ====================================
 Append-only dual-write logger: JSON Lines file + SQLite via SQLAlchemy.
 Every trade, AI decision, and risk check is recorded immutably.

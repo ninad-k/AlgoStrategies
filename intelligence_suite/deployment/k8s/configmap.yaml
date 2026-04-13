@@ -1,12 +1,12 @@
-# Intelligence Suite — Kubernetes ConfigMap
+# ReySentinel — Kubernetes ConfigMap
 # ============================================
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: intelligence-suite-config
+  name: reysentinel-config
   namespace: trading
   labels:
-    app: intelligence-suite
+    app: reysentinel
 data:
   log_level: "INFO"
   trading_mode: "paper"

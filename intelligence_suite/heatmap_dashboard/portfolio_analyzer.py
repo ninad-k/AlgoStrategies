@@ -1,5 +1,5 @@
 """
-Intelligence Suite — Portfolio Analyzer
+ReySentinel — Portfolio Analyzer
 =========================================
 Groups positions by asset type and calculates exposure, concentration risk (HHI).
 """
