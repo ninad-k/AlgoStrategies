@@ -9,7 +9,7 @@
 
 #property indicator_chart_window
 #property indicator_buffers 3
-#property indicator_plots   1
+#property indicator_plots   3
 
 //--- Plot 1: Renko step line (visual approximation)
 #property indicator_label1  "Renko Step"
@@ -17,6 +17,14 @@
 #property indicator_color1  clrLime
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
+
+//--- Plot 2: Direction (hidden, accessible via CopyBuffer)
+#property indicator_label2  "Direction"
+#property indicator_type2   DRAW_NONE
+
+//--- Plot 3: BrickSize (hidden, accessible via CopyBuffer)
+#property indicator_label3  "BrickSize"
+#property indicator_type3   DRAW_NONE
 
 //--- Inputs
 input group "=== ASSET ==="
@@ -79,8 +87,8 @@ double RoundToStep(const double value, const double step)
 int OnInit()
 {
    SetIndexBuffer(0, RenkoBuffer, INDICATOR_DATA);
-   SetIndexBuffer(1, DirBuffer,   INDICATOR_CALCULATIONS);
-   SetIndexBuffer(2, BrickBuffer, INDICATOR_CALCULATIONS);
+   SetIndexBuffer(1, DirBuffer,   INDICATOR_DATA);
+   SetIndexBuffer(2, BrickBuffer, INDICATOR_DATA);
 
    ArraySetAsSeries(RenkoBuffer, true);
    ArraySetAsSeries(DirBuffer, true);
