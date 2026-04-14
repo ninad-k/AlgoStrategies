@@ -69,10 +69,13 @@ private:
     double        m_tp3Pct;
     double        m_residualPct;
     double        m_trailingPoints;
+    bool          m_enablePartialTP;
+    bool          m_enableTrailing;
 
 public:
     CPendingOrderManager() : m_magic(20260410), m_tp1Pct(30), m_tp2Pct(50),
-                             m_tp3Pct(10), m_residualPct(10), m_trailingPoints(200)
+                             m_tp3Pct(10), m_residualPct(10), m_trailingPoints(200),
+                             m_enablePartialTP(true), m_enableTrailing(true)
     {
         for(int i = 0; i < MAX_SIGNALS; i++)
             m_signals[i].Reset();
@@ -94,6 +97,8 @@ public:
     }
 
     void SetTrailingPoints(double pts) { m_trailingPoints = pts; }
+    void SetPartialTPEnabled(bool enabled) { m_enablePartialTP = enabled; }
+    void SetTrailingEnabled(bool enabled)  { m_enableTrailing = enabled; }
 
     //--- Check if signal already exists (deduplication)
     bool HasSignal(const string &signalId)
@@ -270,11 +275,21 @@ public:
             else
                 currentPrice = SymbolInfoDouble(sym, SYMBOL_ASK);  // close price for shorts
 
+            // If partial TP is disabled, just close 100% at TP1
+            if(!m_enablePartialTP)
+            {
+                _ManageFullCloseTP(i, currentPrice);
+                continue;
+            }
+
             // If all TPs hit and residual > 0, trail the stop loss
             if(m_signals[i].tp1Hit && m_signals[i].tp2Hit && m_signals[i].tp3Hit)
             {
-                m_signals[i].trailingActive = true;
-                _TrailStopLoss(i, currentPrice);
+                if(m_enableTrailing)
+                {
+                    m_signals[i].trailingActive = true;
+                    _TrailStopLoss(i, currentPrice);
+                }
                 continue;
             }
 
@@ -336,6 +351,33 @@ private:
             }
         }
         return totalPnL;
+    }
+
+    //--- Simple mode: close 100% at TP1 (no partial booking)
+    void _ManageFullCloseTP(int idx, double currentPrice)
+    {
+        bool hitTP = false;
+        if(m_signals[idx].direction > 0)
+            hitTP = (currentPrice >= m_signals[idx].tp1);
+        else
+            hitTP = (currentPrice <= m_signals[idx].tp1);
+
+        if(hitTP)
+        {
+            if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
+            double unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
+            double volume = PositionGetDouble(POSITION_VOLUME);
+
+            if(m_trade.PositionClose(m_signals[idx].positionTicket))
+            {
+                m_signals[idx].tp1Hit = true;
+                m_signals[idx].closed = true;
+                double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                PrintFormat("[CLOSE] %s signal=%s: TP1 hit, closed %.2f lots @ %.5f, P&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            volume, currentPrice, finalPnL);
+            }
+        }
     }
 
     void _ManageLongTP(int idx, double currentPrice)

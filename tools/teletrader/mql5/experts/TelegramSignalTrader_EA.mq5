@@ -33,12 +33,14 @@ input group "== Trade Settings =="
 input int    InpMagicNumber   = 20260410; // Magic number
 
 input group "== Partial Profit Booking =="
+input bool   InpEnablePartialTP = true;  // Enable partial TP management?
 input double InpTP1Pct        = 30;      // TP1 close % (default 30%)
 input double InpTP2Pct        = 50;      // TP2 close % (default 50%)
 input double InpTP3Pct        = 10;      // TP3 close % (default 10%)
 input double InpResidualPct   = 10;      // Residual % for trailing (default 10%)
 
 input group "== Trailing Stop =="
+input bool   InpEnableTrailing = true;   // Enable trailing stop?
 input double InpTrailingPoints = 200;    // Trailing SL distance (points)
 
 input group "== API Settings =="
@@ -58,18 +60,23 @@ int OnInit()
     Print("[INIT] ====================================");
     Print("[INIT] TeleTrader EA v2.0 starting...");
 
-    // Validate TP percentages
-    double totalPct = InpTP1Pct + InpTP2Pct + InpTP3Pct + InpResidualPct;
-    if(MathAbs(totalPct - 100.0) > 0.01)
+    // Validate TP percentages (only when partial TP is enabled)
+    if(InpEnablePartialTP)
     {
-        PrintFormat("[INIT] ERROR: TP percentages must sum to 100%%. Got %.1f%%", totalPct);
-        return INIT_PARAMETERS_INCORRECT;
+        double totalPct = InpTP1Pct + InpTP2Pct + InpTP3Pct + InpResidualPct;
+        if(MathAbs(totalPct - 100.0) > 0.01)
+        {
+            PrintFormat("[INIT] ERROR: TP percentages must sum to 100%%. Got %.1f%%", totalPct);
+            return INIT_PARAMETERS_INCORRECT;
+        }
     }
 
     // Initialize order manager
     g_orderMgr.Init(InpMagicNumber);
     g_orderMgr.SetTPConfig(InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
     g_orderMgr.SetTrailingPoints(InpTrailingPoints);
+    g_orderMgr.SetPartialTPEnabled(InpEnablePartialTP);
+    g_orderMgr.SetTrailingEnabled(InpEnableTrailing);
 
     // Log lot mode configuration
     if(InpLotMode == LOT_MODE_FIXED)
@@ -78,9 +85,12 @@ int OnInit()
         PrintFormat("[INIT] Lot mode: RISK (%.1f%% of balance)", InpRiskPercent);
 
     PrintFormat("[INIT] Use signal lot: %s", InpUseSignalLot ? "YES (overrides if present)" : "NO");
-    PrintFormat("[INIT] TP config: TP1=%.0f%% TP2=%.0f%% TP3=%.0f%% Residual=%.0f%%",
-                InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
-    PrintFormat("[INIT] Trailing: %.0f points", InpTrailingPoints);
+    PrintFormat("[INIT] Partial TP: %s", InpEnablePartialTP ? "ON" : "OFF (close 100% at TP1)");
+    if(InpEnablePartialTP)
+        PrintFormat("[INIT] TP config: TP1=%.0f%% TP2=%.0f%% TP3=%.0f%% Residual=%.0f%%",
+                    InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
+    PrintFormat("[INIT] Trailing: %s%s", InpEnableTrailing ? "ON" : "OFF",
+                InpEnableTrailing ? StringFormat(" (%.0f points)", InpTrailingPoints) : "");
     PrintFormat("[INIT] Magic: %d, Poll interval: %d sec", InpMagicNumber, InpPollIntervalSec);
     PrintFormat("[INIT] API: %s", InpAPIUrl);
     PrintFormat("[INIT] Account balance: %.2f %s", AccountInfoDouble(ACCOUNT_BALANCE),
