@@ -215,7 +215,7 @@ TELETRADER_TELEGRAM_BOT_TOKEN=$BotToken
 TELETRADER_TELEGRAM_CHAT_ID=$ChatId
 TELETRADER_API_PORT=$ApiPort
 "@
-$envContent | Out-File -FilePath $envFile -Encoding utf8NoBOM
+[System.IO.File]::WriteAllText($envFile, $envContent, [System.Text.UTF8Encoding]::new($false))
 Write-OK "Configuration written to $envFile"
 
 # Also copy to teletrader source dir so pydantic-settings picks it up
@@ -289,54 +289,65 @@ $stopContent | Out-File -FilePath "$InstallDir\stop_teletrader.bat" -Encoding as
 Write-OK "Created stop_teletrader.bat"
 
 # --- run_service.ps1 (for Task Scheduler) ---
-$serviceScript = @"
+# Use single-quoted here-string to avoid all variable expansion,
+# then replace placeholders with actual values.
+$serviceTemplate = @'
 # TeleTrader -- Service Runner
 # Starts both API server and Telegram bot as background jobs
 # Restarts them if they crash
 
-`$env:PATH = "C:\Program Files\Python312;C:\Program Files\Python312\Scripts;" + `$env:PATH
-Set-Location "$InstallDir"
+$env:PATH = "C:\Program Files\Python312;C:\Program Files\Python312\Scripts;" + $env:PATH
 
-`$logDir = "$InstallDir\logs"
+$installDir = "__INSTALL_DIR__"
+$venvPython = "__VENV_DIR__\Scripts\python.exe"
+$logDir     = "__INSTALL_DIR__\logs"
+$apiPort    = __API_PORT__
+
+Set-Location $installDir
 
 function Start-TeleTraderServices {
     # Start API server
-    `$apiJob = Start-Job -Name "TeleTrader-API" -ScriptBlock {
-        Set-Location "$using:InstallDir"
-        & "$using:venvDir\Scripts\python.exe" -m uvicorn teletrader.api.app:app --host 127.0.0.1 --port $ApiPort 2>&1 |
-            Tee-Object -FilePath "$using:logDir\api.log" -Append
+    $apiJob = Start-Job -Name "TeleTrader-API" -ArgumentList $venvPython, $installDir, $logDir, $apiPort -ScriptBlock {
+        param($py, $dir, $logs, $port)
+        Set-Location $dir
+        & $py -m uvicorn teletrader.api.app:app --host 127.0.0.1 --port $port 2>&1 |
+            Tee-Object -FilePath "$logs\api.log" -Append
     }
 
-    # Wait for API to be ready
     Start-Sleep -Seconds 3
 
     # Start Telegram bot
-    `$botJob = Start-Job -Name "TeleTrader-Bot" -ScriptBlock {
-        Set-Location "$using:InstallDir"
-        & "$using:venvDir\Scripts\python.exe" -m teletrader.telegram.bot 2>&1 |
-            Tee-Object -FilePath "$using:logDir\bot.log" -Append
+    $botJob = Start-Job -Name "TeleTrader-Bot" -ArgumentList $venvPython, $installDir, $logDir -ScriptBlock {
+        param($py, $dir, $logs)
+        Set-Location $dir
+        & $py -m teletrader.telegram.bot 2>&1 |
+            Tee-Object -FilePath "$logs\bot.log" -Append
     }
 
-    return @(`$apiJob, `$botJob)
+    return @($apiJob, $botJob)
 }
 
-Write-Output "[`$(Get-Date)] TeleTrader service starting..."
-`$jobs = Start-TeleTraderServices
+Write-Output "[$(Get-Date)] TeleTrader service starting..."
+$jobs = Start-TeleTraderServices
 
 # Monitor and restart on failure
-while (`$true) {
+while ($true) {
     Start-Sleep -Seconds 30
 
-    foreach (`$job in `$jobs) {
-        if (`$job.State -eq "Failed" -or `$job.State -eq "Completed") {
-            Write-Output "[`$(Get-Date)] Job `$(`$job.Name) exited (`$(`$job.State)). Restarting..."
-            Remove-Job `$job -Force -ErrorAction SilentlyContinue
-            `$jobs = Start-TeleTraderServices
+    foreach ($job in $jobs) {
+        if ($job.State -eq "Failed" -or $job.State -eq "Completed") {
+            Write-Output "[$(Get-Date)] Job $($job.Name) exited ($($job.State)). Restarting..."
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+            $jobs = Start-TeleTraderServices
             break
         }
     }
 }
-"@
+'@
+$serviceScript = $serviceTemplate `
+    -replace '__INSTALL_DIR__', $InstallDir `
+    -replace '__VENV_DIR__', $venvDir `
+    -replace '__API_PORT__', $ApiPort
 $serviceScript | Out-File -FilePath "$InstallDir\run_service.ps1" -Encoding utf8
 Write-OK "Created run_service.ps1"
 

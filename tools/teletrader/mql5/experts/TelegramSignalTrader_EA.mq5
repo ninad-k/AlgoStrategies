@@ -157,22 +157,25 @@ void _ProcessSignalsJSON(const string &json)
     arrStart = StringFind(json, "[", arrStart);
     if(arrStart < 0) return;
 
-    int arrEnd = StringFind(json, "]", arrStart);
+    // Find matching ] for the signals array (skip nested [] inside)
+    int arrEnd = _FindMatchingBracket(json, arrStart, '[', ']');
     if(arrEnd < 0) return;
 
     string arrContent = StringSubstr(json, arrStart + 1, arrEnd - arrStart - 1);
-    if(StringLen(StringTrimRight(StringTrimLeft(arrContent))) == 0)
+    StringTrimLeft(arrContent);
+    StringTrimRight(arrContent);
+    if(StringLen(arrContent) == 0)
         return; // empty array
 
-    // Split by "},{" to get individual signal objects
-    // First, find each { ... } block
+    // Find each { ... } signal object, handling nested braces
     int searchPos = 0;
     while(searchPos < StringLen(arrContent))
     {
         int objStart = StringFind(arrContent, "{", searchPos);
         if(objStart < 0) break;
 
-        int objEnd = StringFind(arrContent, "}", objStart);
+        // Find matching } for this object (skip nested {} inside)
+        int objEnd = _FindMatchingBracket(arrContent, objStart, '{', '}');
         if(objEnd < 0) break;
 
         string signalJson = StringSubstr(arrContent, objStart, objEnd - objStart + 1);
@@ -180,6 +183,28 @@ void _ProcessSignalsJSON(const string &json)
 
         searchPos = objEnd + 1;
     }
+}
+
+//+------------------------------------------------------------------+
+//| Find matching closing bracket, skipping nested pairs              |
+//+------------------------------------------------------------------+
+int _FindMatchingBracket(const string &text, int openPos, ushort openChar, ushort closeChar)
+{
+    int depth = 0;
+    int len = StringLen(text);
+    for(int i = openPos; i < len; i++)
+    {
+        ushort ch = StringGetCharacter(text, i);
+        if(ch == openChar)
+            depth++;
+        else if(ch == closeChar)
+        {
+            depth--;
+            if(depth == 0)
+                return i;
+        }
+    }
+    return -1; // no match found
 }
 
 //+------------------------------------------------------------------+
@@ -311,9 +336,9 @@ void _ExtractTakeProfits(const string &json, double &tp1, double &tp2, double &t
     string parts[];
     int count = StringSplit(tpContent, ',', parts);
 
-    if(count >= 1) tp1 = StringToDouble(StringTrimLeft(StringTrimRight(parts[0])));
-    if(count >= 2) tp2 = StringToDouble(StringTrimLeft(StringTrimRight(parts[1])));
-    if(count >= 3) tp3 = StringToDouble(StringTrimLeft(StringTrimRight(parts[2])));
+    if(count >= 1) { StringTrimLeft(parts[0]); StringTrimRight(parts[0]); tp1 = StringToDouble(parts[0]); }
+    if(count >= 2) { StringTrimLeft(parts[1]); StringTrimRight(parts[1]); tp2 = StringToDouble(parts[1]); }
+    if(count >= 3) { StringTrimLeft(parts[2]); StringTrimRight(parts[2]); tp3 = StringToDouble(parts[2]); }
 }
 
 //+------------------------------------------------------------------+

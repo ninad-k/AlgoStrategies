@@ -8,9 +8,15 @@ from pydantic_settings import BaseSettings
 class TeleTraderSettings(BaseSettings):
     mode: Literal["local", "aws"] = "local"
 
-    # Telegram
+    # Telegram Bot
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+
+    # Telegram Forwarder (Telethon user account)
+    telegram_api_id: str = ""
+    telegram_api_hash: str = ""
+    telegram_phone: str = ""
+    forwarder_channels: str = ""  # comma-separated channel usernames or IDs
 
     # Local API
     api_port: int = 8100

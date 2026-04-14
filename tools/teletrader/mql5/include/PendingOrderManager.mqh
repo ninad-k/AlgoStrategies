@@ -316,48 +316,47 @@ private:
 
     void _ManageLongTP(int idx, double currentPrice)
     {
-        SignalOrder &s = m_signals[idx];
         double totalLots = PositionGetDouble(POSITION_VOLUME);
 
         // TP1
-        if(!s.tp1Hit && currentPrice >= s.tp1)
+        if(!m_signals[idx].tp1Hit && currentPrice >= m_signals[idx].tp1)
         {
-            double closeLots = _NormalizeLots(s.symbol, totalLots * m_tp1Pct / 100.0);
-            if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+            double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * m_tp1Pct / 100.0);
+            if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
-                s.tp1Hit = true;
+                m_signals[idx].tp1Hit = true;
                 Print("TeleTrader TP1 hit: closed ", closeLots, " lots @ ", currentPrice);
                 // Move SL to breakeven
-                _ModifySL(s.positionTicket, s.entryPrice);
+                _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
             }
         }
 
         // TP2
-        if(s.tp1Hit && !s.tp2Hit && currentPrice >= s.tp2)
+        if(m_signals[idx].tp1Hit && !m_signals[idx].tp2Hit && currentPrice >= m_signals[idx].tp2)
         {
-            if(!PositionSelectByTicket(s.positionTicket)) return;
+            if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
             totalLots = PositionGetDouble(POSITION_VOLUME);
             double remainPct = m_tp2Pct + m_tp3Pct + m_residualPct;
-            double closeLots = _NormalizeLots(s.symbol, totalLots * (m_tp2Pct / remainPct));
-            if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+            double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp2Pct / remainPct));
+            if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
-                s.tp2Hit = true;
+                m_signals[idx].tp2Hit = true;
                 Print("TeleTrader TP2 hit: closed ", closeLots, " lots @ ", currentPrice);
             }
         }
 
         // TP3
-        if(s.tp1Hit && s.tp2Hit && !s.tp3Hit && currentPrice >= s.tp3)
+        if(m_signals[idx].tp1Hit && m_signals[idx].tp2Hit && !m_signals[idx].tp3Hit && currentPrice >= m_signals[idx].tp3)
         {
             if(m_residualPct > 0)
             {
-                if(!PositionSelectByTicket(s.positionTicket)) return;
+                if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
                 totalLots = PositionGetDouble(POSITION_VOLUME);
                 double remainPct = m_tp3Pct + m_residualPct;
-                double closeLots = _NormalizeLots(s.symbol, totalLots * (m_tp3Pct / remainPct));
-                if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+                double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp3Pct / remainPct));
+                if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
-                    s.tp3Hit = true;
+                    m_signals[idx].tp3Hit = true;
                     Print("TeleTrader TP3 hit: closed ", closeLots, " lots @ ", currentPrice,
                           " — trailing residual");
                 }
@@ -365,9 +364,9 @@ private:
             else
             {
                 // No residual: close everything
-                m_trade.PositionClose(s.positionTicket);
-                s.tp3Hit = true;
-                s.closed = true;
+                m_trade.PositionClose(m_signals[idx].positionTicket);
+                m_signals[idx].tp3Hit = true;
+                m_signals[idx].closed = true;
                 Print("TeleTrader TP3 hit: fully closed @ ", currentPrice);
             }
         }
@@ -375,56 +374,55 @@ private:
 
     void _ManageShortTP(int idx, double currentPrice)
     {
-        SignalOrder &s = m_signals[idx];
         double totalLots = PositionGetDouble(POSITION_VOLUME);
 
         // TP1
-        if(!s.tp1Hit && currentPrice <= s.tp1)
+        if(!m_signals[idx].tp1Hit && currentPrice <= m_signals[idx].tp1)
         {
-            double closeLots = _NormalizeLots(s.symbol, totalLots * m_tp1Pct / 100.0);
-            if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+            double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * m_tp1Pct / 100.0);
+            if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
-                s.tp1Hit = true;
+                m_signals[idx].tp1Hit = true;
                 Print("TeleTrader TP1 hit (short): closed ", closeLots, " lots @ ", currentPrice);
-                _ModifySL(s.positionTicket, s.entryPrice);
+                _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
             }
         }
 
         // TP2
-        if(s.tp1Hit && !s.tp2Hit && currentPrice <= s.tp2)
+        if(m_signals[idx].tp1Hit && !m_signals[idx].tp2Hit && currentPrice <= m_signals[idx].tp2)
         {
-            if(!PositionSelectByTicket(s.positionTicket)) return;
+            if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
             totalLots = PositionGetDouble(POSITION_VOLUME);
             double remainPct = m_tp2Pct + m_tp3Pct + m_residualPct;
-            double closeLots = _NormalizeLots(s.symbol, totalLots * (m_tp2Pct / remainPct));
-            if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+            double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp2Pct / remainPct));
+            if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
-                s.tp2Hit = true;
+                m_signals[idx].tp2Hit = true;
                 Print("TeleTrader TP2 hit (short): closed ", closeLots, " lots @ ", currentPrice);
             }
         }
 
         // TP3
-        if(s.tp1Hit && s.tp2Hit && !s.tp3Hit && currentPrice <= s.tp3)
+        if(m_signals[idx].tp1Hit && m_signals[idx].tp2Hit && !m_signals[idx].tp3Hit && currentPrice <= m_signals[idx].tp3)
         {
             if(m_residualPct > 0)
             {
-                if(!PositionSelectByTicket(s.positionTicket)) return;
+                if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
                 totalLots = PositionGetDouble(POSITION_VOLUME);
                 double remainPct = m_tp3Pct + m_residualPct;
-                double closeLots = _NormalizeLots(s.symbol, totalLots * (m_tp3Pct / remainPct));
-                if(closeLots > 0 && m_trade.PositionClosePartial(s.positionTicket, closeLots))
+                double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp3Pct / remainPct));
+                if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
-                    s.tp3Hit = true;
+                    m_signals[idx].tp3Hit = true;
                     Print("TeleTrader TP3 hit (short): closed ", closeLots, " lots @ ", currentPrice,
                           " — trailing residual");
                 }
             }
             else
             {
-                m_trade.PositionClose(s.positionTicket);
-                s.tp3Hit = true;
-                s.closed = true;
+                m_trade.PositionClose(m_signals[idx].positionTicket);
+                m_signals[idx].tp3Hit = true;
+                m_signals[idx].closed = true;
                 Print("TeleTrader TP3 hit (short): fully closed @ ", currentPrice);
             }
         }
@@ -432,27 +430,26 @@ private:
 
     void _TrailStopLoss(int idx, double currentPrice)
     {
-        SignalOrder &s = m_signals[idx];
-        if(!PositionSelectByTicket(s.positionTicket)) return;
+        if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
 
         double currentSL = PositionGetDouble(POSITION_SL);
         double tp        = PositionGetDouble(POSITION_TP);
-        double point     = SymbolInfoDouble(s.symbol, SYMBOL_POINT);
-        int    digits    = (int)SymbolInfoInteger(s.symbol, SYMBOL_DIGITS);
+        double point     = SymbolInfoDouble(m_signals[idx].symbol, SYMBOL_POINT);
+        int    digits    = (int)SymbolInfoInteger(m_signals[idx].symbol, SYMBOL_DIGITS);
 
-        if(s.direction > 0)
+        if(m_signals[idx].direction > 0)
         {
             // Long: trail SL below price
             double newSL = NormalizeDouble(currentPrice - m_trailingPoints * point, digits);
-            if(newSL > currentSL && newSL > s.entryPrice)
-                m_trade.PositionModify(s.positionTicket, newSL, tp);
+            if(newSL > currentSL && newSL > m_signals[idx].entryPrice)
+                m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp);
         }
         else
         {
             // Short: trail SL above price
             double newSL = NormalizeDouble(currentPrice + m_trailingPoints * point, digits);
-            if((currentSL == 0 || newSL < currentSL) && newSL < s.entryPrice)
-                m_trade.PositionModify(s.positionTicket, newSL, tp);
+            if((currentSL == 0 || newSL < currentSL) && newSL < m_signals[idx].entryPrice)
+                m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp);
         }
     }
 

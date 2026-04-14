@@ -27,19 +27,22 @@ start "TeleTrader API" /min "%VENV_DIR%\Scripts\python.exe" -m uvicorn teletrade
 REM Wait for API to be ready
 timeout /t 3 /nobreak >nul
 
-REM Start the Telegram bot in this window
+REM Start the Telegram bot in a minimized window
 echo Starting Telegram bot...
+start "TeleTrader Bot" /min "%VENV_DIR%\Scripts\python.exe" -m teletrader.telegram.bot
+
+REM Wait briefly
+timeout /t 2 /nobreak >nul
+
+REM Start the Channel Forwarder in this window
+echo Starting Channel Forwarder...
 echo.
 echo =============================================
-echo   API:  http://127.0.0.1:%API_PORT%/health
-echo   Bot:  Listening for Telegram signals...
+echo   API:       http://127.0.0.1:%API_PORT%/health
+echo   Bot:       Listening for direct signals
+echo   Forwarder: Monitoring channels for signals
 echo =============================================
 echo.
-echo Send signals to your Telegram bot like:
-echo   XAUUSD Buy Above 2350
-echo   SL 2330
-echo   Target 2360 2370 2390
-echo.
-"%VENV_DIR%\Scripts\python.exe" -m teletrader.telegram.bot
+"%VENV_DIR%\Scripts\python.exe" -m teletrader.telegram.forwarder
 
 pause
