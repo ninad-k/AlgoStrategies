@@ -45,6 +45,18 @@ class NotifyRequest(BaseModel):
     message: str
 
 
+class TradeEventRequest(BaseModel):
+    signal_id: str
+    event_type: str  # order_placed, order_failed, activated, tp1_hit, tp2_hit, tp3_hit, closed, symbol_not_found
+    symbol: str
+    direction: str
+    lots: float = 0
+    price: float = 0
+    pnl: float = 0
+    source: str = "unknown"
+    details: str = ""
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "teletrader"}
@@ -167,3 +179,30 @@ async def send_notification(body: NotifyRequest) -> dict:
     except Exception as e:
         logger.exception("[NOTIFY] Failed to send Telegram message")
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/v1/trade/update", status_code=status.HTTP_201_CREATED)
+async def report_trade_event(body: TradeEventRequest) -> dict:
+    """Record a trade event from the EA for dashboard analytics.
+
+    Called by the EA on order placed, activated, TP hits, closed, failures.
+    """
+    if not hasattr(signal_store, "add_trade_event"):
+        raise HTTPException(status_code=503, detail="Trade events require SQLite store")
+
+    event_id = signal_store.add_trade_event(
+        signal_id=body.signal_id,
+        event_type=body.event_type,
+        symbol=body.symbol,
+        direction=body.direction,
+        lots=body.lots,
+        price=body.price,
+        pnl=body.pnl,
+        source=body.source,
+        details=body.details,
+    )
+    logger.info(
+        "[TRADE_EVENT] %s %s %s pnl=%.2f (id=%d)",
+        body.event_type, body.symbol, body.direction, body.pnl, event_id,
+    )
+    return {"status": "recorded", "event_id": event_id}

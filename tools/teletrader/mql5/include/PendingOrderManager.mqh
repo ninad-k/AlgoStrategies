@@ -10,6 +10,38 @@
 
 #define MAX_SIGNALS 10
 #define MAX_NOTIFICATIONS 20
+#define MAX_TRADE_EVENTS 20
+
+//+------------------------------------------------------------------+
+//| Structured trade event for API reporting                          |
+//+------------------------------------------------------------------+
+struct TradeEvent
+{
+    string signalId;
+    string eventType;   // order_placed, order_failed, activated, tp1_hit, tp2_hit, tp3_hit, closed, symbol_not_found
+    string symbol;
+    string direction;   // buy or sell
+    double lots;
+    double price;
+    double pnl;
+    string source;
+    string details;
+    bool   used;
+
+    void Reset()
+    {
+        signalId  = "";
+        eventType = "";
+        symbol    = "";
+        direction = "";
+        lots      = 0;
+        price     = 0;
+        pnl       = 0;
+        source    = "";
+        details   = "";
+        used      = false;
+    }
+};
 
 //+------------------------------------------------------------------+
 //| Per-signal tracking state                                         |
@@ -20,6 +52,7 @@ struct SignalOrder
     ulong  orderTicket;      // pending order ticket
     ulong  positionTicket;   // populated once pending order activates
     string symbol;
+    string source;           // signal source for trade event reporting
     double entryPrice;
     double stopLoss;
     double tp1;
@@ -42,6 +75,7 @@ struct SignalOrder
         orderTicket   = 0;
         positionTicket = 0;
         symbol        = "";
+        source        = "unknown";
         entryPrice    = 0;
         stopLoss      = 0;
         tp1 = tp2 = tp3 = 0;
@@ -106,9 +140,13 @@ private:
     bool          m_enablePartialTP;
     bool          m_enableTrailing;
 
-    // Notification queue — EA drains this via GetNotification()
+    // Notification queue — EA drains this via PopNotification()
     string        m_notifications[MAX_NOTIFICATIONS];
     int           m_notifyCount;
+
+    // Trade event queue — EA drains this via PopTradeEvent()
+    TradeEvent    m_tradeEvents[MAX_TRADE_EVENTS];
+    int           m_eventCount;
 
 public:
     TradeStats    Stats;  // public so EA can read for dashboard
@@ -116,7 +154,7 @@ public:
     CPendingOrderManager() : m_magic(20260410), m_tp1Pct(30), m_tp2Pct(50),
                              m_tp3Pct(10), m_residualPct(10), m_trailingPoints(200),
                              m_enablePartialTP(true), m_enableTrailing(true),
-                             m_notifyCount(0)
+                             m_notifyCount(0), m_eventCount(0)
     {
         for(int i = 0; i < MAX_SIGNALS; i++)
             m_signals[i].Reset();
@@ -157,6 +195,20 @@ public:
         return msg;
     }
 
+    //--- Trade event queue ---
+    bool HasTradeEvents()       { return m_eventCount > 0; }
+
+    bool PopTradeEvent(TradeEvent &evt)
+    {
+        if(m_eventCount <= 0) return false;
+        evt = m_tradeEvents[0];
+        // Shift remaining
+        for(int i = 1; i < m_eventCount; i++)
+            m_tradeEvents[i-1] = m_tradeEvents[i];
+        m_eventCount--;
+        return true;
+    }
+
     //--- Check if signal already exists (deduplication)
     bool HasSignal(const string &signalId)
     {
@@ -172,7 +224,8 @@ public:
     bool PlaceOrder(const string &signalId, const string &symbol,
                     int direction, const string &orderTypeStr,
                     double entryPrice, double stopLoss,
-                    double tp1, double tp2, double tp3, double lots)
+                    double tp1, double tp2, double tp3, double lots,
+                    const string &source = "unknown")
     {
         Stats.totalSignals++;
 
@@ -237,6 +290,7 @@ public:
             m_signals[slot].signalId      = signalId;
             m_signals[slot].orderTicket   = m_trade.ResultOrder();
             m_signals[slot].symbol        = symbol;
+            m_signals[slot].source        = source;
             m_signals[slot].entryPrice    = entryPrice;
             m_signals[slot].stopLoss      = stopLoss;
             m_signals[slot].tp1           = tp1;
@@ -272,6 +326,9 @@ public:
                 m_enablePartialTP ? "ON" : "OFF",
                 m_enableTrailing ? "ON" : "OFF"
             ));
+            _QueueTradeEvent(signalId, "order_placed", symbol, dir,
+                             normLots, normEntry, 0, source,
+                             StringFormat("SL=%.5f TP1=%.5f TP2=%.5f TP3=%.5f", normSL, tp1, tp2, tp3));
         }
         else
         {
@@ -286,6 +343,10 @@ public:
                 symbol, orderTypeStr,
                 m_trade.ResultRetcodeDescription(), m_trade.ResultRetcode()
             ));
+            string dirStr = (direction > 0) ? "buy" : "sell";
+            _QueueTradeEvent(signalId, "order_failed", symbol, dirStr,
+                             lots, entryPrice, 0, source,
+                             StringFormat("Error: %s (code %d)", m_trade.ResultRetcodeDescription(), m_trade.ResultRetcode()));
         }
 
         return result;
@@ -325,6 +386,10 @@ public:
                         m_signals[i].entryPrice,
                         m_signals[i].lots, trans.position
                     ));
+                    string dirLower = (m_signals[i].direction > 0) ? "buy" : "sell";
+                    _QueueTradeEvent(m_signals[i].signalId, "activated", m_signals[i].symbol,
+                                     dirLower, m_signals[i].lots, m_signals[i].entryPrice, 0,
+                                     m_signals[i].source, StringFormat("position=%d", trans.position));
                     break;
                 }
             }
@@ -372,12 +437,15 @@ public:
                 PrintFormat("[CLOSE] Position closed externally for signal %s (%s), P&L=%.2f",
                             m_signals[i].signalId, m_signals[i].symbol, pnl);
 
+                string closedDir = (m_signals[i].direction > 0) ? "buy" : "sell";
                 _QueueNotification(StringFormat(
                     "<b>Position Closed</b>\n"
                     "%s closed externally\n"
                     "P&L: %.2f",
                     m_signals[i].symbol, pnl
                 ));
+                _QueueTradeEvent(m_signals[i].signalId, "closed", m_signals[i].symbol,
+                                 closedDir, 0, 0, pnl, m_signals[i].source, "Closed externally");
                 m_signals[i].closed = true;
                 m_signals[i].Reset();
                 continue;
@@ -570,6 +638,31 @@ private:
         m_notifyCount++;
     }
 
+    void _QueueTradeEvent(const string &signalId, const string &eventType,
+                          const string &symbol, const string &dir,
+                          double lots, double price, double pnl,
+                          const string &source, const string &details)
+    {
+        if(m_eventCount >= MAX_TRADE_EVENTS)
+        {
+            // Drop oldest
+            for(int i = 1; i < MAX_TRADE_EVENTS; i++)
+                m_tradeEvents[i-1] = m_tradeEvents[i];
+            m_eventCount = MAX_TRADE_EVENTS - 1;
+        }
+        m_tradeEvents[m_eventCount].signalId  = signalId;
+        m_tradeEvents[m_eventCount].eventType = eventType;
+        m_tradeEvents[m_eventCount].symbol    = symbol;
+        m_tradeEvents[m_eventCount].direction = dir;
+        m_tradeEvents[m_eventCount].lots      = lots;
+        m_tradeEvents[m_eventCount].price     = price;
+        m_tradeEvents[m_eventCount].pnl       = pnl;
+        m_tradeEvents[m_eventCount].source    = source;
+        m_tradeEvents[m_eventCount].details   = details;
+        m_tradeEvents[m_eventCount].used      = false;
+        m_eventCount++;
+    }
+
     int _FindFreeSlot()
     {
         for(int i = 0; i < MAX_SIGNALS; i++)
@@ -642,6 +735,11 @@ private:
                     "P&L: %+.2f",
                     m_signals[idx].symbol, volume, currentPrice, finalPnL
                 ));
+                string fcDir = (m_signals[idx].direction > 0) ? "buy" : "sell";
+                _QueueTradeEvent(m_signals[idx].signalId, "tp1_hit", m_signals[idx].symbol,
+                                 fcDir, volume, currentPrice, finalPnL, m_signals[idx].source, "Full close at TP1");
+                _QueueTradeEvent(m_signals[idx].signalId, "closed", m_signals[idx].symbol,
+                                 fcDir, 0, currentPrice, finalPnL, m_signals[idx].source, "TP1 full close");
             }
         }
     }
@@ -674,6 +772,9 @@ private:
                     m_signals[idx].symbol, closeLots, currentPrice,
                     remainLots, m_signals[idx].entryPrice
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp1_hit", m_signals[idx].symbol,
+                                 "buy", closeLots, currentPrice, 0, m_signals[idx].source,
+                                 StringFormat("Remaining: %.2f lots, SL to BE", remainLots));
             }
         }
 
@@ -700,6 +801,9 @@ private:
                     "Remaining: %.2f lots",
                     m_signals[idx].symbol, closeLots, currentPrice, remainLots
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp2_hit", m_signals[idx].symbol,
+                                 "buy", closeLots, currentPrice, 0, m_signals[idx].source,
+                                 StringFormat("Remaining: %.2f lots", remainLots));
             }
         }
 
@@ -732,6 +836,9 @@ private:
                         "%s",
                         m_signals[idx].symbol, closeLots, currentPrice, remainLots, trailMsg
                     ));
+                    _QueueTradeEvent(m_signals[idx].signalId, "tp3_hit", m_signals[idx].symbol,
+                                     "buy", closeLots, currentPrice, 0, m_signals[idx].source,
+                                     StringFormat("Residual: %.2f lots, %s", remainLots, trailMsg));
                 }
             }
             else
@@ -755,6 +862,10 @@ private:
                     "Final P&L: %+.2f",
                     m_signals[idx].symbol, currentPrice, finalPnL
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp3_hit", m_signals[idx].symbol,
+                                 "buy", 0, currentPrice, finalPnL, m_signals[idx].source, "All TPs hit");
+                _QueueTradeEvent(m_signals[idx].signalId, "closed", m_signals[idx].symbol,
+                                 "buy", 0, currentPrice, finalPnL, m_signals[idx].source, "Fully closed");
             }
         }
     }
@@ -787,6 +898,9 @@ private:
                     m_signals[idx].symbol, closeLots, currentPrice,
                     remainLots, m_signals[idx].entryPrice
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp1_hit", m_signals[idx].symbol,
+                                 "sell", closeLots, currentPrice, 0, m_signals[idx].source,
+                                 StringFormat("Remaining: %.2f lots, SL to BE", remainLots));
             }
         }
 
@@ -813,6 +927,9 @@ private:
                     "Remaining: %.2f lots",
                     m_signals[idx].symbol, closeLots, currentPrice, remainLots
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp2_hit", m_signals[idx].symbol,
+                                 "sell", closeLots, currentPrice, 0, m_signals[idx].source,
+                                 StringFormat("Remaining: %.2f lots", remainLots));
             }
         }
 
@@ -845,6 +962,9 @@ private:
                         "%s",
                         m_signals[idx].symbol, closeLots, currentPrice, remainLots, trailMsg
                     ));
+                    _QueueTradeEvent(m_signals[idx].signalId, "tp3_hit", m_signals[idx].symbol,
+                                     "sell", closeLots, currentPrice, 0, m_signals[idx].source,
+                                     StringFormat("Residual: %.2f lots, %s", remainLots, trailMsg));
                 }
             }
             else
@@ -868,6 +988,10 @@ private:
                     "Final P&L: %+.2f",
                     m_signals[idx].symbol, currentPrice, finalPnL
                 ));
+                _QueueTradeEvent(m_signals[idx].signalId, "tp3_hit", m_signals[idx].symbol,
+                                 "sell", 0, currentPrice, finalPnL, m_signals[idx].source, "All TPs hit");
+                _QueueTradeEvent(m_signals[idx].signalId, "closed", m_signals[idx].symbol,
+                                 "sell", 0, currentPrice, finalPnL, m_signals[idx].source, "Fully closed");
             }
         }
     }

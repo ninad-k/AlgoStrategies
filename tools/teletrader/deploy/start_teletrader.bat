@@ -34,16 +34,36 @@ start "TeleTrader Bot" /min "%VENV_DIR%\Scripts\python.exe" -m teletrader.telegr
 REM Wait briefly
 timeout /t 2 /nobreak >nul
 
-REM Start the Channel Forwarder in this window
+REM Start the Channel Forwarder in a minimized window
 echo Starting Channel Forwarder...
+start "TeleTrader Forwarder" /min "%VENV_DIR%\Scripts\python.exe" -m teletrader.telegram.forwarder
+
+REM Wait briefly for all services to initialize
+timeout /t 2 /nobreak >nul
+
 echo.
 echo =============================================
+echo   All services started!
+echo.
 echo   API:       http://127.0.0.1:%API_PORT%/health
 echo   Dashboard: http://127.0.0.1:%API_PORT%/dashboard
 echo   Bot:       Listening for direct signals
 echo   Forwarder: Monitoring channels for signals
 echo =============================================
 echo.
-"%VENV_DIR%\Scripts\python.exe" -m teletrader.telegram.forwarder
+
+REM Open dashboard in default browser
+echo Opening dashboard in browser...
+start "" "http://127.0.0.1:%API_PORT%/dashboard"
+
+echo.
+echo Press any key to stop all TeleTrader services...
+pause >nul
+
+echo Stopping TeleTrader services...
+taskkill /F /FI "WINDOWTITLE eq TeleTrader API" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq TeleTrader Bot" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq TeleTrader Forwarder" >nul 2>&1
+echo TeleTrader services stopped.
 
 pause

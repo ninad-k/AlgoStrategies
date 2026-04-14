@@ -11,11 +11,25 @@
         .badge-buy { background: #065f46; color: #6ee7b7; }
         .badge-sell { background: #7f1d1d; color: #fca5a5; }
         .badge-source { background: #1e3a5f; color: #93c5fd; }
+        .badge-event { background: #4c1d95; color: #c4b5fd; }
         table th { position: sticky; top: 0; background: #1e293b; z-index: 1; }
-        .bar { background: #3b82f6; border-radius: 4px; min-width: 2px; transition: width 0.3s; }
-        .bar-source { background: #8b5cf6; }
+        .bar { border-radius: 4px; min-width: 2px; transition: width 0.3s; }
+        .bar-blue { background: #3b82f6; }
+        .bar-purple { background: #8b5cf6; }
+        .bar-green { background: #22c55e; }
+        .bar-red { background: #ef4444; }
+        .bar-amber { background: #f59e0b; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #fff; }
+        .tab-inactive { border-bottom: 2px solid transparent; color: #94a3b8; }
+        .tab-inactive:hover { color: #cbd5e1; }
         .refresh-spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .pnl-positive { color: #4ade80; }
+        .pnl-negative { color: #f87171; }
+        .pnl-zero { color: #94a3b8; }
+        .win-rate-high { color: #4ade80; }
+        .win-rate-mid { color: #fbbf24; }
+        .win-rate-low { color: #f87171; }
     </style>
 </head>
 <body class="min-h-screen p-4 md:p-6">
@@ -37,116 +51,346 @@
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <!-- Performance Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6" id="perfCards">
         <div class="card p-4">
             <p class="text-xs text-slate-400 uppercase tracking-wider">Total Signals</p>
-            <p class="text-3xl font-bold text-white mt-1" id="statTotal">-</p>
+            <p class="text-2xl font-bold text-white mt-1" id="statTotalSignals">-</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Sources</p>
-            <p class="text-3xl font-bold text-white mt-1" id="statSources">-</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Orders Placed</p>
+            <p class="text-2xl font-bold text-white mt-1" id="statPlaced">-</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Symbols</p>
-            <p class="text-3xl font-bold text-white mt-1" id="statSymbols">-</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Win Rate</p>
+            <p class="text-2xl font-bold mt-1" id="statWinRate">-</p>
         </div>
         <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Today</p>
-            <p class="text-3xl font-bold text-white mt-1" id="statToday">-</p>
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Total P&L</p>
+            <p class="text-2xl font-bold mt-1" id="statTotalPnL">-</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Win / Loss</p>
+            <p class="text-2xl font-bold text-white mt-1" id="statWinLoss">-</p>
         </div>
     </div>
 
-    <!-- Charts Row -->
-    <div class="grid md:grid-cols-2 gap-4 mb-6">
-        <!-- Source Breakdown -->
-        <div class="card p-4">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Source</h2>
-            <div id="sourceChart" class="space-y-2"></div>
+    <!-- Secondary Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div class="card p-3">
+            <p class="text-xs text-slate-400">Avg P&L</p>
+            <p class="text-lg font-semibold mt-1" id="statAvgPnL">-</p>
         </div>
-        <!-- Symbol Breakdown -->
-        <div class="card p-4">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Symbol</h2>
-            <div id="symbolChart" class="space-y-2"></div>
+        <div class="card p-3">
+            <p class="text-xs text-slate-400">Best Trade</p>
+            <p class="text-lg font-semibold pnl-positive mt-1" id="statBestTrade">-</p>
+        </div>
+        <div class="card p-3">
+            <p class="text-xs text-slate-400">Worst Trade</p>
+            <p class="text-lg font-semibold pnl-negative mt-1" id="statWorstTrade">-</p>
+        </div>
+        <div class="card p-3">
+            <p class="text-xs text-slate-400">Failed Orders</p>
+            <p class="text-lg font-semibold text-red-400 mt-1" id="statFailed">-</p>
+        </div>
+        <div class="card p-3">
+            <p class="text-xs text-slate-400">Symbol Not Found</p>
+            <p class="text-lg font-semibold text-amber-400 mt-1" id="statSymNotFound">-</p>
         </div>
     </div>
 
-    <!-- Daily Timeline -->
-    <div class="card p-4 mb-6">
-        <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily Signal Volume (Last 30 Days)</h2>
-        <div class="flex items-end gap-1 h-32" id="dailyChart"></div>
-        <div class="flex justify-between text-xs text-slate-500 mt-1" id="dailyLabels"></div>
+    <!-- Tab Navigation -->
+    <div class="flex gap-1 border-b border-slate-700 mb-4 overflow-x-auto">
+        <button onclick="switchTab('overview')" id="tab-overview" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-active">Overview</button>
+        <button onclick="switchTab('channels')" id="tab-channels" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Channel Performance</button>
+        <button onclick="switchTab('symbols')" id="tab-symbols" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Symbol Performance</button>
+        <button onclick="switchTab('pnl')" id="tab-pnl" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Daily P&L</button>
+        <button onclick="switchTab('signals')" id="tab-signals" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Signal Feed</button>
+        <button onclick="switchTab('events')" id="tab-events" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Trade Events</button>
     </div>
 
-    <!-- Filters -->
-    <div class="card p-4 mb-4">
-        <div class="flex flex-wrap gap-3 items-end">
-            <div>
-                <label class="text-xs text-slate-400">Source</label>
-                <input type="text" id="filterSource" placeholder="e.g. channel:drd"
-                       class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-40">
+    <!-- Tab Content: Overview -->
+    <div id="content-overview" class="tab-content">
+        <div class="grid md:grid-cols-2 gap-4 mb-6">
+            <div class="card p-4">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Source</h2>
+                <div id="sourceChart" class="space-y-2"></div>
             </div>
-            <div>
-                <label class="text-xs text-slate-400">Symbol</label>
-                <input type="text" id="filterSymbol" placeholder="e.g. XAUUSD"
-                       class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-32">
+            <div class="card p-4">
+                <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Symbol</h2>
+                <div id="symbolChart" class="space-y-2"></div>
             </div>
-            <button onclick="loadSignals()"
-                    class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
-                Filter
-            </button>
-            <button onclick="clearFilters()"
-                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded transition">
-                Clear
-            </button>
+        </div>
+        <div class="card p-4">
+            <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily Signal Volume (Last 30 Days)</h2>
+            <div class="flex items-end gap-1 h-32" id="dailyChart"></div>
+            <div class="flex justify-between text-xs text-slate-500 mt-1" id="dailyLabels"></div>
         </div>
     </div>
 
-    <!-- Signal Table -->
-    <div class="card overflow-hidden">
-        <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                        <th class="px-4 py-3">Time</th>
-                        <th class="px-4 py-3">Symbol</th>
-                        <th class="px-4 py-3">Direction</th>
-                        <th class="px-4 py-3">Type</th>
-                        <th class="px-4 py-3">Entry</th>
-                        <th class="px-4 py-3">SL</th>
-                        <th class="px-4 py-3">TP1 / TP2 / TP3</th>
-                        <th class="px-4 py-3">Lot</th>
-                        <th class="px-4 py-3">Source</th>
-                    </tr>
-                </thead>
-                <tbody id="signalTableBody" class="divide-y divide-slate-700/50">
-                    <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading signals...</td></tr>
-                </tbody>
-            </table>
+    <!-- Tab Content: Channel Performance -->
+    <div id="content-channels" class="tab-content hidden">
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3">Channel / Source</th>
+                            <th class="px-4 py-3 text-right">Trades</th>
+                            <th class="px-4 py-3 text-right">Wins</th>
+                            <th class="px-4 py-3 text-right">Losses</th>
+                            <th class="px-4 py-3 text-right">Win Rate</th>
+                            <th class="px-4 py-3 text-right">Total P&L</th>
+                            <th class="px-4 py-3 text-right">TP1</th>
+                            <th class="px-4 py-3 text-right">TP2</th>
+                            <th class="px-4 py-3 text-right">TP3</th>
+                            <th class="px-4 py-3">Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="channelTableBody" class="divide-y divide-slate-700/50">
+                        <tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Symbol Performance -->
+    <div id="content-symbols" class="tab-content hidden">
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-4 py-3 text-right">Trades</th>
+                            <th class="px-4 py-3 text-right">Wins</th>
+                            <th class="px-4 py-3 text-right">Losses</th>
+                            <th class="px-4 py-3 text-right">Win Rate</th>
+                            <th class="px-4 py-3 text-right">Total P&L</th>
+                            <th class="px-4 py-3">Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody id="symbolTableBody" class="divide-y divide-slate-700/50">
+                        <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Daily P&L -->
+    <div id="content-pnl" class="tab-content hidden">
+        <div class="card p-4 mb-4">
+            <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily P&L (Last 30 Days)</h2>
+            <div class="flex items-end gap-1 h-48" id="pnlChart"></div>
+            <div class="flex justify-between text-xs text-slate-500 mt-1" id="pnlLabels"></div>
+        </div>
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3">Date</th>
+                            <th class="px-4 py-3 text-right">Trades</th>
+                            <th class="px-4 py-3 text-right">P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pnlTableBody" class="divide-y divide-slate-700/50">
+                        <tr><td colspan="3" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Signal Feed -->
+    <div id="content-signals" class="tab-content hidden">
+        <div class="card p-4 mb-4">
+            <div class="flex flex-wrap gap-3 items-end">
+                <div>
+                    <label class="text-xs text-slate-400">Source</label>
+                    <input type="text" id="filterSource" placeholder="e.g. channel:drd"
+                           class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-40">
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400">Symbol</label>
+                    <input type="text" id="filterSymbol" placeholder="e.g. XAUUSD"
+                           class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-32">
+                </div>
+                <button onclick="loadSignals()"
+                        class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
+                    Filter
+                </button>
+                <button onclick="clearFilters()"
+                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded transition">
+                    Clear
+                </button>
+            </div>
+        </div>
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3">Time</th>
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-4 py-3">Direction</th>
+                            <th class="px-4 py-3">Type</th>
+                            <th class="px-4 py-3">Entry</th>
+                            <th class="px-4 py-3">SL</th>
+                            <th class="px-4 py-3">TP1 / TP2 / TP3</th>
+                            <th class="px-4 py-3">Lot</th>
+                            <th class="px-4 py-3">Source</th>
+                        </tr>
+                    </thead>
+                    <tbody id="signalTableBody" class="divide-y divide-slate-700/50">
+                        <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading signals...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Content: Trade Events -->
+    <div id="content-events" class="tab-content hidden">
+        <div class="card p-4 mb-4">
+            <div class="flex flex-wrap gap-3 items-end">
+                <div>
+                    <label class="text-xs text-slate-400">Event Type</label>
+                    <select id="filterEventType" class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-44">
+                        <option value="">All</option>
+                        <option value="order_placed">Order Placed</option>
+                        <option value="order_failed">Order Failed</option>
+                        <option value="activated">Activated</option>
+                        <option value="tp1_hit">TP1 Hit</option>
+                        <option value="tp2_hit">TP2 Hit</option>
+                        <option value="tp3_hit">TP3 Hit</option>
+                        <option value="closed">Closed</option>
+                        <option value="symbol_not_found">Symbol Not Found</option>
+                    </select>
+                </div>
+                <button onclick="loadTradeEvents()"
+                        class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
+                    Filter
+                </button>
+            </div>
+        </div>
+        <div class="card overflow-hidden">
+            <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                            <th class="px-4 py-3">Time</th>
+                            <th class="px-4 py-3">Event</th>
+                            <th class="px-4 py-3">Symbol</th>
+                            <th class="px-4 py-3">Direction</th>
+                            <th class="px-4 py-3 text-right">Lots</th>
+                            <th class="px-4 py-3 text-right">Price</th>
+                            <th class="px-4 py-3 text-right">P&L</th>
+                            <th class="px-4 py-3">Source</th>
+                            <th class="px-4 py-3">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventsTableBody" class="divide-y divide-slate-700/50">
+                        <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading events...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <script>
     const API_BASE = window.location.origin;
     let refreshTimer = null;
+    let currentTab = 'overview';
+
+    // --- Tab Switching ---
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById('content-' + tab).classList.remove('hidden');
+        document.querySelectorAll('[id^="tab-"]').forEach(el => {
+            el.className = el.id === 'tab-' + tab
+                ? 'px-4 py-2 text-sm font-medium whitespace-nowrap tab-active'
+                : 'px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive';
+        });
+        currentTab = tab;
+        // Load tab-specific data on switch
+        if (tab === 'channels') loadChannelPerformance();
+        if (tab === 'symbols') loadSymbolPerformance();
+        if (tab === 'pnl') loadDailyPnL();
+        if (tab === 'signals') loadSignals();
+        if (tab === 'events') loadTradeEvents();
+    }
 
     // --- Data fetching ---
-
     async function fetchJSON(url) {
         const resp = await fetch(url);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return resp.json();
     }
 
+    function pnlClass(val) {
+        if (val > 0) return 'pnl-positive';
+        if (val < 0) return 'pnl-negative';
+        return 'pnl-zero';
+    }
+
+    function winRateClass(rate) {
+        if (rate >= 60) return 'win-rate-high';
+        if (rate >= 40) return 'win-rate-mid';
+        return 'win-rate-low';
+    }
+
+    function winRateBar(rate) {
+        const cls = rate >= 60 ? 'bar-green' : rate >= 40 ? 'bar-amber' : 'bar-red';
+        return `<div class="w-20 h-3 bg-slate-700 rounded overflow-hidden">
+            <div class="${cls} h-full" style="width:${rate}%"></div>
+        </div>`;
+    }
+
+    // --- Performance Summary ---
+    async function loadPerformance() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance`);
+            document.getElementById('statTotalSignals').textContent = data.total_signals || 0;
+            document.getElementById('statPlaced').textContent = data.orders_placed || 0;
+
+            const wr = data.win_rate || 0;
+            const wrEl = document.getElementById('statWinRate');
+            wrEl.textContent = wr + '%';
+            wrEl.className = 'text-2xl font-bold mt-1 ' + winRateClass(wr);
+
+            const pnl = data.total_pnl || 0;
+            const pnlEl = document.getElementById('statTotalPnL');
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+            pnlEl.className = 'text-2xl font-bold mt-1 ' + pnlClass(pnl);
+
+            document.getElementById('statWinLoss').textContent =
+                `${data.wins || 0} / ${data.losses || 0}`;
+
+            const avg = data.avg_pnl || 0;
+            const avgEl = document.getElementById('statAvgPnL');
+            avgEl.textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2);
+            avgEl.className = 'text-lg font-semibold mt-1 ' + pnlClass(avg);
+
+            document.getElementById('statBestTrade').textContent =
+                '+' + (data.best_trade || 0).toFixed(2);
+            document.getElementById('statWorstTrade').textContent =
+                (data.worst_trade || 0).toFixed(2);
+            document.getElementById('statFailed').textContent = data.orders_failed || 0;
+            document.getElementById('statSymNotFound').textContent = data.symbol_not_found || 0;
+        } catch (e) {
+            console.error('Performance error:', e);
+        }
+    }
+
+    // --- Overview Tab ---
     async function loadStats() {
         try {
             const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/stats`);
-            document.getElementById('statTotal').textContent = data.total_signals || 0;
-            document.getElementById('statSources').textContent = Object.keys(data.by_source || {}).length;
-            document.getElementById('statSymbols').textContent = Object.keys(data.by_symbol || {}).length;
-
-            renderBarChart('sourceChart', data.by_source || {}, 'bar-source');
-            renderBarChart('symbolChart', data.by_symbol || {}, 'bar');
+            renderBarChart('sourceChart', data.by_source || {}, 'bar-purple');
+            renderBarChart('symbolChart', data.by_symbol || {}, 'bar-blue');
         } catch (e) {
             console.error('Stats error:', e);
         }
@@ -155,18 +399,100 @@
     async function loadDaily() {
         try {
             const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/daily?days=30`);
-            const daily = data.daily || [];
-            renderDailyChart(daily);
-
-            // Today count
-            const today = new Date().toISOString().slice(0, 10);
-            const todayEntry = daily.find(d => d.date === today);
-            document.getElementById('statToday').textContent = todayEntry ? todayEntry.count : 0;
+            renderDailyChart(data.daily || []);
         } catch (e) {
             console.error('Daily error:', e);
         }
     }
 
+    // --- Channel Performance Tab ---
+    async function loadChannelPerformance() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance/sources`);
+            const sources = data.sources || [];
+            const tbody = document.getElementById('channelTableBody');
+
+            if (sources.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">No trade data yet. Trade events will appear here once the EA starts reporting.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = sources.map(s => `
+                <tr class="hover:bg-slate-800/50 transition">
+                    <td class="px-4 py-3"><span class="badge-source px-2 py-0.5 rounded text-xs">${s.source}</span></td>
+                    <td class="px-4 py-3 text-right text-white">${s.total_trades}</td>
+                    <td class="px-4 py-3 text-right pnl-positive">${s.wins}</td>
+                    <td class="px-4 py-3 text-right pnl-negative">${s.losses}</td>
+                    <td class="px-4 py-3 text-right font-semibold ${winRateClass(s.win_rate)}">${s.win_rate}%</td>
+                    <td class="px-4 py-3 text-right font-semibold ${pnlClass(s.total_pnl)}">${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-right text-slate-300">${s.tp1_hits}</td>
+                    <td class="px-4 py-3 text-right text-slate-300">${s.tp2_hits}</td>
+                    <td class="px-4 py-3 text-right text-slate-300">${s.tp3_hits}</td>
+                    <td class="px-4 py-3">${winRateBar(s.win_rate)}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('Channel perf error:', e);
+        }
+    }
+
+    // --- Symbol Performance Tab ---
+    async function loadSymbolPerformance() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance/symbols`);
+            const symbols = data.symbols || [];
+            const tbody = document.getElementById('symbolTableBody');
+
+            if (symbols.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No trade data yet.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = symbols.map(s => `
+                <tr class="hover:bg-slate-800/50 transition">
+                    <td class="px-4 py-3 font-medium text-white">${s.symbol}</td>
+                    <td class="px-4 py-3 text-right text-white">${s.total_trades}</td>
+                    <td class="px-4 py-3 text-right pnl-positive">${s.wins}</td>
+                    <td class="px-4 py-3 text-right pnl-negative">${s.losses}</td>
+                    <td class="px-4 py-3 text-right font-semibold ${winRateClass(s.win_rate)}">${s.win_rate}%</td>
+                    <td class="px-4 py-3 text-right font-semibold ${pnlClass(s.total_pnl)}">${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl.toFixed(2)}</td>
+                    <td class="px-4 py-3">${winRateBar(s.win_rate)}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('Symbol perf error:', e);
+        }
+    }
+
+    // --- Daily P&L Tab ---
+    async function loadDailyPnL() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/pnl/daily?days=30`);
+            const daily = data.daily || [];
+
+            // Render chart
+            renderPnLChart(daily);
+
+            // Render table (reverse for newest first)
+            const tbody = document.getElementById('pnlTableBody');
+            if (daily.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-slate-500">No closed trades yet.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = [...daily].reverse().map(d => `
+                <tr class="hover:bg-slate-800/50 transition">
+                    <td class="px-4 py-2.5 text-slate-300">${d.date}</td>
+                    <td class="px-4 py-2.5 text-right text-white">${d.trades}</td>
+                    <td class="px-4 py-2.5 text-right font-semibold ${pnlClass(d.pnl)}">${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(2)}</td>
+                </tr>
+            `).join('');
+        } catch (e) {
+            console.error('Daily P&L error:', e);
+        }
+    }
+
+    // --- Signal Feed Tab ---
     async function loadSignals() {
         try {
             const source = document.getElementById('filterSource').value.trim();
@@ -180,7 +506,7 @@
         } catch (e) {
             console.error('Signals error:', e);
             document.getElementById('signalTableBody').innerHTML =
-                `<tr><td colspan="9" class="px-4 py-8 text-center text-red-400">Failed to load signals</td></tr>`;
+                '<tr><td colspan="9" class="px-4 py-8 text-center text-red-400">Failed to load signals</td></tr>';
         }
     }
 
@@ -190,8 +516,21 @@
         loadSignals();
     }
 
-    // --- Rendering ---
+    // --- Trade Events Tab ---
+    async function loadTradeEvents() {
+        try {
+            const eventType = document.getElementById('filterEventType').value;
+            let url = `${API_BASE}/api/v1/dashboard/trades?limit=200`;
+            if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
 
+            const data = await fetchJSON(url);
+            renderEventsTable(data.events || []);
+        } catch (e) {
+            console.error('Events error:', e);
+        }
+    }
+
+    // --- Rendering ---
     function renderBarChart(containerId, data, barClass) {
         const container = document.getElementById(containerId);
         const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
@@ -208,7 +547,7 @@
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-slate-400 w-32 truncate text-right" title="${label}">${label}</span>
                     <div class="flex-1 h-5 bg-slate-800 rounded overflow-hidden">
-                        <div class="${barClass} h-full" style="width: ${pct}%"></div>
+                        <div class="${barClass} bar h-full" style="width: ${pct}%"></div>
                     </div>
                     <span class="text-xs text-slate-300 w-8 text-right">${count}</span>
                 </div>
@@ -227,25 +566,58 @@
         }
 
         const max = Math.max(...daily.map(d => d.count), 1);
-
         container.innerHTML = daily.map(d => {
             const pct = Math.max((d.count / max) * 100, 3);
             return `<div class="flex-1 flex flex-col justify-end items-center group cursor-default">
                 <span class="text-xs text-slate-400 opacity-0 group-hover:opacity-100 mb-1">${d.count}</span>
-                <div class="bar w-full" style="height: ${pct}%" title="${d.date}: ${d.count} signals"></div>
+                <div class="bar bar-blue w-full" style="height: ${pct}%" title="${d.date}: ${d.count} signals"></div>
             </div>`;
         }).join('');
 
-        // Show first, middle, last date labels
         const first = daily[0].date.slice(5);
         const last = daily[daily.length - 1].date.slice(5);
         const mid = daily[Math.floor(daily.length / 2)].date.slice(5);
         labels.innerHTML = `<span>${first}</span><span>${mid}</span><span>${last}</span>`;
     }
 
+    function renderPnLChart(daily) {
+        const container = document.getElementById('pnlChart');
+        const labels = document.getElementById('pnlLabels');
+
+        if (daily.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-sm m-auto">No closed trades yet</p>';
+            labels.innerHTML = '';
+            return;
+        }
+
+        const maxAbs = Math.max(...daily.map(d => Math.abs(d.pnl)), 1);
+
+        container.innerHTML = daily.map(d => {
+            const pct = Math.max((Math.abs(d.pnl) / maxAbs) * 50, 2);
+            const isPositive = d.pnl >= 0;
+            const barColor = isPositive ? 'bar-green' : 'bar-red';
+            // For bidirectional chart: positive bars grow up from center, negative grow down
+            return `<div class="flex-1 flex flex-col items-center group cursor-default" style="height:100%">
+                <div class="flex-1 flex flex-col justify-end" style="height:50%">
+                    ${isPositive ? `<div class="${barColor} bar w-full" style="height:${pct}%" title="${d.date}: +${d.pnl.toFixed(2)}"></div>` : ''}
+                </div>
+                <div class="w-full h-px bg-slate-600"></div>
+                <div class="flex-1 flex flex-col justify-start" style="height:50%">
+                    ${!isPositive ? `<div class="${barColor} bar w-full" style="height:${pct}%" title="${d.date}: ${d.pnl.toFixed(2)}"></div>` : ''}
+                </div>
+                <span class="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 mt-0.5">${d.pnl.toFixed(0)}</span>
+            </div>`;
+        }).join('');
+
+        if (daily.length > 0) {
+            const first = daily[0].date.slice(5);
+            const last = daily[daily.length - 1].date.slice(5);
+            labels.innerHTML = `<span>${first}</span><span>${last}</span>`;
+        }
+    }
+
     function renderSignalTable(signals) {
         const tbody = document.getElementById('signalTableBody');
-
         if (signals.length === 0) {
             tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No signals found</td></tr>';
             return;
@@ -276,18 +648,73 @@
         }).join('');
     }
 
-    // --- Refresh ---
+    const eventColors = {
+        order_placed: 'bg-blue-900/50 text-blue-300',
+        order_failed: 'bg-red-900/50 text-red-300',
+        activated: 'bg-emerald-900/50 text-emerald-300',
+        tp1_hit: 'bg-green-900/50 text-green-300',
+        tp2_hit: 'bg-green-900/50 text-green-300',
+        tp3_hit: 'bg-green-900/50 text-green-300',
+        closed: 'bg-slate-700/50 text-slate-300',
+        symbol_not_found: 'bg-amber-900/50 text-amber-300',
+    };
 
+    function renderEventsTable(events) {
+        const tbody = document.getElementById('eventsTableBody');
+        if (events.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No trade events yet</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = events.map(e => {
+            const time = e.created_at ? new Date(e.created_at).toLocaleString() : '-';
+            const evtClass = eventColors[e.event_type] || 'bg-slate-700/50 text-slate-300';
+            const dirClass = e.direction === 'buy' ? 'badge-buy' : 'badge-sell';
+            return `<tr class="hover:bg-slate-800/50 transition">
+                <td class="px-4 py-2.5 text-slate-300 whitespace-nowrap">${time}</td>
+                <td class="px-4 py-2.5">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium ${evtClass}">${e.event_type}</span>
+                </td>
+                <td class="px-4 py-2.5 font-medium text-white">${e.symbol || '-'}</td>
+                <td class="px-4 py-2.5">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium ${dirClass}">${(e.direction || '').toUpperCase()}</span>
+                </td>
+                <td class="px-4 py-2.5 text-right text-slate-300">${e.lots ? e.lots.toFixed(2) : '-'}</td>
+                <td class="px-4 py-2.5 text-right text-slate-200">${e.price ? e.price.toFixed(5) : '-'}</td>
+                <td class="px-4 py-2.5 text-right font-semibold ${pnlClass(e.pnl)}">${e.pnl ? ((e.pnl >= 0 ? '+' : '') + e.pnl.toFixed(2)) : '-'}</td>
+                <td class="px-4 py-2.5">
+                    <span class="badge-source px-2 py-0.5 rounded text-xs">${e.source || 'unknown'}</span>
+                </td>
+                <td class="px-4 py-2.5 text-slate-400 text-xs max-w-[200px] truncate" title="${e.details || ''}">${e.details || '-'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    // --- Refresh ---
     async function refreshAll() {
         const btn = document.getElementById('refreshBtn');
         btn.classList.add('refresh-spin');
         btn.disabled = true;
 
-        await Promise.all([loadStats(), loadDaily(), loadSignals()]);
+        await loadPerformance();
+
+        // Load data for current tab
+        if (currentTab === 'overview') {
+            await Promise.all([loadStats(), loadDaily()]);
+        } else if (currentTab === 'channels') {
+            await loadChannelPerformance();
+        } else if (currentTab === 'symbols') {
+            await loadSymbolPerformance();
+        } else if (currentTab === 'pnl') {
+            await loadDailyPnL();
+        } else if (currentTab === 'signals') {
+            await loadSignals();
+        } else if (currentTab === 'events') {
+            await loadTradeEvents();
+        }
 
         document.getElementById('lastUpdate').textContent =
             'Last updated: ' + new Date().toLocaleTimeString();
-
         btn.classList.remove('refresh-spin');
         btn.disabled = false;
     }
@@ -305,7 +732,11 @@
     }
 
     // --- Init ---
-    refreshAll();
+    refreshAll().then(() => {
+        // Also pre-load overview tab data
+        loadStats();
+        loadDaily();
+    });
     setupAutoRefresh();
     </script>
 </body>

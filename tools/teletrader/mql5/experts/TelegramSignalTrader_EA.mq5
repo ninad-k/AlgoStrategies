@@ -142,6 +142,9 @@ void OnTick()
     // Send any queued notifications
     _DrainNotifications();
 
+    // Report any queued trade events to API
+    _DrainTradeEvents();
+
     // Update chart dashboard
     _UpdateDashboard();
 
@@ -224,6 +227,66 @@ void _SendTelegramNotification(const string &message)
         PrintFormat("[NOTIFY] Telegram notification sent (%d chars)", StringLen(message));
     else
         PrintFormat("[NOTIFY] Failed to send notification (HTTP %d)", res);
+}
+
+//+------------------------------------------------------------------+
+//| Drain trade event queue and POST to API                           |
+//+------------------------------------------------------------------+
+void _DrainTradeEvents()
+{
+    if(!g_orderMgr.HasTradeEvents()) return;
+
+    // Send up to 3 events per tick to avoid blocking
+    int sent = 0;
+    TradeEvent evt;
+    while(g_orderMgr.HasTradeEvents() && sent < 3)
+    {
+        if(g_orderMgr.PopTradeEvent(evt))
+        {
+            _ReportTradeEvent(evt.signalId, evt.eventType, evt.symbol,
+                              evt.direction, evt.lots, evt.price, evt.pnl,
+                              evt.source, evt.details);
+            sent++;
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Report a single trade event to API                                |
+//+------------------------------------------------------------------+
+void _ReportTradeEvent(const string &signalId, const string &eventType,
+                       const string &symbol, const string &direction,
+                       double lots, double price, double pnl,
+                       const string &source, const string &details)
+{
+    string url = InpAPIUrl + "/api/v1/trade/update";
+    string headers = "Content-Type: application/json\r\n";
+
+    // Escape strings for JSON
+    string escDetails = details;
+    StringReplace(escDetails, "\\", "\\\\");
+    StringReplace(escDetails, "\"", "\\\"");
+
+    string jsonBody = StringFormat(
+        "{\"signal_id\":\"%s\",\"event_type\":\"%s\",\"symbol\":\"%s\","
+        "\"direction\":\"%s\",\"lots\":%.4f,\"price\":%.5f,\"pnl\":%.2f,"
+        "\"source\":\"%s\",\"details\":\"%s\"}",
+        signalId, eventType, symbol, direction, lots, price, pnl, source, escDetails
+    );
+
+    char postData[];
+    StringToCharArray(jsonBody, postData, 0, WHOLE_ARRAY, CP_UTF8);
+    ArrayResize(postData, ArraySize(postData) - 1);
+
+    char resultData[];
+    string resultHeaders;
+
+    int res = WebRequest("POST", url, headers, 3000, postData, resultData, resultHeaders);
+
+    if(res == 201)
+        PrintFormat("[TRADE_EVENT] Reported: %s %s %s (pnl=%.2f)", eventType, symbol, direction, pnl);
+    else
+        PrintFormat("[TRADE_EVENT] Failed to report %s (HTTP %d)", eventType, res);
 }
 
 //+------------------------------------------------------------------+
@@ -443,6 +506,9 @@ void _ProcessSingleSignal(const string &signalJson)
                 symbol, direction, orderType, entryPrice, source
             ));
         }
+        // Report symbol_not_found trade event
+        _ReportTradeEvent(signalId, "symbol_not_found", symbol, direction, 0, entryPrice, 0, source,
+                          "Symbol not found in Market Watch");
         return;
     }
 
@@ -466,7 +532,7 @@ void _ProcessSingleSignal(const string &signalJson)
     // Place the pending order
     bool ok = g_orderMgr.PlaceOrder(
         signalId, symbol, dir, orderType,
-        entryPrice, stopLoss, tp1, tp2, tp3, lots
+        entryPrice, stopLoss, tp1, tp2, tp3, lots, source
     );
 
     if(ok)
