@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeleTrader Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
+        .badge-buy { background: #065f46; color: #6ee7b7; }
+        .badge-sell { background: #7f1d1d; color: #fca5a5; }
+        .badge-source { background: #1e3a5f; color: #93c5fd; }
+        table th { position: sticky; top: 0; background: #1e293b; z-index: 1; }
+        .bar { background: #3b82f6; border-radius: 4px; min-width: 2px; transition: width 0.3s; }
+        .bar-source { background: #8b5cf6; }
+        .refresh-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white">TeleTrader Dashboard</h1>
+            <p class="text-sm text-slate-400" id="lastUpdate">Loading...</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <label class="text-sm text-slate-400">
+                Auto-refresh
+                <input type="checkbox" id="autoRefresh" checked class="ml-1 accent-blue-500">
+            </label>
+            <button onclick="refreshAll()" id="refreshBtn"
+                    class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition">
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="card p-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Total Signals</p>
+            <p class="text-3xl font-bold text-white mt-1" id="statTotal">-</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Sources</p>
+            <p class="text-3xl font-bold text-white mt-1" id="statSources">-</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Symbols</p>
+            <p class="text-3xl font-bold text-white mt-1" id="statSymbols">-</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-xs text-slate-400 uppercase tracking-wider">Today</p>
+            <p class="text-3xl font-bold text-white mt-1" id="statToday">-</p>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid md:grid-cols-2 gap-4 mb-6">
+        <!-- Source Breakdown -->
+        <div class="card p-4">
+            <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Source</h2>
+            <div id="sourceChart" class="space-y-2"></div>
+        </div>
+        <!-- Symbol Breakdown -->
+        <div class="card p-4">
+            <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Symbol</h2>
+            <div id="symbolChart" class="space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- Daily Timeline -->
+    <div class="card p-4 mb-6">
+        <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily Signal Volume (Last 30 Days)</h2>
+        <div class="flex items-end gap-1 h-32" id="dailyChart"></div>
+        <div class="flex justify-between text-xs text-slate-500 mt-1" id="dailyLabels"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-4 mb-4">
+        <div class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="text-xs text-slate-400">Source</label>
+                <input type="text" id="filterSource" placeholder="e.g. channel:drd"
+                       class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-40">
+            </div>
+            <div>
+                <label class="text-xs text-slate-400">Symbol</label>
+                <input type="text" id="filterSymbol" placeholder="e.g. XAUUSD"
+                       class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-32">
+            </div>
+            <button onclick="loadSignals()"
+                    class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
+                Filter
+            </button>
+            <button onclick="clearFilters()"
+                    class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded transition">
+                Clear
+            </button>
+        </div>
+    </div>
+
+    <!-- Signal Table -->
+    <div class="card overflow-hidden">
+        <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                        <th class="px-4 py-3">Time</th>
+                        <th class="px-4 py-3">Symbol</th>
+                        <th class="px-4 py-3">Direction</th>
+                        <th class="px-4 py-3">Type</th>
+                        <th class="px-4 py-3">Entry</th>
+                        <th class="px-4 py-3">SL</th>
+                        <th class="px-4 py-3">TP1 / TP2 / TP3</th>
+                        <th class="px-4 py-3">Lot</th>
+                        <th class="px-4 py-3">Source</th>
+                    </tr>
+                </thead>
+                <tbody id="signalTableBody" class="divide-y divide-slate-700/50">
+                    <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading signals...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    const API_BASE = window.location.origin;
+    let refreshTimer = null;
+
+    // --- Data fetching ---
+
+    async function fetchJSON(url) {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return resp.json();
+    }
+
+    async function loadStats() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/stats`);
+            document.getElementById('statTotal').textContent = data.total_signals || 0;
+            document.getElementById('statSources').textContent = Object.keys(data.by_source || {}).length;
+            document.getElementById('statSymbols').textContent = Object.keys(data.by_symbol || {}).length;
+
+            renderBarChart('sourceChart', data.by_source || {}, 'bar-source');
+            renderBarChart('symbolChart', data.by_symbol || {}, 'bar');
+        } catch (e) {
+            console.error('Stats error:', e);
+        }
+    }
+
+    async function loadDaily() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/daily?days=30`);
+            const daily = data.daily || [];
+            renderDailyChart(daily);
+
+            // Today count
+            const today = new Date().toISOString().slice(0, 10);
+            const todayEntry = daily.find(d => d.date === today);
+            document.getElementById('statToday').textContent = todayEntry ? todayEntry.count : 0;
+        } catch (e) {
+            console.error('Daily error:', e);
+        }
+    }
+
+    async function loadSignals() {
+        try {
+            const source = document.getElementById('filterSource').value.trim();
+            const symbol = document.getElementById('filterSymbol').value.trim();
+            let url = `${API_BASE}/api/v1/dashboard/signals?limit=200`;
+            if (source) url += `&source=${encodeURIComponent(source)}`;
+            if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
+
+            const data = await fetchJSON(url);
+            renderSignalTable(data.signals || []);
+        } catch (e) {
+            console.error('Signals error:', e);
+            document.getElementById('signalTableBody').innerHTML =
+                `<tr><td colspan="9" class="px-4 py-8 text-center text-red-400">Failed to load signals</td></tr>`;
+        }
+    }
+
+    function clearFilters() {
+        document.getElementById('filterSource').value = '';
+        document.getElementById('filterSymbol').value = '';
+        loadSignals();
+    }
+
+    // --- Rendering ---
+
+    function renderBarChart(containerId, data, barClass) {
+        const container = document.getElementById(containerId);
+        const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+        const max = entries.length > 0 ? entries[0][1] : 1;
+
+        if (entries.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-sm">No data</p>';
+            return;
+        }
+
+        container.innerHTML = entries.map(([label, count]) => {
+            const pct = Math.max((count / max) * 100, 2);
+            return `
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-400 w-32 truncate text-right" title="${label}">${label}</span>
+                    <div class="flex-1 h-5 bg-slate-800 rounded overflow-hidden">
+                        <div class="${barClass} h-full" style="width: ${pct}%"></div>
+                    </div>
+                    <span class="text-xs text-slate-300 w-8 text-right">${count}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderDailyChart(daily) {
+        const container = document.getElementById('dailyChart');
+        const labels = document.getElementById('dailyLabels');
+
+        if (daily.length === 0) {
+            container.innerHTML = '<p class="text-slate-500 text-sm m-auto">No data</p>';
+            labels.innerHTML = '';
+            return;
+        }
+
+        const max = Math.max(...daily.map(d => d.count), 1);
+
+        container.innerHTML = daily.map(d => {
+            const pct = Math.max((d.count / max) * 100, 3);
+            return `<div class="flex-1 flex flex-col justify-end items-center group cursor-default">
+                <span class="text-xs text-slate-400 opacity-0 group-hover:opacity-100 mb-1">${d.count}</span>
+                <div class="bar w-full" style="height: ${pct}%" title="${d.date}: ${d.count} signals"></div>
+            </div>`;
+        }).join('');
+
+        // Show first, middle, last date labels
+        const first = daily[0].date.slice(5);
+        const last = daily[daily.length - 1].date.slice(5);
+        const mid = daily[Math.floor(daily.length / 2)].date.slice(5);
+        labels.innerHTML = `<span>${first}</span><span>${mid}</span><span>${last}</span>`;
+    }
+
+    function renderSignalTable(signals) {
+        const tbody = document.getElementById('signalTableBody');
+
+        if (signals.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No signals found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = signals.map(s => {
+            const dirClass = s.direction === 'buy' ? 'badge-buy' : 'badge-sell';
+            const dirLabel = s.direction ? s.direction.toUpperCase() : '?';
+            const tps = (s.takeProfits || []).map(v => v.toFixed(2)).join(' / ') || '-';
+            const time = s.parsedAtUtc ? new Date(s.parsedAtUtc).toLocaleString() : '-';
+            const lot = s.lotSize != null ? s.lotSize.toFixed(2) : '-';
+
+            return `<tr class="hover:bg-slate-800/50 transition">
+                <td class="px-4 py-2.5 text-slate-300 whitespace-nowrap">${time}</td>
+                <td class="px-4 py-2.5 font-medium text-white">${s.symbol || '-'}</td>
+                <td class="px-4 py-2.5">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium ${dirClass}">${dirLabel}</span>
+                </td>
+                <td class="px-4 py-2.5 text-slate-400">${s.orderType || '-'}</td>
+                <td class="px-4 py-2.5 text-slate-200">${s.entryPrice != null ? s.entryPrice.toFixed(2) : '-'}</td>
+                <td class="px-4 py-2.5 text-red-400">${s.stopLoss != null ? s.stopLoss.toFixed(2) : '-'}</td>
+                <td class="px-4 py-2.5 text-green-400 text-xs">${tps}</td>
+                <td class="px-4 py-2.5 text-slate-300">${lot}</td>
+                <td class="px-4 py-2.5">
+                    <span class="badge-source px-2 py-0.5 rounded text-xs">${s.source || 'unknown'}</span>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    // --- Refresh ---
+
+    async function refreshAll() {
+        const btn = document.getElementById('refreshBtn');
+        btn.classList.add('refresh-spin');
+        btn.disabled = true;
+
+        await Promise.all([loadStats(), loadDaily(), loadSignals()]);
+
+        document.getElementById('lastUpdate').textContent =
+            'Last updated: ' + new Date().toLocaleTimeString();
+
+        btn.classList.remove('refresh-spin');
+        btn.disabled = false;
+    }
+
+    function setupAutoRefresh() {
+        const cb = document.getElementById('autoRefresh');
+        if (refreshTimer) clearInterval(refreshTimer);
+        if (cb.checked) {
+            refreshTimer = setInterval(refreshAll, 30000);
+        }
+        cb.addEventListener('change', () => {
+            if (refreshTimer) clearInterval(refreshTimer);
+            if (cb.checked) refreshTimer = setInterval(refreshAll, 30000);
+        });
+    }
+
+    // --- Init ---
+    refreshAll();
+    setupAutoRefresh();
+    </script>
+</body>
+</html>

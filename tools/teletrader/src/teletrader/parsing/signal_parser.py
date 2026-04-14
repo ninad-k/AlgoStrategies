@@ -75,6 +75,13 @@ _TP_LABELED_RE = re.compile(
 )
 _NUMBER_RE = re.compile(r"(\d+(?:\.\d+)?)")
 
+# Lot size: "Lot 0.05", "Lots: 0.1", "lot size 0.05", "0.05 lots"
+_LOT_RE = re.compile(
+    r"\b(?:lot(?:s|[\s_-]*size)?)\s*:?\s*(\d+(?:\.\d+)?)"
+    r"|(\d+(?:\.\d+)?)\s*lots?\b",
+    re.IGNORECASE,
+)
+
 # Above / below keyword extraction
 _ABOVE_RE = re.compile(r"\babove\b", re.IGNORECASE)
 _BELOW_RE = re.compile(r"\bbelow\b", re.IGNORECASE)
@@ -121,6 +128,9 @@ def parse_signal(raw_text: str) -> TradingSignal | None:
     if not take_profits:
         return None
 
+    # --- Extract lot size (optional) ---
+    lot_size = _extract_lot_size(text)
+
     # Resolve symbol alias
     canonical = SYMBOL_ALIASES.get(symbol.upper(), symbol.upper())
 
@@ -132,6 +142,7 @@ def parse_signal(raw_text: str) -> TradingSignal | None:
         entry_price=entry_price,
         stop_loss=stop_loss,
         take_profits=take_profits,
+        lot_size=lot_size,
         raw_text=raw_text,
         parsed_at_utc=datetime.now(UTC),
     )
@@ -188,6 +199,23 @@ def _derive_order_type(
         return "buy_limit" if has_below else "buy_stop"
     else:  # sell
         return "sell_limit" if has_above else "sell_stop"
+
+
+def _extract_lot_size(text: str) -> float | None:
+    """Extract lot size from the message, if present.
+
+    Handles: "Lot 0.05", "Lots: 0.1", "lot size 0.05", "0.05 lots"
+    """
+    match = _LOT_RE.search(text)
+    if not match:
+        return None
+    # Group 1 = "Lot 0.05" form, Group 2 = "0.05 lots" form
+    value = match.group(1) or match.group(2)
+    if value:
+        lot = float(value)
+        if lot > 0:
+            return lot
+    return None
 
 
 def _extract_take_profits(text: str) -> list[float]:

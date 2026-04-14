@@ -45,15 +45,16 @@ except ImportError:
     sys.exit(1)
 
 
-async def _forward_to_api(raw_text: str) -> None:
-    """Forward raw signal text to the TeleTrader local API."""
-    url = f"http://127.0.0.1:{settings.api_port}/api/v1/signal"
+async def _forward_to_api(raw_text: str, source: str = "unknown") -> None:
+    """Forward raw signal text to the TeleTrader local API with source tracking."""
+    url = f"http://127.0.0.1:{settings.api_port}/api/v1/signal/ingest"
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(url, content=raw_text)
+        response = await client.post(url, json={"raw_text": raw_text, "source": source})
         if response.status_code == 201:
             data = response.json()
             logger.info(
-                "Signal forwarded: %s %s @ %s",
+                "Signal forwarded [%s]: %s %s @ %s",
+                source,
                 data.get("symbol", "?"),
                 data.get("direction", "?"),
                 data.get("entryPrice", "?"),
@@ -113,10 +114,15 @@ async def run_forwarder() -> None:
         if not _SIGNAL_KEYWORDS_RE.search(text):
             return
 
-        logger.info("Signal detected from channel: %s", text[:80])
+        # Build source tag from channel info
+        chat = await event.get_chat()
+        channel_name = getattr(chat, "title", None) or getattr(chat, "username", None) or str(chat.id)
+        source = f"channel:{channel_name}"
+
+        logger.info("Signal detected from %s: %s", source, text[:80])
 
         try:
-            await _forward_to_api(text)
+            await _forward_to_api(text, source)
         except Exception:
             logger.exception("Failed to forward signal to API")
 

@@ -55,6 +55,9 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.debug("Skipping non-signal message: %s", text[:50])
         return
 
+    # Determine source: forwarded message or manual
+    source = "forwarded" if update.message.forward_date else "manual"
+
     # Try to parse
     signal = parse_signal(text)
     if signal is None:
@@ -62,18 +65,20 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     logger.info(
-        "Parsed signal: %s %s %s @ %.5f, SL=%.5f, TPs=%s",
+        "Parsed signal [%s]: %s %s %s @ %.5f, SL=%.5f, TPs=%s, Lot=%s",
+        source,
         signal.symbol,
         signal.direction,
         signal.order_type,
         signal.entry_price,
         signal.stop_loss,
         signal.take_profits,
+        signal.lot_size,
     )
 
     # Forward to backend
     try:
-        await _forward_signal(text)
+        await _forward_signal(text, source)
         if update.message:
             await update.message.reply_text(
                 f"Signal received: {signal.symbol} {signal.direction.upper()} "
@@ -85,13 +90,11 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.message.reply_text("Failed to process signal. Check logs.")
 
 
-async def _forward_signal(raw_text: str) -> None:
-    """Forward raw signal text to the configured backend."""
+async def _forward_signal(raw_text: str, source: str = "unknown") -> None:
+    """Forward raw signal text to the configured backend with source tracking."""
     if settings.mode == "local":
-        url = f"http://127.0.0.1:{settings.api_port}/api/v1/signal"
+        url = f"http://127.0.0.1:{settings.api_port}/api/v1/signal/ingest"
     else:
-        # AWS mode — post to API Gateway
-        # The API Gateway URL should be configured via env var
         import os
         api_url = os.environ.get("TELETRADER_AWS_API_URL", "")
         if not api_url:
@@ -99,9 +102,9 @@ async def _forward_signal(raw_text: str) -> None:
         url = f"{api_url}/signal"
 
     async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(url, content=raw_text)
+        response = await client.post(url, json={"raw_text": raw_text, "source": source})
         response.raise_for_status()
-        logger.info("Signal forwarded successfully: %s", response.json())
+        logger.info("Signal forwarded [%s]: %s", source, response.json())
 
 
 def main() -> None:

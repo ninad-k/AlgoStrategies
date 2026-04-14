@@ -28,7 +28,7 @@ struct SignalOrder
     int    direction;        // +1 = buy, -1 = sell
     int    orderType;        // ORDER_TYPE_BUY_STOP, etc.
     bool   active;           // slot in use
-    bool   activated;        // pending → position
+    bool   activated;        // pending -> position
     bool   tp1Hit;
     bool   tp2Hit;
     bool   tp3Hit;
@@ -118,7 +118,7 @@ public:
         int slot = _FindFreeSlot();
         if(slot < 0)
         {
-            Print("PendingOrderManager: No free slots for signal ", signalId);
+            PrintFormat("[ORDER] ERROR: No free slots for signal %s (max %d)", signalId, MAX_SIGNALS);
             return false;
         }
 
@@ -130,7 +130,7 @@ public:
         else if(orderTypeStr == "sell_limit")  mqlOrderType = ORDER_TYPE_SELL_LIMIT;
         else
         {
-            Print("PendingOrderManager: Unknown order type: ", orderTypeStr);
+            PrintFormat("[ORDER] ERROR: Unknown order type: %s (signal %s)", orderTypeStr, signalId);
             return false;
         }
 
@@ -138,7 +138,7 @@ public:
         double normLots = _NormalizeLots(symbol, lots);
         if(normLots <= 0)
         {
-            Print("PendingOrderManager: Lot size too small for ", symbol);
+            PrintFormat("[ORDER] ERROR: Lot size too small for %s (requested %.4f)", symbol, lots);
             return false;
         }
 
@@ -148,6 +148,9 @@ public:
         double normSL    = NormalizeDouble(stopLoss, digits);
 
         string comment = "TT_" + signalId;
+
+        PrintFormat("[ORDER] Placing %s: %s %.2f lots @ %.5f  SL=%.5f  TP=[%.5f, %.5f, %.5f]",
+                    orderTypeStr, symbol, normLots, normEntry, normSL, tp1, tp2, tp3);
 
         bool result = m_trade.OrderOpen(
             symbol,
@@ -181,14 +184,13 @@ public:
             m_signals[slot].trailingActive = false;
             m_signals[slot].closed        = false;
 
-            Print("PendingOrderManager: Placed ", orderTypeStr, " for ", symbol,
-                  " @ ", normEntry, " SL=", normSL,
-                  " TP=[", tp1, ", ", tp2, ", ", tp3, "]",
-                  " ticket=", m_signals[slot].orderTicket);
+            PrintFormat("[ORDER] SUCCESS: %s %s ticket=%d, signal=%s",
+                        orderTypeStr, symbol, m_signals[slot].orderTicket, signalId);
         }
         else
         {
-            Print("PendingOrderManager: OrderOpen failed: ", m_trade.ResultRetcodeDescription());
+            PrintFormat("[ORDER] FAILED: %s — %s (retcode=%d)",
+                        signalId, m_trade.ResultRetcodeDescription(), m_trade.ResultRetcode());
         }
 
         return result;
@@ -213,8 +215,10 @@ public:
                 {
                     m_signals[i].positionTicket = trans.position;
                     m_signals[i].activated = true;
-                    Print("PendingOrderManager: Signal ", m_signals[i].signalId,
-                          " activated! Position ticket=", trans.position);
+                    PrintFormat("[ACTIVATE] Signal %s activated! %s %s @ %.5f, position=%d",
+                                m_signals[i].signalId, m_signals[i].symbol,
+                                (m_signals[i].direction > 0 ? "BUY" : "SELL"),
+                                m_signals[i].entryPrice, trans.position);
                     break;
                 }
             }
@@ -230,8 +234,8 @@ public:
 
                 if(trans.order == m_signals[i].orderTicket)
                 {
-                    Print("PendingOrderManager: Pending order deleted for signal ",
-                          m_signals[i].signalId);
+                    PrintFormat("[ORDER] Pending order DELETED for signal %s (%s)",
+                                m_signals[i].signalId, m_signals[i].symbol);
                     m_signals[i].Reset();
                     break;
                 }
@@ -250,7 +254,9 @@ public:
             // Check if position still exists
             if(!PositionSelectByTicket(m_signals[i].positionTicket))
             {
-                Print("PendingOrderManager: Position closed for signal ", m_signals[i].signalId);
+                double pnl = _GetPositionPnLFromHistory(m_signals[i].positionTicket);
+                PrintFormat("[CLOSE] Position closed externally for signal %s (%s), P&L=%.2f",
+                            m_signals[i].signalId, m_signals[i].symbol, pnl);
                 m_signals[i].closed = true;
                 m_signals[i].Reset();
                 continue;
@@ -314,9 +320,28 @@ private:
         return false;
     }
 
+    //--- Get realized P&L from deal history for a position
+    double _GetPositionPnLFromHistory(ulong posTicket)
+    {
+        double totalPnL = 0;
+        if(HistorySelectByPosition(posTicket))
+        {
+            int total = HistoryDealsTotal();
+            for(int i = 0; i < total; i++)
+            {
+                ulong dealTicket = HistoryDealGetTicket(i);
+                totalPnL += HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+                totalPnL += HistoryDealGetDouble(dealTicket, DEAL_SWAP);
+                totalPnL += HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+            }
+        }
+        return totalPnL;
+    }
+
     void _ManageLongTP(int idx, double currentPrice)
     {
         double totalLots = PositionGetDouble(POSITION_VOLUME);
+        double unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
 
         // TP1
         if(!m_signals[idx].tp1Hit && currentPrice >= m_signals[idx].tp1)
@@ -325,9 +350,13 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp1Hit = true;
-                Print("TeleTrader TP1 hit: closed ", closeLots, " lots @ ", currentPrice);
+                double remainLots = totalLots - closeLots;
+                PrintFormat("[TP1] %s signal=%s: closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            closeLots, currentPrice, remainLots, unrealizedPnL);
                 // Move SL to breakeven
                 _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
+                PrintFormat("[TP1] SL moved to breakeven @ %.5f", m_signals[idx].entryPrice);
             }
         }
 
@@ -336,12 +365,16 @@ private:
         {
             if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
             totalLots = PositionGetDouble(POSITION_VOLUME);
+            unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
             double remainPct = m_tp2Pct + m_tp3Pct + m_residualPct;
             double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp2Pct / remainPct));
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp2Hit = true;
-                Print("TeleTrader TP2 hit: closed ", closeLots, " lots @ ", currentPrice);
+                double remainLots = totalLots - closeLots;
+                PrintFormat("[TP2] %s signal=%s: closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            closeLots, currentPrice, remainLots, unrealizedPnL);
             }
         }
 
@@ -352,22 +385,32 @@ private:
             {
                 if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
                 totalLots = PositionGetDouble(POSITION_VOLUME);
+                unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
                 double remainPct = m_tp3Pct + m_residualPct;
                 double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp3Pct / remainPct));
                 if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
                     m_signals[idx].tp3Hit = true;
-                    Print("TeleTrader TP3 hit: closed ", closeLots, " lots @ ", currentPrice,
-                          " — trailing residual");
+                    double remainLots = totalLots - closeLots;
+                    double realizedPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                    PrintFormat("[TP3] %s signal=%s: closed %.2f lots @ %.5f, trailing residual=%.2f lots",
+                                m_signals[idx].symbol, m_signals[idx].signalId,
+                                closeLots, currentPrice, remainLots);
+                    PrintFormat("[TP3] Realized P&L so far: %.2f, unrealized: %.2f", realizedPnL, unrealizedPnL);
                 }
             }
             else
             {
                 // No residual: close everything
+                if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
+                unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
                 m_trade.PositionClose(m_signals[idx].positionTicket);
                 m_signals[idx].tp3Hit = true;
                 m_signals[idx].closed = true;
-                Print("TeleTrader TP3 hit: fully closed @ ", currentPrice);
+                double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                PrintFormat("[CLOSE] %s signal=%s: fully closed @ %.5f, final P&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            currentPrice, finalPnL);
             }
         }
     }
@@ -375,6 +418,7 @@ private:
     void _ManageShortTP(int idx, double currentPrice)
     {
         double totalLots = PositionGetDouble(POSITION_VOLUME);
+        double unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
 
         // TP1
         if(!m_signals[idx].tp1Hit && currentPrice <= m_signals[idx].tp1)
@@ -383,8 +427,12 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp1Hit = true;
-                Print("TeleTrader TP1 hit (short): closed ", closeLots, " lots @ ", currentPrice);
+                double remainLots = totalLots - closeLots;
+                PrintFormat("[TP1] %s signal=%s (short): closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            closeLots, currentPrice, remainLots, unrealizedPnL);
                 _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
+                PrintFormat("[TP1] SL moved to breakeven @ %.5f", m_signals[idx].entryPrice);
             }
         }
 
@@ -393,12 +441,16 @@ private:
         {
             if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
             totalLots = PositionGetDouble(POSITION_VOLUME);
+            unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
             double remainPct = m_tp2Pct + m_tp3Pct + m_residualPct;
             double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp2Pct / remainPct));
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp2Hit = true;
-                Print("TeleTrader TP2 hit (short): closed ", closeLots, " lots @ ", currentPrice);
+                double remainLots = totalLots - closeLots;
+                PrintFormat("[TP2] %s signal=%s (short): closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            closeLots, currentPrice, remainLots, unrealizedPnL);
             }
         }
 
@@ -409,21 +461,31 @@ private:
             {
                 if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
                 totalLots = PositionGetDouble(POSITION_VOLUME);
+                unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
                 double remainPct = m_tp3Pct + m_residualPct;
                 double closeLots = _NormalizeLots(m_signals[idx].symbol, totalLots * (m_tp3Pct / remainPct));
                 if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
                     m_signals[idx].tp3Hit = true;
-                    Print("TeleTrader TP3 hit (short): closed ", closeLots, " lots @ ", currentPrice,
-                          " — trailing residual");
+                    double remainLots = totalLots - closeLots;
+                    double realizedPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                    PrintFormat("[TP3] %s signal=%s (short): closed %.2f lots @ %.5f, trailing residual=%.2f lots",
+                                m_signals[idx].symbol, m_signals[idx].signalId,
+                                closeLots, currentPrice, remainLots);
+                    PrintFormat("[TP3] Realized P&L so far: %.2f, unrealized: %.2f", realizedPnL, unrealizedPnL);
                 }
             }
             else
             {
+                if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
+                unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
                 m_trade.PositionClose(m_signals[idx].positionTicket);
                 m_signals[idx].tp3Hit = true;
                 m_signals[idx].closed = true;
-                Print("TeleTrader TP3 hit (short): fully closed @ ", currentPrice);
+                double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                PrintFormat("[CLOSE] %s signal=%s (short): fully closed @ %.5f, final P&L=%.2f",
+                            m_signals[idx].symbol, m_signals[idx].signalId,
+                            currentPrice, finalPnL);
             }
         }
     }
@@ -442,14 +504,28 @@ private:
             // Long: trail SL below price
             double newSL = NormalizeDouble(currentPrice - m_trailingPoints * point, digits);
             if(newSL > currentSL && newSL > m_signals[idx].entryPrice)
-                m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp);
+            {
+                if(m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp))
+                {
+                    PrintFormat("[TRAIL] %s signal=%s: SL %.5f -> %.5f (price=%.5f)",
+                                m_signals[idx].symbol, m_signals[idx].signalId,
+                                currentSL, newSL, currentPrice);
+                }
+            }
         }
         else
         {
             // Short: trail SL above price
             double newSL = NormalizeDouble(currentPrice + m_trailingPoints * point, digits);
             if((currentSL == 0 || newSL < currentSL) && newSL < m_signals[idx].entryPrice)
-                m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp);
+            {
+                if(m_trade.PositionModify(m_signals[idx].positionTicket, newSL, tp))
+                {
+                    PrintFormat("[TRAIL] %s signal=%s (short): SL %.5f -> %.5f (price=%.5f)",
+                                m_signals[idx].symbol, m_signals[idx].signalId,
+                                currentSL, newSL, currentPrice);
+                }
+            }
         }
     }
 

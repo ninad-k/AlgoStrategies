@@ -9,15 +9,27 @@
 //|   Telegram → Bot → Parser → API → THIS EA polls → Orders        |
 //+------------------------------------------------------------------+
 #property copyright "TeleTrader"
-#property version   "1.00"
+#property version   "2.00"
 #property strict
 
 #include <Trade/Trade.mqh>
 #include "../include/PendingOrderManager.mqh"
 
+//--- Lot mode enum
+enum ENUM_LOT_MODE
+{
+    LOT_MODE_FIXED = 0,   // Fixed lot size
+    LOT_MODE_RISK  = 1    // Risk % of balance
+};
+
 //--- Input parameters
+input group "== Lot Sizing =="
+input ENUM_LOT_MODE InpLotMode    = LOT_MODE_FIXED;  // Lot calculation mode
+input double InpLotSize           = 0.01;             // Fixed lot size
+input bool   InpUseSignalLot      = false;            // Accept lot size from signal?
+input double InpRiskPercent       = 1.0;              // Risk % of balance (Risk mode)
+
 input group "== Trade Settings =="
-input double InpLotSize       = 0.01;    // Lot size per signal
 input int    InpMagicNumber   = 20260410; // Magic number
 
 input group "== Partial Profit Booking =="
@@ -43,11 +55,14 @@ datetime g_lastPollTime = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
+    Print("[INIT] ====================================");
+    Print("[INIT] TeleTrader EA v2.0 starting...");
+
     // Validate TP percentages
     double totalPct = InpTP1Pct + InpTP2Pct + InpTP3Pct + InpResidualPct;
     if(MathAbs(totalPct - 100.0) > 0.01)
     {
-        PrintFormat("ERROR: TP percentages must sum to 100%%. Got %.1f%%", totalPct);
+        PrintFormat("[INIT] ERROR: TP percentages must sum to 100%%. Got %.1f%%", totalPct);
         return INIT_PARAMETERS_INCORRECT;
     }
 
@@ -56,19 +71,34 @@ int OnInit()
     g_orderMgr.SetTPConfig(InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
     g_orderMgr.SetTrailingPoints(InpTrailingPoints);
 
+    // Log lot mode configuration
+    if(InpLotMode == LOT_MODE_FIXED)
+        PrintFormat("[INIT] Lot mode: FIXED (%.2f lots)", InpLotSize);
+    else
+        PrintFormat("[INIT] Lot mode: RISK (%.1f%% of balance)", InpRiskPercent);
+
+    PrintFormat("[INIT] Use signal lot: %s", InpUseSignalLot ? "YES (overrides if present)" : "NO");
+    PrintFormat("[INIT] TP config: TP1=%.0f%% TP2=%.0f%% TP3=%.0f%% Residual=%.0f%%",
+                InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
+    PrintFormat("[INIT] Trailing: %.0f points", InpTrailingPoints);
+    PrintFormat("[INIT] Magic: %d, Poll interval: %d sec", InpMagicNumber, InpPollIntervalSec);
+    PrintFormat("[INIT] API: %s", InpAPIUrl);
+    PrintFormat("[INIT] Account balance: %.2f %s", AccountInfoDouble(ACCOUNT_BALANCE),
+                AccountInfoString(ACCOUNT_CURRENCY));
+
     // Test API connectivity
     if(!_TestAPIConnection())
     {
-        Print("WARNING: Could not reach TeleTrader API at ", InpAPIUrl);
-        Print("EA will keep retrying on each poll cycle.");
+        Print("[INIT] WARNING: Could not reach TeleTrader API at ", InpAPIUrl);
+        Print("[INIT] EA will keep retrying on each poll cycle.");
     }
     else
     {
-        Print("TeleTrader EA initialized. API connected at ", InpAPIUrl);
+        Print("[INIT] API connected successfully.");
     }
 
-    PrintFormat("Config: TP1=%.0f%% TP2=%.0f%% TP3=%.0f%% Residual=%.0f%% Trail=%.0f pts",
-                InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct, InpTrailingPoints);
+    Print("[INIT] TeleTrader EA initialized.");
+    Print("[INIT] ====================================");
 
     return INIT_SUCCEEDED;
 }
@@ -78,7 +108,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-    Print("TeleTrader EA stopped. Reason: ", reason);
+    PrintFormat("[DEINIT] TeleTrader EA stopped. Reason code: %d", reason);
 }
 
 //+------------------------------------------------------------------+
@@ -109,6 +139,72 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 }
 
 //+------------------------------------------------------------------+
+//| Calculate lot size based on mode and signal                       |
+//+------------------------------------------------------------------+
+double _CalculateLotSize(const string &symbol, double signalLots, double slDistance)
+{
+    double finalLots = InpLotSize; // default
+
+    // Priority 1: If signal lot is present and InpUseSignalLot is enabled
+    if(InpUseSignalLot && signalLots > 0)
+    {
+        finalLots = signalLots;
+        PrintFormat("[LOT] Using signal lot size: %.2f", finalLots);
+    }
+    // Priority 2: Risk-based calculation
+    else if(InpLotMode == LOT_MODE_RISK)
+    {
+        double balance    = AccountInfoDouble(ACCOUNT_BALANCE);
+        double riskAmount = balance * InpRiskPercent / 100.0;
+        double tickSize   = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+        double tickValue  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+        double point      = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+        if(tickSize > 0 && tickValue > 0 && slDistance > 0)
+        {
+            // Convert SL distance in price to ticks, then to money per lot
+            double slTicks        = slDistance / tickSize;
+            double riskPerLot     = slTicks * tickValue;
+            finalLots             = riskAmount / riskPerLot;
+
+            PrintFormat("[LOT] Risk calc: balance=%.2f, risk%%=%.1f%%, riskAmount=%.2f",
+                        balance, InpRiskPercent, riskAmount);
+            PrintFormat("[LOT] Risk calc: slDist=%.5f, tickSize=%.5f, tickValue=%.2f",
+                        slDistance, tickSize, tickValue);
+            PrintFormat("[LOT] Risk calc: slTicks=%.1f, riskPerLot=%.2f, rawLots=%.4f",
+                        slTicks, riskPerLot, finalLots);
+        }
+        else
+        {
+            PrintFormat("[LOT] WARNING: Cannot calculate risk lots (tickSize=%.5f, tickValue=%.2f, slDist=%.5f). Using fixed: %.2f",
+                        tickSize, tickValue, slDistance, InpLotSize);
+            finalLots = InpLotSize;
+        }
+    }
+    // Priority 3: Fixed lot
+    else
+    {
+        finalLots = InpLotSize;
+        PrintFormat("[LOT] Using fixed lot size: %.2f", finalLots);
+    }
+
+    // Normalize to broker constraints
+    double minLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+    double maxLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+    double stepLot = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+    if(stepLot > 0)
+        finalLots = MathFloor(finalLots / stepLot) * stepLot;
+    if(finalLots < minLot) finalLots = minLot;
+    if(finalLots > maxLot) finalLots = maxLot;
+
+    PrintFormat("[LOT] Final lot size: %.2f (min=%.2f, max=%.2f, step=%.2f)",
+                finalLots, minLot, maxLot, stepLot);
+
+    return finalLots;
+}
+
+//+------------------------------------------------------------------+
 //| Poll TeleTrader API for new signals                               |
 //+------------------------------------------------------------------+
 void _PollForSignals()
@@ -129,7 +225,13 @@ void _PollForSignals()
         {
             int err = GetLastError();
             if(err == 4014)
-                Print("Add '", InpAPIUrl, "' to Tools → Options → Expert Advisors → Allow WebRequest");
+                Print("[POLL] ERROR: Add '", InpAPIUrl, "' to Tools > Options > Expert Advisors > Allow WebRequest");
+            else
+                PrintFormat("[POLL] ERROR: WebRequest failed, error=%d", err);
+        }
+        else
+        {
+            PrintFormat("[POLL] ERROR: API returned HTTP %d", res);
         }
         return;
     }
@@ -145,11 +247,6 @@ void _PollForSignals()
 //+------------------------------------------------------------------+
 void _ProcessSignalsJSON(const string &json)
 {
-    // Expected format:
-    // {"signals":[{"signalId":"abc","seq":1,"symbol":"XAUUSD","direction":"buy",
-    //   "orderType":"buy_stop","entryPrice":4756.0,"stopLoss":4736.0,
-    //   "takeProfits":[4760.0,4764.0,4785.0],"parsedAtUtc":"..."},...]}"
-
     // Find the signals array
     int arrStart = StringFind(json, "\"signals\"");
     if(arrStart < 0) return;
@@ -219,6 +316,8 @@ void _ProcessSingleSignal(const string &signalJson)
     string orderType = _ExtractJsonString(signalJson, "orderType");
     double entryPrice = _ExtractJsonNumber(signalJson, "entryPrice");
     double stopLoss   = _ExtractJsonNumber(signalJson, "stopLoss");
+    string source     = _ExtractJsonString(signalJson, "source");
+    double signalLotSize = _ExtractJsonNumber(signalJson, "lotSize");
 
     // Update cursor
     if(seq > g_lastSeq)
@@ -227,7 +326,8 @@ void _ProcessSingleSignal(const string &signalJson)
     // Validate
     if(signalId == "" || symbol == "" || direction == "" || entryPrice == 0)
     {
-        Print("Invalid signal JSON: ", signalJson);
+        PrintFormat("[SIGNAL] ERROR: Invalid signal JSON (id=%s, sym=%s, dir=%s, entry=%.5f)",
+                    signalId, symbol, direction, entryPrice);
         return;
     }
 
@@ -241,19 +341,27 @@ void _ProcessSingleSignal(const string &signalJson)
 
     int dir = (direction == "buy") ? 1 : -1;
 
-    PrintFormat("New signal: %s %s %s @ %.5f SL=%.5f TP=[%.5f, %.5f, %.5f]",
-                symbol, direction, orderType, entryPrice, stopLoss, tp1, tp2, tp3);
+    PrintFormat("[SIGNAL] ========== NEW SIGNAL ==========");
+    PrintFormat("[SIGNAL] ID: %s  seq: %d  source: %s", signalId, seq, source);
+    PrintFormat("[SIGNAL] %s %s %s @ %.5f", symbol, direction, orderType, entryPrice);
+    PrintFormat("[SIGNAL] SL=%.5f  TP1=%.5f  TP2=%.5f  TP3=%.5f", stopLoss, tp1, tp2, tp3);
+    if(signalLotSize > 0)
+        PrintFormat("[SIGNAL] Signal lot size: %.2f", signalLotSize);
+
+    // Calculate lot size
+    double slDistance = MathAbs(entryPrice - stopLoss);
+    double lots = _CalculateLotSize(symbol, signalLotSize, slDistance);
 
     // Place the pending order
     bool ok = g_orderMgr.PlaceOrder(
         signalId, symbol, dir, orderType,
-        entryPrice, stopLoss, tp1, tp2, tp3, InpLotSize
+        entryPrice, stopLoss, tp1, tp2, tp3, lots
     );
 
     if(ok)
-        PrintFormat("Pending order placed for signal %s", signalId);
+        PrintFormat("[SIGNAL] Order placed successfully for %s", signalId);
     else
-        PrintFormat("Failed to place order for signal %s", signalId);
+        PrintFormat("[SIGNAL] FAILED to place order for %s", signalId);
 }
 
 //+------------------------------------------------------------------+
@@ -301,6 +409,10 @@ double _ExtractJsonNumber(const string &json, const string &key)
             break;
         numStart++;
     }
+
+    // Check for null
+    if(StringSubstr(json, numStart, 4) == "null")
+        return 0;
 
     // Read until non-numeric character
     string numStr = "";

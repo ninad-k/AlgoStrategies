@@ -21,6 +21,14 @@ class TeleTraderSettings(BaseSettings):
     # Local API
     api_port: int = 8100
 
+    # Storage
+    store_backend: Literal["memory", "sqlite"] = "sqlite"
+    db_path: str = "teletrader.db"
+
+    # Logging
+    log_file: str = "teletrader.log"
+    log_level: str = "INFO"
+
     # AWS (only when mode="aws")
     aws_region: str = "us-east-1"
     dynamodb_table: str = "teletrader-signals"

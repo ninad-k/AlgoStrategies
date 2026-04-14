@@ -1,16 +1,43 @@
-"""TeleTrader local API — FastAPI server for signal ingestion and EA polling."""
+"""TeleTrader local API -- FastAPI server for signal ingestion, EA polling, and dashboard."""
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Request, status
+import logging
+from datetime import UTC, datetime
 
+from fastapi import FastAPI, HTTPException, Request, status
+from pydantic import BaseModel
+
+from teletrader.api.dashboard import html_router, router as dashboard_router
+from teletrader.config import settings
 from teletrader.models.trading_signal import TradingSignal
 from teletrader.parsing.signal_parser import parse_signal
-from teletrader.store.memory_store import InMemorySignalStore
 
-app = FastAPI(title="TeleTrader API", version="0.1.0")
+logger = logging.getLogger("teletrader.api")
 
-signal_store = InMemorySignalStore()
+app = FastAPI(title="TeleTrader API", version="0.2.0")
+
+# --- Dashboard routes ---
+app.include_router(dashboard_router)
+app.include_router(html_router)
+
+# --- Store initialization based on config ---
+if settings.store_backend == "sqlite":
+    from teletrader.store.sqlite_store import SQLiteSignalStore
+    signal_store = SQLiteSignalStore(settings.db_path)
+    logger.info("Using SQLite store: %s", settings.db_path)
+else:
+    from teletrader.store.memory_store import InMemorySignalStore
+    signal_store = InMemorySignalStore()
+    logger.info("Using in-memory store")
+
+# Expose store on app.state for dashboard router
+app.state.signal_store = signal_store
+
+
+class SignalIngestRequest(BaseModel):
+    raw_text: str
+    source: str = "unknown"
 
 
 @app.get("/health")
@@ -20,19 +47,72 @@ def health() -> dict[str, str]:
 
 @app.post("/api/v1/signal", status_code=status.HTTP_201_CREATED)
 async def ingest_raw_signal(request: Request) -> dict:
-    """Accept raw Telegram message text, parse it, and store the signal."""
+    """Accept raw Telegram message text, parse it, and store the signal.
+
+    Backward-compatible endpoint (source defaults to 'unknown').
+    """
     raw_text = (await request.body()).decode("utf-8").strip()
     if not raw_text:
         raise HTTPException(status_code=422, detail="Empty message body")
 
+    logger.info("[SIGNAL_RECEIVED] raw text (%d chars), source=unknown", len(raw_text))
+
     signal = parse_signal(raw_text)
     if signal is None:
+        logger.warning("[SIGNAL_PARSE_FAILED] Could not parse: %s", raw_text[:80])
         raise HTTPException(
             status_code=422,
             detail="Could not parse trading signal from message",
         )
 
+    signal.source = "unknown"
+    signal.received_at_utc = datetime.now(UTC)
+
+    logger.info(
+        "[SIGNAL_PARSED] %s %s %s @ %.5f SL=%.5f TPs=%s lot=%s",
+        signal.symbol, signal.direction, signal.order_type,
+        signal.entry_price, signal.stop_loss, signal.take_profits, signal.lot_size,
+    )
+
     stored = signal_store.append(signal)
+    logger.info("[SIGNAL_STORED] id=%s seq=%d", stored.signal_id, stored.seq)
+    return stored.to_ea_dict()
+
+
+@app.post("/api/v1/signal/ingest", status_code=status.HTTP_201_CREATED)
+async def ingest_signal_with_source(body: SignalIngestRequest) -> dict:
+    """Accept JSON with raw_text and source, parse and store the signal.
+
+    Used by the bot and forwarder for source-tracked signal ingestion.
+    """
+    raw_text = body.raw_text.strip()
+    if not raw_text:
+        raise HTTPException(status_code=422, detail="Empty raw_text")
+
+    logger.info(
+        "[SIGNAL_RECEIVED] raw text (%d chars), source=%s", len(raw_text), body.source
+    )
+
+    signal = parse_signal(raw_text)
+    if signal is None:
+        logger.warning("[SIGNAL_PARSE_FAILED] Could not parse: %s", raw_text[:80])
+        raise HTTPException(
+            status_code=422,
+            detail="Could not parse trading signal from message",
+        )
+
+    signal.source = body.source
+    signal.received_at_utc = datetime.now(UTC)
+
+    logger.info(
+        "[SIGNAL_PARSED] %s %s %s @ %.5f SL=%.5f TPs=%s lot=%s source=%s",
+        signal.symbol, signal.direction, signal.order_type,
+        signal.entry_price, signal.stop_loss, signal.take_profits,
+        signal.lot_size, signal.source,
+    )
+
+    stored = signal_store.append(signal)
+    logger.info("[SIGNAL_STORED] id=%s seq=%d source=%s", stored.signal_id, stored.seq, stored.source)
     return stored.to_ea_dict()
 
 
@@ -45,11 +125,9 @@ async def ingest_json_signal(signal: TradingSignal) -> dict:
 
 @app.get("/api/v1/signals")
 def get_signals(since: int = 0) -> dict:
-    """Return signals with seq > since, for EA cursor-based polling.
-
-    The EA maintains a lastSeq and passes it here. Only new signals are returned.
-    """
+    """Return signals with seq > since, for EA cursor-based polling."""
     signals = signal_store.since(since)
+    logger.debug("[SIGNAL_POLLED] since=%d, returning %d signals", since, len(signals))
     return {
         "signals": [s.to_ea_dict() for s in signals],
     }

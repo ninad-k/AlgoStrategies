@@ -16,12 +16,15 @@ class TradingSignal(BaseModel):
     entry_price: float
     stop_loss: float
     take_profits: list[float]
+    lot_size: float | None = None
     raw_text: str
+    source: str = "unknown"  # "manual", "forwarded", "channel:<name>"
     parsed_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    received_at_utc: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def to_ea_dict(self) -> dict:
         """Serialize for the MT5 EA JSON response."""
-        return {
+        d: dict = {
             "signalId": self.signal_id,
             "seq": self.seq,
             "symbol": self.symbol,
@@ -30,5 +33,9 @@ class TradingSignal(BaseModel):
             "entryPrice": self.entry_price,
             "stopLoss": self.stop_loss,
             "takeProfits": self.take_profits,
+            "source": self.source,
             "parsedAtUtc": self.parsed_at_utc.isoformat(),
         }
+        if self.lot_size is not None:
+            d["lotSize"] = self.lot_size
+        return d
