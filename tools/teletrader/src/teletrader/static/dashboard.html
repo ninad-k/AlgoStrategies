@@ -1,264 +1,586 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TeleTrader Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>TeleTrader Dashboard — Rey Capital</title>
     <style>
-        body { background: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
-        .card { background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; }
-        .badge-buy { background: #065f46; color: #6ee7b7; }
-        .badge-sell { background: #7f1d1d; color: #fca5a5; }
-        .badge-source { background: #1e3a5f; color: #93c5fd; }
-        .badge-event { background: #4c1d95; color: #c4b5fd; }
-        table th { position: sticky; top: 0; background: #1e293b; z-index: 1; }
-        .bar { border-radius: 4px; min-width: 2px; transition: width 0.3s; }
-        .bar-blue { background: #3b82f6; }
-        .bar-purple { background: #8b5cf6; }
-        .bar-green { background: #22c55e; }
-        .bar-red { background: #ef4444; }
-        .bar-amber { background: #f59e0b; }
-        .tab-active { border-bottom: 2px solid #3b82f6; color: #fff; }
-        .tab-inactive { border-bottom: 2px solid transparent; color: #94a3b8; }
-        .tab-inactive:hover { color: #cbd5e1; }
+        /* ========== Rey Capital Theme System ========== */
+        :root {
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            --font-mono: 'SF Mono', 'Consolas', monospace;
+            --accent: #0052CC;
+            --accent-light: #1a73e8;
+            --accent-glow: rgba(0,82,204,0.15);
+            --green: #3fb950;
+            --red: #f85149;
+            --orange: #d29922;
+            --purple: #bc8cff;
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        /* Dark Theme (Black) */
+        [data-theme="dark"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --bg-card-hover: #1a1a1a;
+            --bg-input: #0a0a0a;
+            --border: #222222;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #5a6370;
+            --shadow: 0 2px 8px rgba(0,0,0,0.5);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+        }
+
+        /* Light Theme (White / Light Yellow) */
+        [data-theme="light"] {
+            --bg-primary: #fffef5;
+            --bg-secondary: #faf8ed;
+            --bg-card: #ffffff;
+            --bg-card-hover: #fefdf2;
+            --bg-input: #faf8ed;
+            --border: #e5e0c8;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8b949e;
+            --shadow: 0 1px 4px rgba(0,0,0,0.08);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --accent-glow: rgba(0,82,204,0.08);
+        }
+
+        /* ========== Base Styles ========== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            line-height: 1.5;
+            min-height: 100vh;
+            padding: 20px 24px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* ========== Layout ========== */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-left { display: flex; align-items: center; gap: 14px; }
+        .brand-accent { color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+        .header h1 { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+        .header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+
+        .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+        @media (max-width: 900px) {
+            .grid-5 { grid-template-columns: repeat(2, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+        }
+
+        /* ========== Cards ========== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .card:hover { background: var(--bg-card-hover); }
+        .card-pad { padding: 16px; }
+        .card-pad-sm { padding: 12px 16px; }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            margin-top: 4px;
+        }
+        .stat-value-sm {
+            font-size: 16px;
+            font-weight: 600;
+            font-family: var(--font-mono);
+            margin-top: 4px;
+        }
+
+        /* ========== Buttons & Controls ========== */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font-sans);
+        }
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .btn-primary:hover { background: var(--accent-light); }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+        }
+        .btn-ghost:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+
+        .theme-toggle {
+            width: 36px; height: 20px;
+            border-radius: 10px;
+            background: var(--border);
+            border: none;
+            cursor: pointer;
+            position: relative;
+            transition: background 0.3s;
+        }
+        .theme-toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px; left: 2px;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: var(--accent);
+            transition: transform 0.3s;
+        }
+        [data-theme="light"] .theme-toggle::after {
+            transform: translateX(16px);
+        }
+
+        .input-field {
+            padding: 6px 10px;
+            font-size: 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus { border-color: var(--accent); }
+
+        select.input-field {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            padding-right: 28px;
+        }
+
+        .checkbox-label {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; color: var(--text-muted); cursor: pointer;
+        }
+        .checkbox-label input[type="checkbox"] { accent-color: var(--accent); }
+
+        /* ========== Tabs ========== */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+            overflow-x: auto;
+        }
+        .tab-btn {
+            padding: 10px 18px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            font-family: var(--font-sans);
+        }
+        .tab-btn:hover { color: var(--text-secondary); }
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+            font-weight: 600;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ========== Tables ========== */
+        .table-wrap {
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--bg-card);
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            z-index: 1;
+        }
+        td {
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+            vertical-align: middle;
+        }
+        tr:hover td { background: var(--bg-card-hover); }
+        .text-right { text-align: right; }
+        .text-mono { font-family: var(--font-mono); }
+        .text-white { color: var(--text-primary); font-weight: 500; }
+        .text-sm { font-size: 11px; }
+        .nowrap { white-space: nowrap; }
+        .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* ========== Badges ========== */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .badge-buy { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge-sell { background: rgba(248,81,73,0.15); color: var(--red); }
+        .badge-source { background: var(--accent-glow); color: var(--accent-light); }
+        .badge-placed { background: rgba(0,82,204,0.15); color: var(--accent-light); }
+        .badge-failed { background: rgba(248,81,73,0.15); color: var(--red); }
+        .badge-activated { background: rgba(63,185,80,0.15); color: var(--green); }
+        .badge-tp { background: rgba(63,185,80,0.2); color: var(--green); }
+        .badge-closed { background: rgba(138,148,160,0.15); color: var(--text-secondary); }
+        .badge-notfound { background: rgba(210,153,34,0.15); color: var(--orange); }
+
+        /* ========== Colors ========== */
+        .c-green { color: var(--green); }
+        .c-red { color: var(--red); }
+        .c-orange { color: var(--orange); }
+        .c-accent { color: var(--accent); }
+        .c-muted { color: var(--text-muted); }
+        .c-primary { color: var(--text-primary); }
+
+        .pnl-pos { color: var(--green); }
+        .pnl-neg { color: var(--red); }
+        .pnl-zero { color: var(--text-muted); }
+
+        .wr-high { color: var(--green); }
+        .wr-mid { color: var(--orange); }
+        .wr-low { color: var(--red); }
+
+        /* ========== Charts ========== */
+        .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+        .bar-row { display: flex; align-items: center; gap: 8px; }
+        .bar-label { font-size: 11px; color: var(--text-secondary); width: 120px; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bar-track { flex: 1; height: 18px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; min-width: 2px; }
+        .bar-fill-accent { background: var(--accent); }
+        .bar-fill-purple { background: var(--purple); }
+        .bar-fill-green { background: var(--green); }
+        .bar-fill-red { background: var(--red); }
+        .bar-fill-orange { background: var(--orange); }
+        .bar-count { font-size: 11px; color: var(--text-muted); width: 32px; text-align: right; font-family: var(--font-mono); }
+
+        .timeline-chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; }
+        .timeline-bar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            cursor: default;
+        }
+        .timeline-bar .bar-col { width: 100%; border-radius: 3px 3px 0 0; transition: height 0.3s; }
+        .timeline-bar .tooltip { font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; margin-bottom: 4px; }
+        .timeline-bar:hover .tooltip { opacity: 1; }
+        .timeline-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+        /* P&L bidirectional chart */
+        .pnl-chart { display: flex; align-items: stretch; gap: 2px; height: 180px; }
+        .pnl-bar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: default;
+        }
+        .pnl-bar-top { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+        .pnl-bar-mid { width: 100%; height: 1px; background: var(--border); flex-shrink: 0; }
+        .pnl-bar-bot { flex: 1; display: flex; flex-direction: column; justify-content: flex-start; }
+        .pnl-bar .bar-col { width: 100%; border-radius: 3px; min-height: 2px; }
+        .pnl-bar .tooltip { font-size: 9px; color: var(--text-muted); opacity: 0; transition: opacity 0.2s; }
+        .pnl-bar:hover .tooltip { opacity: 1; }
+
+        /* Win rate mini bar */
+        .wr-bar { display: inline-flex; width: 64px; height: 10px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden; }
+        .wr-bar-fill { height: 100%; border-radius: 3px; }
+
+        /* ========== Utilities ========== */
+        .mb-3 { margin-bottom: 12px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-1 { margin-top: 4px; }
+        .gap-3 { gap: 12px; }
+        .flex { display: flex; }
+        .flex-wrap { flex-wrap: wrap; }
+        .items-end { align-items: flex-end; }
+        .items-center { align-items: center; }
+        .card-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; }
+        .empty-msg { padding: 32px; text-align: center; color: var(--text-muted); font-size: 12px; }
+        .hidden { display: none !important; }
+
         .refresh-spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .pnl-positive { color: #4ade80; }
-        .pnl-negative { color: #f87171; }
-        .pnl-zero { color: #94a3b8; }
-        .win-rate-high { color: #4ade80; }
-        .win-rate-mid { color: #fbbf24; }
-        .win-rate-low { color: #f87171; }
     </style>
 </head>
-<body class="min-h-screen p-4 md:p-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-2xl font-bold text-white">TeleTrader Dashboard</h1>
-            <p class="text-sm text-slate-400" id="lastUpdate">Loading...</p>
+<body>
+    <!-- ========== Header ========== -->
+    <div class="header">
+        <div class="header-left">
+            <div>
+                <div class="brand-accent">Rey Capital</div>
+                <h1>TeleTrader Dashboard</h1>
+                <div class="header-sub" id="lastUpdate">Loading...</div>
+            </div>
         </div>
-        <div class="flex items-center gap-3">
-            <label class="text-sm text-slate-400">
+        <div class="header-right">
+            <label class="checkbox-label">
                 Auto-refresh
-                <input type="checkbox" id="autoRefresh" checked class="ml-1 accent-blue-500">
+                <input type="checkbox" id="autoRefresh" checked>
             </label>
-            <button onclick="refreshAll()" id="refreshBtn"
-                    class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition">
-                Refresh
-            </button>
+            <button onclick="toggleTheme()" class="theme-toggle" title="Toggle theme"></button>
+            <button onclick="refreshAll()" id="refreshBtn" class="btn btn-primary">Refresh</button>
         </div>
     </div>
 
-    <!-- Performance Summary Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6" id="perfCards">
-        <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Total Signals</p>
-            <p class="text-2xl font-bold text-white mt-1" id="statTotalSignals">-</p>
+    <!-- ========== Performance Summary ========== -->
+    <div class="grid-5">
+        <div class="card card-pad">
+            <div class="stat-label">Total Signals</div>
+            <div class="stat-value" id="statTotalSignals">-</div>
         </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Orders Placed</p>
-            <p class="text-2xl font-bold text-white mt-1" id="statPlaced">-</p>
+        <div class="card card-pad">
+            <div class="stat-label">Orders Placed</div>
+            <div class="stat-value" id="statPlaced">-</div>
         </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Win Rate</p>
-            <p class="text-2xl font-bold mt-1" id="statWinRate">-</p>
+        <div class="card card-pad">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-value" id="statWinRate">-</div>
         </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Total P&L</p>
-            <p class="text-2xl font-bold mt-1" id="statTotalPnL">-</p>
+        <div class="card card-pad">
+            <div class="stat-label">Total P&L</div>
+            <div class="stat-value" id="statTotalPnL">-</div>
         </div>
-        <div class="card p-4">
-            <p class="text-xs text-slate-400 uppercase tracking-wider">Win / Loss</p>
-            <p class="text-2xl font-bold text-white mt-1" id="statWinLoss">-</p>
-        </div>
-    </div>
-
-    <!-- Secondary Stats Row -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <div class="card p-3">
-            <p class="text-xs text-slate-400">Avg P&L</p>
-            <p class="text-lg font-semibold mt-1" id="statAvgPnL">-</p>
-        </div>
-        <div class="card p-3">
-            <p class="text-xs text-slate-400">Best Trade</p>
-            <p class="text-lg font-semibold pnl-positive mt-1" id="statBestTrade">-</p>
-        </div>
-        <div class="card p-3">
-            <p class="text-xs text-slate-400">Worst Trade</p>
-            <p class="text-lg font-semibold pnl-negative mt-1" id="statWorstTrade">-</p>
-        </div>
-        <div class="card p-3">
-            <p class="text-xs text-slate-400">Failed Orders</p>
-            <p class="text-lg font-semibold text-red-400 mt-1" id="statFailed">-</p>
-        </div>
-        <div class="card p-3">
-            <p class="text-xs text-slate-400">Symbol Not Found</p>
-            <p class="text-lg font-semibold text-amber-400 mt-1" id="statSymNotFound">-</p>
+        <div class="card card-pad">
+            <div class="stat-label">Win / Loss</div>
+            <div class="stat-value" id="statWinLoss">-</div>
         </div>
     </div>
 
-    <!-- Tab Navigation -->
-    <div class="flex gap-1 border-b border-slate-700 mb-4 overflow-x-auto">
-        <button onclick="switchTab('overview')" id="tab-overview" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-active">Overview</button>
-        <button onclick="switchTab('channels')" id="tab-channels" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Channel Performance</button>
-        <button onclick="switchTab('symbols')" id="tab-symbols" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Symbol Performance</button>
-        <button onclick="switchTab('pnl')" id="tab-pnl" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Daily P&L</button>
-        <button onclick="switchTab('signals')" id="tab-signals" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Signal Feed</button>
-        <button onclick="switchTab('events')" id="tab-events" class="px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive">Trade Events</button>
+    <div class="grid-5">
+        <div class="card card-pad-sm">
+            <div class="stat-label">Avg P&L</div>
+            <div class="stat-value-sm" id="statAvgPnL">-</div>
+        </div>
+        <div class="card card-pad-sm">
+            <div class="stat-label">Best Trade</div>
+            <div class="stat-value-sm c-green" id="statBestTrade">-</div>
+        </div>
+        <div class="card card-pad-sm">
+            <div class="stat-label">Worst Trade</div>
+            <div class="stat-value-sm c-red" id="statWorstTrade">-</div>
+        </div>
+        <div class="card card-pad-sm">
+            <div class="stat-label">Failed Orders</div>
+            <div class="stat-value-sm c-red" id="statFailed">-</div>
+        </div>
+        <div class="card card-pad-sm">
+            <div class="stat-label">Symbol Not Found</div>
+            <div class="stat-value-sm c-orange" id="statSymNotFound">-</div>
+        </div>
     </div>
 
-    <!-- Tab Content: Overview -->
-    <div id="content-overview" class="tab-content">
-        <div class="grid md:grid-cols-2 gap-4 mb-6">
-            <div class="card p-4">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Source</h2>
-                <div id="sourceChart" class="space-y-2"></div>
+    <!-- ========== Tabs ========== -->
+    <div class="tabs">
+        <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn active">Overview</button>
+        <button onclick="switchTab('channels')" id="tab-channels" class="tab-btn">Channel Performance</button>
+        <button onclick="switchTab('symbols')" id="tab-symbols" class="tab-btn">Symbol Performance</button>
+        <button onclick="switchTab('pnl')" id="tab-pnl" class="tab-btn">Daily P&L</button>
+        <button onclick="switchTab('signals')" id="tab-signals" class="tab-btn">Signal Feed</button>
+        <button onclick="switchTab('events')" id="tab-events" class="tab-btn">Trade Events</button>
+    </div>
+
+    <!-- ========== Tab: Overview ========== -->
+    <div id="content-overview" class="tab-content active">
+        <div class="grid-2 mb-4">
+            <div class="card card-pad">
+                <div class="card-title">Signals by Source</div>
+                <div id="sourceChart" class="bar-chart"></div>
             </div>
-            <div class="card p-4">
-                <h2 class="text-sm font-semibold text-slate-300 mb-3">Signals by Symbol</h2>
-                <div id="symbolChart" class="space-y-2"></div>
+            <div class="card card-pad">
+                <div class="card-title">Signals by Symbol</div>
+                <div id="symbolChart" class="bar-chart"></div>
             </div>
         </div>
-        <div class="card p-4">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily Signal Volume (Last 30 Days)</h2>
-            <div class="flex items-end gap-1 h-32" id="dailyChart"></div>
-            <div class="flex justify-between text-xs text-slate-500 mt-1" id="dailyLabels"></div>
+        <div class="card card-pad">
+            <div class="card-title">Daily Signal Volume (Last 30 Days)</div>
+            <div class="timeline-chart" id="dailyChart"></div>
+            <div class="timeline-labels" id="dailyLabels"></div>
         </div>
     </div>
 
-    <!-- Tab Content: Channel Performance -->
-    <div id="content-channels" class="tab-content hidden">
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+    <!-- ========== Tab: Channel Performance ========== -->
+    <div id="content-channels" class="tab-content">
+        <div class="card">
+            <div class="table-wrap">
+                <table>
                     <thead>
-                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                            <th class="px-4 py-3">Channel / Source</th>
-                            <th class="px-4 py-3 text-right">Trades</th>
-                            <th class="px-4 py-3 text-right">Wins</th>
-                            <th class="px-4 py-3 text-right">Losses</th>
-                            <th class="px-4 py-3 text-right">Win Rate</th>
-                            <th class="px-4 py-3 text-right">Total P&L</th>
-                            <th class="px-4 py-3 text-right">TP1</th>
-                            <th class="px-4 py-3 text-right">TP2</th>
-                            <th class="px-4 py-3 text-right">TP3</th>
-                            <th class="px-4 py-3">Win Rate</th>
+                        <tr>
+                            <th>Channel / Source</th>
+                            <th class="text-right">Trades</th>
+                            <th class="text-right">Wins</th>
+                            <th class="text-right">Losses</th>
+                            <th class="text-right">Win Rate</th>
+                            <th class="text-right">Total P&L</th>
+                            <th class="text-right">TP1</th>
+                            <th class="text-right">TP2</th>
+                            <th class="text-right">TP3</th>
+                            <th>Win Rate</th>
                         </tr>
                     </thead>
-                    <tbody id="channelTableBody" class="divide-y divide-slate-700/50">
-                        <tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    <tbody id="channelTableBody">
+                        <tr><td colspan="10" class="empty-msg">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Tab Content: Symbol Performance -->
-    <div id="content-symbols" class="tab-content hidden">
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+    <!-- ========== Tab: Symbol Performance ========== -->
+    <div id="content-symbols" class="tab-content">
+        <div class="card">
+            <div class="table-wrap">
+                <table>
                     <thead>
-                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                            <th class="px-4 py-3">Symbol</th>
-                            <th class="px-4 py-3 text-right">Trades</th>
-                            <th class="px-4 py-3 text-right">Wins</th>
-                            <th class="px-4 py-3 text-right">Losses</th>
-                            <th class="px-4 py-3 text-right">Win Rate</th>
-                            <th class="px-4 py-3 text-right">Total P&L</th>
-                            <th class="px-4 py-3">Win Rate</th>
+                        <tr>
+                            <th>Symbol</th>
+                            <th class="text-right">Trades</th>
+                            <th class="text-right">Wins</th>
+                            <th class="text-right">Losses</th>
+                            <th class="text-right">Win Rate</th>
+                            <th class="text-right">Total P&L</th>
+                            <th>Win Rate</th>
                         </tr>
                     </thead>
-                    <tbody id="symbolTableBody" class="divide-y divide-slate-700/50">
-                        <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    <tbody id="symbolTableBody">
+                        <tr><td colspan="7" class="empty-msg">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Tab Content: Daily P&L -->
-    <div id="content-pnl" class="tab-content hidden">
-        <div class="card p-4 mb-4">
-            <h2 class="text-sm font-semibold text-slate-300 mb-3">Daily P&L (Last 30 Days)</h2>
-            <div class="flex items-end gap-1 h-48" id="pnlChart"></div>
-            <div class="flex justify-between text-xs text-slate-500 mt-1" id="pnlLabels"></div>
+    <!-- ========== Tab: Daily P&L ========== -->
+    <div id="content-pnl" class="tab-content">
+        <div class="card card-pad mb-4">
+            <div class="card-title">Daily P&L (Last 30 Days)</div>
+            <div class="pnl-chart" id="pnlChart"></div>
+            <div class="timeline-labels" id="pnlLabels"></div>
         </div>
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
-                <table class="w-full text-sm">
+        <div class="card">
+            <div class="table-wrap" style="max-height:400px">
+                <table>
                     <thead>
-                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                            <th class="px-4 py-3">Date</th>
-                            <th class="px-4 py-3 text-right">Trades</th>
-                            <th class="px-4 py-3 text-right">P&L</th>
+                        <tr>
+                            <th>Date</th>
+                            <th class="text-right">Trades</th>
+                            <th class="text-right">P&L</th>
                         </tr>
                     </thead>
-                    <tbody id="pnlTableBody" class="divide-y divide-slate-700/50">
-                        <tr><td colspan="3" class="px-4 py-8 text-center text-slate-500">Loading...</td></tr>
+                    <tbody id="pnlTableBody">
+                        <tr><td colspan="3" class="empty-msg">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Tab Content: Signal Feed -->
-    <div id="content-signals" class="tab-content hidden">
-        <div class="card p-4 mb-4">
-            <div class="flex flex-wrap gap-3 items-end">
+    <!-- ========== Tab: Signal Feed ========== -->
+    <div id="content-signals" class="tab-content">
+        <div class="card card-pad-sm mb-3">
+            <div class="flex flex-wrap items-end gap-3">
                 <div>
-                    <label class="text-xs text-slate-400">Source</label>
-                    <input type="text" id="filterSource" placeholder="e.g. channel:drd"
-                           class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-40">
+                    <div class="stat-label" style="margin-bottom:4px">Source</div>
+                    <input type="text" id="filterSource" placeholder="e.g. channel:drd" class="input-field" style="width:150px">
                 </div>
                 <div>
-                    <label class="text-xs text-slate-400">Symbol</label>
-                    <input type="text" id="filterSymbol" placeholder="e.g. XAUUSD"
-                           class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-32">
+                    <div class="stat-label" style="margin-bottom:4px">Symbol</div>
+                    <input type="text" id="filterSymbol" placeholder="e.g. XAUUSD" class="input-field" style="width:120px">
                 </div>
-                <button onclick="loadSignals()"
-                        class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
-                    Filter
-                </button>
-                <button onclick="clearFilters()"
-                        class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm rounded transition">
-                    Clear
-                </button>
+                <button onclick="loadSignals()" class="btn btn-primary">Filter</button>
+                <button onclick="clearFilters()" class="btn btn-ghost">Clear</button>
             </div>
         </div>
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
-                <table class="w-full text-sm">
+        <div class="card">
+            <div class="table-wrap">
+                <table>
                     <thead>
-                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                            <th class="px-4 py-3">Time</th>
-                            <th class="px-4 py-3">Symbol</th>
-                            <th class="px-4 py-3">Direction</th>
-                            <th class="px-4 py-3">Type</th>
-                            <th class="px-4 py-3">Entry</th>
-                            <th class="px-4 py-3">SL</th>
-                            <th class="px-4 py-3">TP1 / TP2 / TP3</th>
-                            <th class="px-4 py-3">Lot</th>
-                            <th class="px-4 py-3">Source</th>
+                        <tr>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>Direction</th>
+                            <th>Type</th>
+                            <th class="text-right">Entry</th>
+                            <th class="text-right">SL</th>
+                            <th>TP1 / TP2 / TP3</th>
+                            <th class="text-right">Lot</th>
+                            <th>Source</th>
                         </tr>
                     </thead>
-                    <tbody id="signalTableBody" class="divide-y divide-slate-700/50">
-                        <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading signals...</td></tr>
+                    <tbody id="signalTableBody">
+                        <tr><td colspan="9" class="empty-msg">Loading signals...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Tab Content: Trade Events -->
-    <div id="content-events" class="tab-content hidden">
-        <div class="card p-4 mb-4">
-            <div class="flex flex-wrap gap-3 items-end">
+    <!-- ========== Tab: Trade Events ========== -->
+    <div id="content-events" class="tab-content">
+        <div class="card card-pad-sm mb-3">
+            <div class="flex flex-wrap items-end gap-3">
                 <div>
-                    <label class="text-xs text-slate-400">Event Type</label>
-                    <select id="filterEventType" class="block mt-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-white w-44">
+                    <div class="stat-label" style="margin-bottom:4px">Event Type</div>
+                    <select id="filterEventType" class="input-field" style="width:170px">
                         <option value="">All</option>
                         <option value="order_placed">Order Placed</option>
                         <option value="order_failed">Order Failed</option>
@@ -270,52 +592,58 @@
                         <option value="symbol_not_found">Symbol Not Found</option>
                     </select>
                 </div>
-                <button onclick="loadTradeEvents()"
-                        class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition">
-                    Filter
-                </button>
+                <button onclick="loadTradeEvents()" class="btn btn-primary">Filter</button>
             </div>
         </div>
-        <div class="card overflow-hidden">
-            <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
-                <table class="w-full text-sm">
+        <div class="card">
+            <div class="table-wrap">
+                <table>
                     <thead>
-                        <tr class="text-left text-xs text-slate-400 uppercase tracking-wider border-b border-slate-700">
-                            <th class="px-4 py-3">Time</th>
-                            <th class="px-4 py-3">Event</th>
-                            <th class="px-4 py-3">Symbol</th>
-                            <th class="px-4 py-3">Direction</th>
-                            <th class="px-4 py-3 text-right">Lots</th>
-                            <th class="px-4 py-3 text-right">Price</th>
-                            <th class="px-4 py-3 text-right">P&L</th>
-                            <th class="px-4 py-3">Source</th>
-                            <th class="px-4 py-3">Details</th>
+                        <tr>
+                            <th>Time</th>
+                            <th>Event</th>
+                            <th>Symbol</th>
+                            <th>Direction</th>
+                            <th class="text-right">Lots</th>
+                            <th class="text-right">Price</th>
+                            <th class="text-right">P&L</th>
+                            <th>Source</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
-                    <tbody id="eventsTableBody" class="divide-y divide-slate-700/50">
-                        <tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">Loading events...</td></tr>
+                    <tbody id="eventsTableBody">
+                        <tr><td colspan="9" class="empty-msg">Loading events...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
+    <!-- ========== JavaScript ========== -->
     <script>
-    const API_BASE = window.location.origin;
+    const API = window.location.origin;
     let refreshTimer = null;
     let currentTab = 'overview';
 
-    // --- Tab Switching ---
+    // ---- Theme ----
+    function toggleTheme() {
+        const html = document.documentElement;
+        const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('tt-theme', next);
+    }
+    (function initTheme() {
+        const saved = localStorage.getItem('tt-theme');
+        if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+
+    // ---- Tabs ----
     function switchTab(tab) {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-        document.getElementById('content-' + tab).classList.remove('hidden');
-        document.querySelectorAll('[id^="tab-"]').forEach(el => {
-            el.className = el.id === 'tab-' + tab
-                ? 'px-4 py-2 text-sm font-medium whitespace-nowrap tab-active'
-                : 'px-4 py-2 text-sm font-medium whitespace-nowrap tab-inactive';
-        });
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.getElementById('content-' + tab).classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
         currentTab = tab;
-        // Load tab-specific data on switch
         if (tab === 'channels') loadChannelPerformance();
         if (tab === 'symbols') loadSymbolPerformance();
         if (tab === 'pnl') loadDailyPnL();
@@ -323,421 +651,283 @@
         if (tab === 'events') loadTradeEvents();
     }
 
-    // --- Data fetching ---
+    // ---- Helpers ----
     async function fetchJSON(url) {
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return resp.json();
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
     }
 
-    function pnlClass(val) {
-        if (val > 0) return 'pnl-positive';
-        if (val < 0) return 'pnl-negative';
-        return 'pnl-zero';
+    function pnlCls(v) { return v > 0 ? 'pnl-pos' : v < 0 ? 'pnl-neg' : 'pnl-zero'; }
+    function wrCls(r) { return r >= 60 ? 'wr-high' : r >= 40 ? 'wr-mid' : 'wr-low'; }
+    function fmtPnl(v) { return (v >= 0 ? '+' : '') + v.toFixed(2); }
+
+    function wrBar(rate) {
+        const color = rate >= 60 ? 'var(--green)' : rate >= 40 ? 'var(--orange)' : 'var(--red)';
+        return `<span class="wr-bar"><span class="wr-bar-fill" style="width:${rate}%;background:${color}"></span></span>`;
     }
 
-    function winRateClass(rate) {
-        if (rate >= 60) return 'win-rate-high';
-        if (rate >= 40) return 'win-rate-mid';
-        return 'win-rate-low';
+    function eventBadge(type) {
+        const map = {
+            order_placed: 'badge-placed', order_failed: 'badge-failed',
+            activated: 'badge-activated', tp1_hit: 'badge-tp', tp2_hit: 'badge-tp',
+            tp3_hit: 'badge-tp', closed: 'badge-closed', symbol_not_found: 'badge-notfound',
+        };
+        return `<span class="badge ${map[type] || 'badge-closed'}">${type}</span>`;
     }
 
-    function winRateBar(rate) {
-        const cls = rate >= 60 ? 'bar-green' : rate >= 40 ? 'bar-amber' : 'bar-red';
-        return `<div class="w-20 h-3 bg-slate-700 rounded overflow-hidden">
-            <div class="${cls} h-full" style="width:${rate}%"></div>
-        </div>`;
-    }
-
-    // --- Performance Summary ---
+    // ---- Performance Summary ----
     async function loadPerformance() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance`);
-            document.getElementById('statTotalSignals').textContent = data.total_signals || 0;
-            document.getElementById('statPlaced').textContent = data.orders_placed || 0;
+            const d = await fetchJSON(`${API}/api/v1/dashboard/performance`);
+            document.getElementById('statTotalSignals').textContent = d.total_signals || 0;
+            document.getElementById('statPlaced').textContent = d.orders_placed || 0;
 
-            const wr = data.win_rate || 0;
+            const wr = d.win_rate || 0;
             const wrEl = document.getElementById('statWinRate');
             wrEl.textContent = wr + '%';
-            wrEl.className = 'text-2xl font-bold mt-1 ' + winRateClass(wr);
+            wrEl.className = 'stat-value ' + wrCls(wr);
 
-            const pnl = data.total_pnl || 0;
+            const pnl = d.total_pnl || 0;
             const pnlEl = document.getElementById('statTotalPnL');
-            pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
-            pnlEl.className = 'text-2xl font-bold mt-1 ' + pnlClass(pnl);
+            pnlEl.textContent = fmtPnl(pnl);
+            pnlEl.className = 'stat-value ' + pnlCls(pnl);
 
-            document.getElementById('statWinLoss').textContent =
-                `${data.wins || 0} / ${data.losses || 0}`;
+            document.getElementById('statWinLoss').textContent = `${d.wins||0} / ${d.losses||0}`;
 
-            const avg = data.avg_pnl || 0;
+            const avg = d.avg_pnl || 0;
             const avgEl = document.getElementById('statAvgPnL');
-            avgEl.textContent = (avg >= 0 ? '+' : '') + avg.toFixed(2);
-            avgEl.className = 'text-lg font-semibold mt-1 ' + pnlClass(avg);
+            avgEl.textContent = fmtPnl(avg);
+            avgEl.className = 'stat-value-sm ' + pnlCls(avg);
 
-            document.getElementById('statBestTrade').textContent =
-                '+' + (data.best_trade || 0).toFixed(2);
-            document.getElementById('statWorstTrade').textContent =
-                (data.worst_trade || 0).toFixed(2);
-            document.getElementById('statFailed').textContent = data.orders_failed || 0;
-            document.getElementById('statSymNotFound').textContent = data.symbol_not_found || 0;
-        } catch (e) {
-            console.error('Performance error:', e);
-        }
+            document.getElementById('statBestTrade').textContent = '+' + (d.best_trade||0).toFixed(2);
+            document.getElementById('statWorstTrade').textContent = (d.worst_trade||0).toFixed(2);
+            document.getElementById('statFailed').textContent = d.orders_failed || 0;
+            document.getElementById('statSymNotFound').textContent = d.symbol_not_found || 0;
+        } catch (e) { console.error('Perf:', e); }
     }
 
-    // --- Overview Tab ---
+    // ---- Overview ----
     async function loadStats() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/stats`);
-            renderBarChart('sourceChart', data.by_source || {}, 'bar-purple');
-            renderBarChart('symbolChart', data.by_symbol || {}, 'bar-blue');
-        } catch (e) {
-            console.error('Stats error:', e);
-        }
+            const d = await fetchJSON(`${API}/api/v1/dashboard/stats`);
+            renderBarChart('sourceChart', d.by_source || {}, 'bar-fill-purple');
+            renderBarChart('symbolChart', d.by_symbol || {}, 'bar-fill-accent');
+        } catch (e) { console.error('Stats:', e); }
     }
 
     async function loadDaily() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/daily?days=30`);
-            renderDailyChart(data.daily || []);
-        } catch (e) {
-            console.error('Daily error:', e);
-        }
+            const d = await fetchJSON(`${API}/api/v1/dashboard/daily?days=30`);
+            renderTimeline(d.daily || []);
+        } catch (e) { console.error('Daily:', e); }
     }
 
-    // --- Channel Performance Tab ---
+    // ---- Channel Performance ----
     async function loadChannelPerformance() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance/sources`);
-            const sources = data.sources || [];
-            const tbody = document.getElementById('channelTableBody');
-
-            if (sources.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">No trade data yet. Trade events will appear here once the EA starts reporting.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = sources.map(s => `
-                <tr class="hover:bg-slate-800/50 transition">
-                    <td class="px-4 py-3"><span class="badge-source px-2 py-0.5 rounded text-xs">${s.source}</span></td>
-                    <td class="px-4 py-3 text-right text-white">${s.total_trades}</td>
-                    <td class="px-4 py-3 text-right pnl-positive">${s.wins}</td>
-                    <td class="px-4 py-3 text-right pnl-negative">${s.losses}</td>
-                    <td class="px-4 py-3 text-right font-semibold ${winRateClass(s.win_rate)}">${s.win_rate}%</td>
-                    <td class="px-4 py-3 text-right font-semibold ${pnlClass(s.total_pnl)}">${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl.toFixed(2)}</td>
-                    <td class="px-4 py-3 text-right text-slate-300">${s.tp1_hits}</td>
-                    <td class="px-4 py-3 text-right text-slate-300">${s.tp2_hits}</td>
-                    <td class="px-4 py-3 text-right text-slate-300">${s.tp3_hits}</td>
-                    <td class="px-4 py-3">${winRateBar(s.win_rate)}</td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            console.error('Channel perf error:', e);
-        }
+            const d = await fetchJSON(`${API}/api/v1/dashboard/performance/sources`);
+            const s = d.sources || [];
+            const tb = document.getElementById('channelTableBody');
+            if (!s.length) { tb.innerHTML = `<tr><td colspan="10" class="empty-msg">No trade data yet</td></tr>`; return; }
+            tb.innerHTML = s.map(r => `<tr>
+                <td><span class="badge badge-source">${r.source}</span></td>
+                <td class="text-right text-mono text-white">${r.total_trades}</td>
+                <td class="text-right text-mono c-green">${r.wins}</td>
+                <td class="text-right text-mono c-red">${r.losses}</td>
+                <td class="text-right text-mono ${wrCls(r.win_rate)}" style="font-weight:600">${r.win_rate}%</td>
+                <td class="text-right text-mono ${pnlCls(r.total_pnl)}" style="font-weight:600">${fmtPnl(r.total_pnl)}</td>
+                <td class="text-right text-mono">${r.tp1_hits}</td>
+                <td class="text-right text-mono">${r.tp2_hits}</td>
+                <td class="text-right text-mono">${r.tp3_hits}</td>
+                <td>${wrBar(r.win_rate)}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('Channels:', e); }
     }
 
-    // --- Symbol Performance Tab ---
+    // ---- Symbol Performance ----
     async function loadSymbolPerformance() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/performance/symbols`);
-            const symbols = data.symbols || [];
-            const tbody = document.getElementById('symbolTableBody');
-
-            if (symbols.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No trade data yet.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = symbols.map(s => `
-                <tr class="hover:bg-slate-800/50 transition">
-                    <td class="px-4 py-3 font-medium text-white">${s.symbol}</td>
-                    <td class="px-4 py-3 text-right text-white">${s.total_trades}</td>
-                    <td class="px-4 py-3 text-right pnl-positive">${s.wins}</td>
-                    <td class="px-4 py-3 text-right pnl-negative">${s.losses}</td>
-                    <td class="px-4 py-3 text-right font-semibold ${winRateClass(s.win_rate)}">${s.win_rate}%</td>
-                    <td class="px-4 py-3 text-right font-semibold ${pnlClass(s.total_pnl)}">${s.total_pnl >= 0 ? '+' : ''}${s.total_pnl.toFixed(2)}</td>
-                    <td class="px-4 py-3">${winRateBar(s.win_rate)}</td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            console.error('Symbol perf error:', e);
-        }
+            const d = await fetchJSON(`${API}/api/v1/dashboard/performance/symbols`);
+            const s = d.symbols || [];
+            const tb = document.getElementById('symbolTableBody');
+            if (!s.length) { tb.innerHTML = `<tr><td colspan="7" class="empty-msg">No trade data yet</td></tr>`; return; }
+            tb.innerHTML = s.map(r => `<tr>
+                <td class="text-white">${r.symbol}</td>
+                <td class="text-right text-mono text-white">${r.total_trades}</td>
+                <td class="text-right text-mono c-green">${r.wins}</td>
+                <td class="text-right text-mono c-red">${r.losses}</td>
+                <td class="text-right text-mono ${wrCls(r.win_rate)}" style="font-weight:600">${r.win_rate}%</td>
+                <td class="text-right text-mono ${pnlCls(r.total_pnl)}" style="font-weight:600">${fmtPnl(r.total_pnl)}</td>
+                <td>${wrBar(r.win_rate)}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('Symbols:', e); }
     }
 
-    // --- Daily P&L Tab ---
+    // ---- Daily P&L ----
     async function loadDailyPnL() {
         try {
-            const data = await fetchJSON(`${API_BASE}/api/v1/dashboard/pnl/daily?days=30`);
-            const daily = data.daily || [];
-
-            // Render chart
+            const d = await fetchJSON(`${API}/api/v1/dashboard/pnl/daily?days=30`);
+            const daily = d.daily || [];
             renderPnLChart(daily);
-
-            // Render table (reverse for newest first)
-            const tbody = document.getElementById('pnlTableBody');
-            if (daily.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-8 text-center text-slate-500">No closed trades yet.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = [...daily].reverse().map(d => `
-                <tr class="hover:bg-slate-800/50 transition">
-                    <td class="px-4 py-2.5 text-slate-300">${d.date}</td>
-                    <td class="px-4 py-2.5 text-right text-white">${d.trades}</td>
-                    <td class="px-4 py-2.5 text-right font-semibold ${pnlClass(d.pnl)}">${d.pnl >= 0 ? '+' : ''}${d.pnl.toFixed(2)}</td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            console.error('Daily P&L error:', e);
-        }
+            const tb = document.getElementById('pnlTableBody');
+            if (!daily.length) { tb.innerHTML = `<tr><td colspan="3" class="empty-msg">No closed trades yet</td></tr>`; return; }
+            tb.innerHTML = [...daily].reverse().map(r => `<tr>
+                <td class="nowrap">${r.date}</td>
+                <td class="text-right text-mono text-white">${r.trades}</td>
+                <td class="text-right text-mono ${pnlCls(r.pnl)}" style="font-weight:600">${fmtPnl(r.pnl)}</td>
+            </tr>`).join('');
+        } catch (e) { console.error('PnL:', e); }
     }
 
-    // --- Signal Feed Tab ---
+    // ---- Signal Feed ----
     async function loadSignals() {
         try {
-            const source = document.getElementById('filterSource').value.trim();
-            const symbol = document.getElementById('filterSymbol').value.trim();
-            let url = `${API_BASE}/api/v1/dashboard/signals?limit=200`;
-            if (source) url += `&source=${encodeURIComponent(source)}`;
-            if (symbol) url += `&symbol=${encodeURIComponent(symbol)}`;
-
-            const data = await fetchJSON(url);
-            renderSignalTable(data.signals || []);
+            const src = document.getElementById('filterSource').value.trim();
+            const sym = document.getElementById('filterSymbol').value.trim();
+            let url = `${API}/api/v1/dashboard/signals?limit=200`;
+            if (src) url += `&source=${encodeURIComponent(src)}`;
+            if (sym) url += `&symbol=${encodeURIComponent(sym)}`;
+            const d = await fetchJSON(url);
+            renderSignalTable(d.signals || []);
         } catch (e) {
-            console.error('Signals error:', e);
-            document.getElementById('signalTableBody').innerHTML =
-                '<tr><td colspan="9" class="px-4 py-8 text-center text-red-400">Failed to load signals</td></tr>';
+            document.getElementById('signalTableBody').innerHTML = `<tr><td colspan="9" class="empty-msg" style="color:var(--red)">Failed to load</td></tr>`;
         }
     }
-
     function clearFilters() {
         document.getElementById('filterSource').value = '';
         document.getElementById('filterSymbol').value = '';
         loadSignals();
     }
 
-    // --- Trade Events Tab ---
+    // ---- Trade Events ----
     async function loadTradeEvents() {
         try {
-            const eventType = document.getElementById('filterEventType').value;
-            let url = `${API_BASE}/api/v1/dashboard/trades?limit=200`;
-            if (eventType) url += `&event_type=${encodeURIComponent(eventType)}`;
-
-            const data = await fetchJSON(url);
-            renderEventsTable(data.events || []);
-        } catch (e) {
-            console.error('Events error:', e);
-        }
+            const et = document.getElementById('filterEventType').value;
+            let url = `${API}/api/v1/dashboard/trades?limit=200`;
+            if (et) url += `&event_type=${encodeURIComponent(et)}`;
+            const d = await fetchJSON(url);
+            renderEventsTable(d.events || []);
+        } catch (e) { console.error('Events:', e); }
     }
 
-    // --- Rendering ---
-    function renderBarChart(containerId, data, barClass) {
-        const container = document.getElementById(containerId);
+    // ---- Renderers ----
+    function renderBarChart(id, data, fillCls) {
+        const el = document.getElementById(id);
         const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
-        const max = entries.length > 0 ? entries[0][1] : 1;
-
-        if (entries.length === 0) {
-            container.innerHTML = '<p class="text-slate-500 text-sm">No data</p>';
-            return;
-        }
-
-        container.innerHTML = entries.map(([label, count]) => {
+        const max = entries.length ? entries[0][1] : 1;
+        if (!entries.length) { el.innerHTML = '<div class="empty-msg">No data</div>'; return; }
+        el.innerHTML = entries.map(([label, count]) => {
             const pct = Math.max((count / max) * 100, 2);
-            return `
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-slate-400 w-32 truncate text-right" title="${label}">${label}</span>
-                    <div class="flex-1 h-5 bg-slate-800 rounded overflow-hidden">
-                        <div class="${barClass} bar h-full" style="width: ${pct}%"></div>
-                    </div>
-                    <span class="text-xs text-slate-300 w-8 text-right">${count}</span>
-                </div>
-            `;
-        }).join('');
-    }
-
-    function renderDailyChart(daily) {
-        const container = document.getElementById('dailyChart');
-        const labels = document.getElementById('dailyLabels');
-
-        if (daily.length === 0) {
-            container.innerHTML = '<p class="text-slate-500 text-sm m-auto">No data</p>';
-            labels.innerHTML = '';
-            return;
-        }
-
-        const max = Math.max(...daily.map(d => d.count), 1);
-        container.innerHTML = daily.map(d => {
-            const pct = Math.max((d.count / max) * 100, 3);
-            return `<div class="flex-1 flex flex-col justify-end items-center group cursor-default">
-                <span class="text-xs text-slate-400 opacity-0 group-hover:opacity-100 mb-1">${d.count}</span>
-                <div class="bar bar-blue w-full" style="height: ${pct}%" title="${d.date}: ${d.count} signals"></div>
+            return `<div class="bar-row">
+                <span class="bar-label" title="${label}">${label}</span>
+                <div class="bar-track"><div class="bar-fill ${fillCls}" style="width:${pct}%"></div></div>
+                <span class="bar-count">${count}</span>
             </div>`;
         }).join('');
+    }
 
-        const first = daily[0].date.slice(5);
-        const last = daily[daily.length - 1].date.slice(5);
-        const mid = daily[Math.floor(daily.length / 2)].date.slice(5);
-        labels.innerHTML = `<span>${first}</span><span>${mid}</span><span>${last}</span>`;
+    function renderTimeline(daily) {
+        const el = document.getElementById('dailyChart');
+        const lb = document.getElementById('dailyLabels');
+        if (!daily.length) { el.innerHTML = '<div class="empty-msg" style="margin:auto">No data</div>'; lb.innerHTML = ''; return; }
+        const max = Math.max(...daily.map(d => d.count), 1);
+        el.innerHTML = daily.map(d => {
+            const pct = Math.max((d.count / max) * 100, 3);
+            return `<div class="timeline-bar">
+                <span class="tooltip">${d.count}</span>
+                <div class="bar-col bar-fill-accent" style="height:${pct}%" title="${d.date}: ${d.count}"></div>
+            </div>`;
+        }).join('');
+        lb.innerHTML = `<span>${daily[0].date.slice(5)}</span><span>${daily[Math.floor(daily.length/2)].date.slice(5)}</span><span>${daily[daily.length-1].date.slice(5)}</span>`;
     }
 
     function renderPnLChart(daily) {
-        const container = document.getElementById('pnlChart');
-        const labels = document.getElementById('pnlLabels');
-
-        if (daily.length === 0) {
-            container.innerHTML = '<p class="text-slate-500 text-sm m-auto">No closed trades yet</p>';
-            labels.innerHTML = '';
-            return;
-        }
-
+        const el = document.getElementById('pnlChart');
+        const lb = document.getElementById('pnlLabels');
+        if (!daily.length) { el.innerHTML = '<div class="empty-msg" style="margin:auto">No closed trades</div>'; lb.innerHTML = ''; return; }
         const maxAbs = Math.max(...daily.map(d => Math.abs(d.pnl)), 1);
-
-        container.innerHTML = daily.map(d => {
+        el.innerHTML = daily.map(d => {
             const pct = Math.max((Math.abs(d.pnl) / maxAbs) * 50, 2);
-            const isPositive = d.pnl >= 0;
-            const barColor = isPositive ? 'bar-green' : 'bar-red';
-            // For bidirectional chart: positive bars grow up from center, negative grow down
-            return `<div class="flex-1 flex flex-col items-center group cursor-default" style="height:100%">
-                <div class="flex-1 flex flex-col justify-end" style="height:50%">
-                    ${isPositive ? `<div class="${barColor} bar w-full" style="height:${pct}%" title="${d.date}: +${d.pnl.toFixed(2)}"></div>` : ''}
-                </div>
-                <div class="w-full h-px bg-slate-600"></div>
-                <div class="flex-1 flex flex-col justify-start" style="height:50%">
-                    ${!isPositive ? `<div class="${barColor} bar w-full" style="height:${pct}%" title="${d.date}: ${d.pnl.toFixed(2)}"></div>` : ''}
-                </div>
-                <span class="text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 mt-0.5">${d.pnl.toFixed(0)}</span>
+            const pos = d.pnl >= 0;
+            const color = pos ? 'background:var(--green)' : 'background:var(--red)';
+            return `<div class="pnl-bar">
+                <div class="pnl-bar-top">${pos ? `<div class="bar-col" style="height:${pct}%;${color}" title="${d.date}: ${fmtPnl(d.pnl)}"></div>` : ''}</div>
+                <div class="pnl-bar-mid"></div>
+                <div class="pnl-bar-bot">${!pos ? `<div class="bar-col" style="height:${pct}%;${color}" title="${d.date}: ${fmtPnl(d.pnl)}"></div>` : ''}</div>
+                <span class="tooltip">${d.pnl.toFixed(0)}</span>
             </div>`;
         }).join('');
-
-        if (daily.length > 0) {
-            const first = daily[0].date.slice(5);
-            const last = daily[daily.length - 1].date.slice(5);
-            labels.innerHTML = `<span>${first}</span><span>${last}</span>`;
-        }
+        lb.innerHTML = `<span>${daily[0].date.slice(5)}</span><span>${daily[daily.length-1].date.slice(5)}</span>`;
     }
 
     function renderSignalTable(signals) {
-        const tbody = document.getElementById('signalTableBody');
-        if (signals.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No signals found</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = signals.map(s => {
-            const dirClass = s.direction === 'buy' ? 'badge-buy' : 'badge-sell';
-            const dirLabel = s.direction ? s.direction.toUpperCase() : '?';
+        const tb = document.getElementById('signalTableBody');
+        if (!signals.length) { tb.innerHTML = `<tr><td colspan="9" class="empty-msg">No signals found</td></tr>`; return; }
+        tb.innerHTML = signals.map(s => {
+            const dir = s.direction === 'buy' ? 'badge-buy' : 'badge-sell';
             const tps = (s.takeProfits || []).map(v => v.toFixed(2)).join(' / ') || '-';
             const time = s.parsedAtUtc ? new Date(s.parsedAtUtc).toLocaleString() : '-';
-            const lot = s.lotSize != null ? s.lotSize.toFixed(2) : '-';
-
-            return `<tr class="hover:bg-slate-800/50 transition">
-                <td class="px-4 py-2.5 text-slate-300 whitespace-nowrap">${time}</td>
-                <td class="px-4 py-2.5 font-medium text-white">${s.symbol || '-'}</td>
-                <td class="px-4 py-2.5">
-                    <span class="px-2 py-0.5 rounded text-xs font-medium ${dirClass}">${dirLabel}</span>
-                </td>
-                <td class="px-4 py-2.5 text-slate-400">${s.orderType || '-'}</td>
-                <td class="px-4 py-2.5 text-slate-200">${s.entryPrice != null ? s.entryPrice.toFixed(2) : '-'}</td>
-                <td class="px-4 py-2.5 text-red-400">${s.stopLoss != null ? s.stopLoss.toFixed(2) : '-'}</td>
-                <td class="px-4 py-2.5 text-green-400 text-xs">${tps}</td>
-                <td class="px-4 py-2.5 text-slate-300">${lot}</td>
-                <td class="px-4 py-2.5">
-                    <span class="badge-source px-2 py-0.5 rounded text-xs">${s.source || 'unknown'}</span>
-                </td>
+            return `<tr>
+                <td class="nowrap">${time}</td>
+                <td class="text-white">${s.symbol || '-'}</td>
+                <td><span class="badge ${dir}">${(s.direction||'?').toUpperCase()}</span></td>
+                <td>${s.orderType || '-'}</td>
+                <td class="text-right text-mono">${s.entryPrice != null ? s.entryPrice.toFixed(2) : '-'}</td>
+                <td class="text-right text-mono c-red">${s.stopLoss != null ? s.stopLoss.toFixed(2) : '-'}</td>
+                <td class="text-sm c-green">${tps}</td>
+                <td class="text-right text-mono">${s.lotSize != null ? s.lotSize.toFixed(2) : '-'}</td>
+                <td><span class="badge badge-source">${s.source || 'unknown'}</span></td>
             </tr>`;
         }).join('');
     }
-
-    const eventColors = {
-        order_placed: 'bg-blue-900/50 text-blue-300',
-        order_failed: 'bg-red-900/50 text-red-300',
-        activated: 'bg-emerald-900/50 text-emerald-300',
-        tp1_hit: 'bg-green-900/50 text-green-300',
-        tp2_hit: 'bg-green-900/50 text-green-300',
-        tp3_hit: 'bg-green-900/50 text-green-300',
-        closed: 'bg-slate-700/50 text-slate-300',
-        symbol_not_found: 'bg-amber-900/50 text-amber-300',
-    };
 
     function renderEventsTable(events) {
-        const tbody = document.getElementById('eventsTableBody');
-        if (events.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No trade events yet</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = events.map(e => {
+        const tb = document.getElementById('eventsTableBody');
+        if (!events.length) { tb.innerHTML = `<tr><td colspan="9" class="empty-msg">No trade events yet</td></tr>`; return; }
+        tb.innerHTML = events.map(e => {
             const time = e.created_at ? new Date(e.created_at).toLocaleString() : '-';
-            const evtClass = eventColors[e.event_type] || 'bg-slate-700/50 text-slate-300';
-            const dirClass = e.direction === 'buy' ? 'badge-buy' : 'badge-sell';
-            return `<tr class="hover:bg-slate-800/50 transition">
-                <td class="px-4 py-2.5 text-slate-300 whitespace-nowrap">${time}</td>
-                <td class="px-4 py-2.5">
-                    <span class="px-2 py-0.5 rounded text-xs font-medium ${evtClass}">${e.event_type}</span>
-                </td>
-                <td class="px-4 py-2.5 font-medium text-white">${e.symbol || '-'}</td>
-                <td class="px-4 py-2.5">
-                    <span class="px-2 py-0.5 rounded text-xs font-medium ${dirClass}">${(e.direction || '').toUpperCase()}</span>
-                </td>
-                <td class="px-4 py-2.5 text-right text-slate-300">${e.lots ? e.lots.toFixed(2) : '-'}</td>
-                <td class="px-4 py-2.5 text-right text-slate-200">${e.price ? e.price.toFixed(5) : '-'}</td>
-                <td class="px-4 py-2.5 text-right font-semibold ${pnlClass(e.pnl)}">${e.pnl ? ((e.pnl >= 0 ? '+' : '') + e.pnl.toFixed(2)) : '-'}</td>
-                <td class="px-4 py-2.5">
-                    <span class="badge-source px-2 py-0.5 rounded text-xs">${e.source || 'unknown'}</span>
-                </td>
-                <td class="px-4 py-2.5 text-slate-400 text-xs max-w-[200px] truncate" title="${e.details || ''}">${e.details || '-'}</td>
+            const dir = e.direction === 'buy' ? 'badge-buy' : 'badge-sell';
+            return `<tr>
+                <td class="nowrap">${time}</td>
+                <td>${eventBadge(e.event_type)}</td>
+                <td class="text-white">${e.symbol || '-'}</td>
+                <td><span class="badge ${dir}">${(e.direction||'').toUpperCase()}</span></td>
+                <td class="text-right text-mono">${e.lots ? e.lots.toFixed(2) : '-'}</td>
+                <td class="text-right text-mono">${e.price ? e.price.toFixed(5) : '-'}</td>
+                <td class="text-right text-mono ${pnlCls(e.pnl)}" style="font-weight:600">${e.pnl ? fmtPnl(e.pnl) : '-'}</td>
+                <td><span class="badge badge-source">${e.source || 'unknown'}</span></td>
+                <td class="text-sm truncate" title="${e.details || ''}">${e.details || '-'}</td>
             </tr>`;
         }).join('');
     }
 
-    // --- Refresh ---
+    // ---- Refresh ----
     async function refreshAll() {
         const btn = document.getElementById('refreshBtn');
         btn.classList.add('refresh-spin');
         btn.disabled = true;
-
         await loadPerformance();
-
-        // Load data for current tab
-        if (currentTab === 'overview') {
-            await Promise.all([loadStats(), loadDaily()]);
-        } else if (currentTab === 'channels') {
-            await loadChannelPerformance();
-        } else if (currentTab === 'symbols') {
-            await loadSymbolPerformance();
-        } else if (currentTab === 'pnl') {
-            await loadDailyPnL();
-        } else if (currentTab === 'signals') {
-            await loadSignals();
-        } else if (currentTab === 'events') {
-            await loadTradeEvents();
-        }
-
-        document.getElementById('lastUpdate').textContent =
-            'Last updated: ' + new Date().toLocaleTimeString();
+        if (currentTab === 'overview') await Promise.all([loadStats(), loadDaily()]);
+        else if (currentTab === 'channels') await loadChannelPerformance();
+        else if (currentTab === 'symbols') await loadSymbolPerformance();
+        else if (currentTab === 'pnl') await loadDailyPnL();
+        else if (currentTab === 'signals') await loadSignals();
+        else if (currentTab === 'events') await loadTradeEvents();
+        document.getElementById('lastUpdate').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
         btn.classList.remove('refresh-spin');
         btn.disabled = false;
     }
 
-    function setupAutoRefresh() {
+    (function setupAutoRefresh() {
         const cb = document.getElementById('autoRefresh');
-        if (refreshTimer) clearInterval(refreshTimer);
-        if (cb.checked) {
-            refreshTimer = setInterval(refreshAll, 30000);
-        }
-        cb.addEventListener('change', () => {
-            if (refreshTimer) clearInterval(refreshTimer);
-            if (cb.checked) refreshTimer = setInterval(refreshAll, 30000);
-        });
-    }
+        const start = () => { if (refreshTimer) clearInterval(refreshTimer); if (cb.checked) refreshTimer = setInterval(refreshAll, 30000); };
+        cb.addEventListener('change', start);
+        start();
+    })();
 
-    // --- Init ---
-    refreshAll().then(() => {
-        // Also pre-load overview tab data
-        loadStats();
-        loadDaily();
-    });
-    setupAutoRefresh();
+    // ---- Init ----
+    refreshAll().then(() => { loadStats(); loadDaily(); });
     </script>
 </body>
 </html>
