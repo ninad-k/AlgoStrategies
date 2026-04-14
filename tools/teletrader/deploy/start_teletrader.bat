@@ -39,6 +39,7 @@ echo Starting Channel Forwarder...
 echo.
 echo =============================================
 echo   API:       http://127.0.0.1:%API_PORT%/health
+echo   Dashboard: http://127.0.0.1:%API_PORT%/dashboard
 echo   Bot:       Listening for direct signals
 echo   Forwarder: Monitoring channels for signals
 echo =============================================

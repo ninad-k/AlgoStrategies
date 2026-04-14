@@ -226,6 +226,14 @@ TELETRADER_TELEGRAM_API_ID=$ApiId
 TELETRADER_TELEGRAM_API_HASH=$ApiHash
 TELETRADER_TELEGRAM_PHONE=$Phone
 TELETRADER_FORWARDER_CHANNELS=$Channels
+
+# Storage (sqlite or memory)
+TELETRADER_STORE_BACKEND=sqlite
+TELETRADER_DB_PATH=$InstallDir\teletrader.db
+
+# Logging
+TELETRADER_LOG_FILE=$InstallDir\logs\teletrader.log
+TELETRADER_LOG_LEVEL=INFO
 "@
 [System.IO.File]::WriteAllText($envFile, $envContent, [System.Text.UTF8Encoding]::new($false))
 Write-OK "Configuration written to $envFile"
@@ -280,6 +288,7 @@ echo Starting Channel Forwarder...
 echo.
 echo =============================================
 echo   API:       http://127.0.0.1:$ApiPort/health
+echo   Dashboard: http://127.0.0.1:$ApiPort/dashboard
 echo   Bot:       Listening for direct signals
 echo   Forwarder: Monitoring channels for signals
 echo =============================================
@@ -499,7 +508,9 @@ $checks = @(
     @{Name="TeleTrader"; Cmd="& '$venvDir\Scripts\python.exe' -c `"import teletrader; print('OK')`""},
     @{Name=".env";       Cmd="if (Test-Path '$envFile') { 'OK' } else { throw 'missing' }"},
     @{Name="Bot files";  Cmd="if (Test-Path '$teleDir\src\teletrader\telegram\bot.py') { 'OK' } else { throw 'missing' }"},
-    @{Name="Forwarder";  Cmd="if (Test-Path '$teleDir\src\teletrader\telegram\forwarder.py') { 'OK' } else { throw 'missing' }"}
+    @{Name="Forwarder";  Cmd="if (Test-Path '$teleDir\src\teletrader\telegram\forwarder.py') { 'OK' } else { throw 'missing' }"},
+    @{Name="SQLite store"; Cmd="if (Test-Path '$teleDir\src\teletrader\store\sqlite_store.py') { 'OK' } else { throw 'missing' }"},
+    @{Name="Dashboard";  Cmd="if (Test-Path '$teleDir\src\teletrader\static\dashboard.html') { 'OK' } else { throw 'missing' }"}
 )
 
 foreach ($check in $checks) {
@@ -580,6 +591,12 @@ Write-Host "  LOGS:" -ForegroundColor Cyan
 Write-Host ("    API:       " + $logsDir + "\api.log") -ForegroundColor White
 Write-Host ("    Bot:       " + $logsDir + "\bot.log") -ForegroundColor White
 Write-Host ("    Forwarder: " + $logsDir + "\forwarder.log") -ForegroundColor White
+Write-Host ("    TeleTrader:" + $logsDir + "\teletrader.log") -ForegroundColor White
 Write-Host ""
-Write-Host ("  API:  http://127.0.0.1:" + $ApiPort + "/health") -ForegroundColor Cyan
+Write-Host "  DATABASE:" -ForegroundColor Cyan
+Write-Host ("    SQLite:    " + $InstallDir + "\teletrader.db") -ForegroundColor White
+Write-Host ""
+Write-Host "  URLS:" -ForegroundColor Cyan
+Write-Host ("    Health:    http://127.0.0.1:" + $ApiPort + "/health") -ForegroundColor White
+Write-Host ("    Dashboard: http://127.0.0.1:" + $ApiPort + "/dashboard") -ForegroundColor White
 Write-Host ""
