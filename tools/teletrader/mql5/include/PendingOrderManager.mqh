@@ -225,7 +225,7 @@ public:
                     int direction, const string &orderTypeStr,
                     double entryPrice, double stopLoss,
                     double tp1, double tp2, double tp3, double lots,
-                    const string &source = "unknown")
+                    const string &source)
     {
         Stats.totalSignals++;
 
