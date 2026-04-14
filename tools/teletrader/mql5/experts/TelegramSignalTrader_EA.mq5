@@ -9,7 +9,7 @@
 //|   Telegram → Bot → Parser → API → THIS EA polls → Orders        |
 //+------------------------------------------------------------------+
 #property copyright "TeleTrader"
-#property version   "2.00"
+#property version   "2.10"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -43,14 +43,18 @@ input group "== Trailing Stop =="
 input bool   InpEnableTrailing = true;   // Enable trailing stop?
 input double InpTrailingPoints = 200;    // Trailing SL distance (points)
 
+input group "== Notifications =="
+input bool   InpNotifyTelegram = true;   // Send trade updates to Telegram?
+
 input group "== API Settings =="
 input string InpAPIUrl        = "http://127.0.0.1:8100"; // TeleTrader API URL
 input int    InpPollIntervalSec = 5;     // Poll interval (seconds)
 
 //--- Global variables
 CPendingOrderManager g_orderMgr;
-int    g_lastSeq = 0;                    // cursor for polling
+int    g_lastSeq = 0;
 datetime g_lastPollTime = 0;
+bool   g_apiConnected = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization                                             |
@@ -58,7 +62,7 @@ datetime g_lastPollTime = 0;
 int OnInit()
 {
     Print("[INIT] ====================================");
-    Print("[INIT] TeleTrader EA v2.0 starting...");
+    Print("[INIT] TeleTrader EA v2.1 starting...");
 
     // Validate TP percentages (only when partial TP is enabled)
     if(InpEnablePartialTP)
@@ -78,7 +82,7 @@ int OnInit()
     g_orderMgr.SetPartialTPEnabled(InpEnablePartialTP);
     g_orderMgr.SetTrailingEnabled(InpEnableTrailing);
 
-    // Log lot mode configuration
+    // Log configuration
     if(InpLotMode == LOT_MODE_FIXED)
         PrintFormat("[INIT] Lot mode: FIXED (%.2f lots)", InpLotSize);
     else
@@ -91,13 +95,15 @@ int OnInit()
                     InpTP1Pct, InpTP2Pct, InpTP3Pct, InpResidualPct);
     PrintFormat("[INIT] Trailing: %s%s", InpEnableTrailing ? "ON" : "OFF",
                 InpEnableTrailing ? StringFormat(" (%.0f points)", InpTrailingPoints) : "");
+    PrintFormat("[INIT] Telegram notifications: %s", InpNotifyTelegram ? "ON" : "OFF");
     PrintFormat("[INIT] Magic: %d, Poll interval: %d sec", InpMagicNumber, InpPollIntervalSec);
     PrintFormat("[INIT] API: %s", InpAPIUrl);
     PrintFormat("[INIT] Account balance: %.2f %s", AccountInfoDouble(ACCOUNT_BALANCE),
                 AccountInfoString(ACCOUNT_CURRENCY));
 
     // Test API connectivity
-    if(!_TestAPIConnection())
+    g_apiConnected = _TestAPIConnection();
+    if(!g_apiConnected)
     {
         Print("[INIT] WARNING: Could not reach TeleTrader API at ", InpAPIUrl);
         Print("[INIT] EA will keep retrying on each poll cycle.");
@@ -110,6 +116,9 @@ int OnInit()
     Print("[INIT] TeleTrader EA initialized.");
     Print("[INIT] ====================================");
 
+    // Show initial dashboard
+    _UpdateDashboard();
+
     return INIT_SUCCEEDED;
 }
 
@@ -118,6 +127,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+    Comment(""); // Clear chart dashboard
     PrintFormat("[DEINIT] TeleTrader EA stopped. Reason code: %d", reason);
 }
 
@@ -129,6 +139,12 @@ void OnTick()
     // Manage existing positions on every tick
     g_orderMgr.ManagePositions();
 
+    // Send any queued notifications
+    _DrainNotifications();
+
+    // Update chart dashboard
+    _UpdateDashboard();
+
     // Poll API at configured interval
     datetime now = TimeCurrent();
     if(now - g_lastPollTime < InpPollIntervalSec)
@@ -139,7 +155,7 @@ void OnTick()
 }
 
 //+------------------------------------------------------------------+
-//| Trade transaction handler — detect pending order activations      |
+//| Trade transaction handler                                         |
 //+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
@@ -149,33 +165,91 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 }
 
 //+------------------------------------------------------------------+
+//| Update chart dashboard via Comment()                              |
+//+------------------------------------------------------------------+
+void _UpdateDashboard()
+{
+    string dash = g_orderMgr.GetDashboardText(g_apiConnected, g_lastPollTime, g_lastSeq);
+    Comment(dash);
+}
+
+//+------------------------------------------------------------------+
+//| Drain notification queue and send to Telegram                     |
+//+------------------------------------------------------------------+
+void _DrainNotifications()
+{
+    if(!InpNotifyTelegram) return;
+    if(!g_orderMgr.HasNotifications()) return;
+
+    // Send up to 3 notifications per tick to avoid blocking
+    int sent = 0;
+    while(g_orderMgr.HasNotifications() && sent < 3)
+    {
+        string msg = g_orderMgr.PopNotification();
+        if(msg != "")
+        {
+            _SendTelegramNotification(msg);
+            sent++;
+        }
+    }
+}
+
+//+------------------------------------------------------------------+
+//| Send notification via TeleTrader API -> Telegram                  |
+//+------------------------------------------------------------------+
+void _SendTelegramNotification(const string &message)
+{
+    string url = InpAPIUrl + "/api/v1/notify";
+    string headers = "Content-Type: application/json\r\n";
+
+    // Build JSON: {"message": "..."}
+    // Escape quotes and newlines in the message
+    string escaped = message;
+    StringReplace(escaped, "\\", "\\\\");
+    StringReplace(escaped, "\"", "\\\"");
+    StringReplace(escaped, "\n", "\\n");
+
+    string jsonBody = "{\"message\": \"" + escaped + "\"}";
+    char postData[];
+    StringToCharArray(jsonBody, postData, 0, WHOLE_ARRAY, CP_UTF8);
+    // Remove null terminator that StringToCharArray adds
+    ArrayResize(postData, ArraySize(postData) - 1);
+
+    char resultData[];
+    string resultHeaders;
+
+    int res = WebRequest("POST", url, headers, 3000, postData, resultData, resultHeaders);
+
+    if(res == 200)
+        PrintFormat("[NOTIFY] Telegram notification sent (%d chars)", StringLen(message));
+    else
+        PrintFormat("[NOTIFY] Failed to send notification (HTTP %d)", res);
+}
+
+//+------------------------------------------------------------------+
 //| Calculate lot size based on mode and signal                       |
 //+------------------------------------------------------------------+
 double _CalculateLotSize(const string &symbol, double signalLots, double slDistance)
 {
-    double finalLots = InpLotSize; // default
+    double finalLots = InpLotSize;
 
-    // Priority 1: If signal lot is present and InpUseSignalLot is enabled
     if(InpUseSignalLot && signalLots > 0)
     {
         finalLots = signalLots;
         PrintFormat("[LOT] Using signal lot size: %.2f", finalLots);
     }
-    // Priority 2: Risk-based calculation
     else if(InpLotMode == LOT_MODE_RISK)
     {
         double balance    = AccountInfoDouble(ACCOUNT_BALANCE);
         double riskAmount = balance * InpRiskPercent / 100.0;
         double tickSize   = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
         double tickValue  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-        double point      = SymbolInfoDouble(symbol, SYMBOL_POINT);
 
         if(tickSize > 0 && tickValue > 0 && slDistance > 0)
         {
-            // Convert SL distance in price to ticks, then to money per lot
-            double slTicks        = slDistance / tickSize;
-            double riskPerLot     = slTicks * tickValue;
-            finalLots             = riskAmount / riskPerLot;
+            double slTicks    = slDistance / tickSize;
+            double riskPerLot = slTicks * tickValue;
+            finalLots         = riskAmount / riskPerLot;
 
             PrintFormat("[LOT] Risk calc: balance=%.2f, risk%%=%.1f%%, riskAmount=%.2f",
                         balance, InpRiskPercent, riskAmount);
@@ -186,12 +260,10 @@ double _CalculateLotSize(const string &symbol, double signalLots, double slDista
         }
         else
         {
-            PrintFormat("[LOT] WARNING: Cannot calculate risk lots (tickSize=%.5f, tickValue=%.2f, slDist=%.5f). Using fixed: %.2f",
-                        tickSize, tickValue, slDistance, InpLotSize);
+            PrintFormat("[LOT] WARNING: Cannot calculate risk lots. Using fixed: %.2f", InpLotSize);
             finalLots = InpLotSize;
         }
     }
-    // Priority 3: Fixed lot
     else
     {
         finalLots = InpLotSize;
@@ -215,6 +287,22 @@ double _CalculateLotSize(const string &symbol, double signalLots, double slDista
 }
 
 //+------------------------------------------------------------------+
+//| Check if symbol exists in Market Watch                            |
+//+------------------------------------------------------------------+
+bool _ValidateSymbol(const string &symbol)
+{
+    // Try to select the symbol in Market Watch
+    if(SymbolSelect(symbol, true))
+    {
+        // Verify it has valid tick data
+        double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+        if(bid > 0)
+            return true;
+    }
+    return false;
+}
+
+//+------------------------------------------------------------------+
 //| Poll TeleTrader API for new signals                               |
 //+------------------------------------------------------------------+
 void _PollForSignals()
@@ -225,12 +313,11 @@ void _PollForSignals()
     char   resultData[];
     string resultHeaders;
 
-    int timeout = 5000; // 5 seconds
-
-    int res = WebRequest("GET", url, headers, timeout, postData, resultData, resultHeaders);
+    int res = WebRequest("GET", url, headers, 5000, postData, resultData, resultHeaders);
 
     if(res != 200)
     {
+        g_apiConnected = false;
         if(res == -1)
         {
             int err = GetLastError();
@@ -246,9 +333,8 @@ void _PollForSignals()
         return;
     }
 
+    g_apiConnected = true;
     string json = CharArrayToString(resultData);
-
-    // Parse the signals array from JSON response
     _ProcessSignalsJSON(json);
 }
 
@@ -257,14 +343,12 @@ void _PollForSignals()
 //+------------------------------------------------------------------+
 void _ProcessSignalsJSON(const string &json)
 {
-    // Find the signals array
     int arrStart = StringFind(json, "\"signals\"");
     if(arrStart < 0) return;
 
     arrStart = StringFind(json, "[", arrStart);
     if(arrStart < 0) return;
 
-    // Find matching ] for the signals array (skip nested [] inside)
     int arrEnd = _FindMatchingBracket(json, arrStart, '[', ']');
     if(arrEnd < 0) return;
 
@@ -272,16 +356,14 @@ void _ProcessSignalsJSON(const string &json)
     StringTrimLeft(arrContent);
     StringTrimRight(arrContent);
     if(StringLen(arrContent) == 0)
-        return; // empty array
+        return;
 
-    // Find each { ... } signal object, handling nested braces
     int searchPos = 0;
     while(searchPos < StringLen(arrContent))
     {
         int objStart = StringFind(arrContent, "{", searchPos);
         if(objStart < 0) break;
 
-        // Find matching } for this object (skip nested {} inside)
         int objEnd = _FindMatchingBracket(arrContent, objStart, '{', '}');
         if(objEnd < 0) break;
 
@@ -311,7 +393,7 @@ int _FindMatchingBracket(const string &text, int openPos, ushort openChar, ushor
                 return i;
         }
     }
-    return -1; // no match found
+    return -1;
 }
 
 //+------------------------------------------------------------------+
@@ -333,7 +415,7 @@ void _ProcessSingleSignal(const string &signalJson)
     if(seq > g_lastSeq)
         g_lastSeq = seq;
 
-    // Validate
+    // Validate basic fields
     if(signalId == "" || symbol == "" || direction == "" || entryPrice == 0)
     {
         PrintFormat("[SIGNAL] ERROR: Invalid signal JSON (id=%s, sym=%s, dir=%s, entry=%.5f)",
@@ -344,6 +426,25 @@ void _ProcessSingleSignal(const string &signalJson)
     // Check if already processed
     if(g_orderMgr.HasSignal(signalId))
         return;
+
+    // Validate symbol exists in MT5
+    if(!_ValidateSymbol(symbol))
+    {
+        PrintFormat("[SIGNAL] ERROR: Symbol '%s' not found in Market Watch", symbol);
+
+        if(InpNotifyTelegram)
+        {
+            _SendTelegramNotification(StringFormat(
+                "<b>Symbol Not Found</b>\n"
+                "Symbol <b>%s</b> is not available in Market Watch.\n"
+                "Signal: %s %s @ %.5f\n"
+                "Source: %s\n\n"
+                "Please check the symbol name in your broker's MT5.",
+                symbol, direction, orderType, entryPrice, source
+            ));
+        }
+        return;
+    }
 
     // Extract take profits array
     double tp1 = 0, tp2 = 0, tp3 = 0;
@@ -383,15 +484,12 @@ string _ExtractJsonString(const string &json, const string &key)
     int pos = StringFind(json, searchKey);
     if(pos < 0) return "";
 
-    // Find the colon after the key
     int colonPos = StringFind(json, ":", pos + StringLen(searchKey));
     if(colonPos < 0) return "";
 
-    // Find opening quote
     int quoteStart = StringFind(json, "\"", colonPos + 1);
     if(quoteStart < 0) return "";
 
-    // Find closing quote
     int quoteEnd = StringFind(json, "\"", quoteStart + 1);
     if(quoteEnd < 0) return "";
 
@@ -410,7 +508,6 @@ double _ExtractJsonNumber(const string &json, const string &key)
     int colonPos = StringFind(json, ":", pos + StringLen(searchKey));
     if(colonPos < 0) return 0;
 
-    // Find the start of the number (skip whitespace)
     int numStart = colonPos + 1;
     while(numStart < StringLen(json))
     {
@@ -420,11 +517,9 @@ double _ExtractJsonNumber(const string &json, const string &key)
         numStart++;
     }
 
-    // Check for null
     if(StringSubstr(json, numStart, 4) == "null")
         return 0;
 
-    // Read until non-numeric character
     string numStr = "";
     for(int i = numStart; i < StringLen(json); i++)
     {
@@ -454,7 +549,6 @@ void _ExtractTakeProfits(const string &json, double &tp1, double &tp2, double &t
 
     string tpContent = StringSubstr(json, arrStart + 1, arrEnd - arrStart - 1);
 
-    // Split by comma
     string parts[];
     int count = StringSplit(tpContent, ',', parts);
 

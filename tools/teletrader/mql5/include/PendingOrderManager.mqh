@@ -9,6 +9,7 @@
 #include <Trade/Trade.mqh>
 
 #define MAX_SIGNALS 10
+#define MAX_NOTIFICATIONS 20
 
 //+------------------------------------------------------------------+
 //| Per-signal tracking state                                         |
@@ -56,6 +57,39 @@ struct SignalOrder
 };
 
 //+------------------------------------------------------------------+
+//| Lifetime stats for dashboard                                      |
+//+------------------------------------------------------------------+
+struct TradeStats
+{
+    int    totalSignals;      // signals received from API
+    int    ordersPlaced;      // successfully placed
+    int    ordersFailed;      // failed to place
+    int    buyCount;          // buy orders placed
+    int    sellCount;         // sell orders placed
+    int    positionsActivated; // pending -> live
+    int    positionsClosed;   // fully closed
+    double realizedPnL;       // from closed positions
+    int    tp1Hits;
+    int    tp2Hits;
+    int    tp3Hits;
+
+    void Reset()
+    {
+        totalSignals = 0;
+        ordersPlaced = 0;
+        ordersFailed = 0;
+        buyCount = 0;
+        sellCount = 0;
+        positionsActivated = 0;
+        positionsClosed = 0;
+        realizedPnL = 0;
+        tp1Hits = 0;
+        tp2Hits = 0;
+        tp3Hits = 0;
+    }
+};
+
+//+------------------------------------------------------------------+
 //| Pending Order Manager                                             |
 //+------------------------------------------------------------------+
 class CPendingOrderManager
@@ -72,13 +106,21 @@ private:
     bool          m_enablePartialTP;
     bool          m_enableTrailing;
 
+    // Notification queue — EA drains this via GetNotification()
+    string        m_notifications[MAX_NOTIFICATIONS];
+    int           m_notifyCount;
+
 public:
+    TradeStats    Stats;  // public so EA can read for dashboard
+
     CPendingOrderManager() : m_magic(20260410), m_tp1Pct(30), m_tp2Pct(50),
                              m_tp3Pct(10), m_residualPct(10), m_trailingPoints(200),
-                             m_enablePartialTP(true), m_enableTrailing(true)
+                             m_enablePartialTP(true), m_enableTrailing(true),
+                             m_notifyCount(0)
     {
         for(int i = 0; i < MAX_SIGNALS; i++)
             m_signals[i].Reset();
+        Stats.Reset();
     }
 
     void Init(int magic, double slippage = 3)
@@ -100,6 +142,21 @@ public:
     void SetPartialTPEnabled(bool enabled) { m_enablePartialTP = enabled; }
     void SetTrailingEnabled(bool enabled)  { m_enableTrailing = enabled; }
 
+    //--- Notification queue ---
+    bool HasNotifications()     { return m_notifyCount > 0; }
+    int  NotificationCount()    { return m_notifyCount; }
+
+    string PopNotification()
+    {
+        if(m_notifyCount <= 0) return "";
+        string msg = m_notifications[0];
+        // Shift remaining
+        for(int i = 1; i < m_notifyCount; i++)
+            m_notifications[i-1] = m_notifications[i];
+        m_notifyCount--;
+        return msg;
+    }
+
     //--- Check if signal already exists (deduplication)
     bool HasSignal(const string &signalId)
     {
@@ -117,6 +174,8 @@ public:
                     double entryPrice, double stopLoss,
                     double tp1, double tp2, double tp3, double lots)
     {
+        Stats.totalSignals++;
+
         if(HasSignal(signalId))
             return false; // already placed
 
@@ -124,6 +183,7 @@ public:
         if(slot < 0)
         {
             PrintFormat("[ORDER] ERROR: No free slots for signal %s (max %d)", signalId, MAX_SIGNALS);
+            Stats.ordersFailed++;
             return false;
         }
 
@@ -136,6 +196,7 @@ public:
         else
         {
             PrintFormat("[ORDER] ERROR: Unknown order type: %s (signal %s)", orderTypeStr, signalId);
+            Stats.ordersFailed++;
             return false;
         }
 
@@ -144,6 +205,7 @@ public:
         if(normLots <= 0)
         {
             PrintFormat("[ORDER] ERROR: Lot size too small for %s (requested %.4f)", symbol, lots);
+            Stats.ordersFailed++;
             return false;
         }
 
@@ -189,13 +251,41 @@ public:
             m_signals[slot].trailingActive = false;
             m_signals[slot].closed        = false;
 
+            Stats.ordersPlaced++;
+            if(direction > 0) Stats.buyCount++;
+            else              Stats.sellCount++;
+
             PrintFormat("[ORDER] SUCCESS: %s %s ticket=%d, signal=%s",
                         orderTypeStr, symbol, m_signals[slot].orderTicket, signalId);
+
+            string dir = (direction > 0) ? "BUY" : "SELL";
+            _QueueNotification(StringFormat(
+                "<b>Order Placed</b>\n"
+                "%s %s %s\n"
+                "Entry: %.5f\n"
+                "SL: %.5f\n"
+                "TP1: %.5f | TP2: %.5f | TP3: %.5f\n"
+                "Lots: %.2f\n"
+                "Partial TP: %s | Trailing: %s",
+                symbol, dir, orderTypeStr,
+                normEntry, normSL, tp1, tp2, tp3, normLots,
+                m_enablePartialTP ? "ON" : "OFF",
+                m_enableTrailing ? "ON" : "OFF"
+            ));
         }
         else
         {
-            PrintFormat("[ORDER] FAILED: %s — %s (retcode=%d)",
+            Stats.ordersFailed++;
+            PrintFormat("[ORDER] FAILED: %s - %s (retcode=%d)",
                         signalId, m_trade.ResultRetcodeDescription(), m_trade.ResultRetcode());
+
+            _QueueNotification(StringFormat(
+                "<b>Order FAILED</b>\n"
+                "%s %s\n"
+                "Error: %s (code %d)",
+                symbol, orderTypeStr,
+                m_trade.ResultRetcodeDescription(), m_trade.ResultRetcode()
+            ));
         }
 
         return result;
@@ -220,10 +310,21 @@ public:
                 {
                     m_signals[i].positionTicket = trans.position;
                     m_signals[i].activated = true;
+                    Stats.positionsActivated++;
+
+                    string dir = (m_signals[i].direction > 0) ? "BUY" : "SELL";
                     PrintFormat("[ACTIVATE] Signal %s activated! %s %s @ %.5f, position=%d",
                                 m_signals[i].signalId, m_signals[i].symbol,
-                                (m_signals[i].direction > 0 ? "BUY" : "SELL"),
-                                m_signals[i].entryPrice, trans.position);
+                                dir, m_signals[i].entryPrice, trans.position);
+
+                    _QueueNotification(StringFormat(
+                        "<b>Position Activated</b>\n"
+                        "%s %s @ %.5f\n"
+                        "Lots: %.2f | Position: %d",
+                        m_signals[i].symbol, dir,
+                        m_signals[i].entryPrice,
+                        m_signals[i].lots, trans.position
+                    ));
                     break;
                 }
             }
@@ -241,6 +342,12 @@ public:
                 {
                     PrintFormat("[ORDER] Pending order DELETED for signal %s (%s)",
                                 m_signals[i].signalId, m_signals[i].symbol);
+
+                    _QueueNotification(StringFormat(
+                        "<b>Order Deleted</b>\n"
+                        "%s pending order removed",
+                        m_signals[i].symbol
+                    ));
                     m_signals[i].Reset();
                     break;
                 }
@@ -260,8 +367,17 @@ public:
             if(!PositionSelectByTicket(m_signals[i].positionTicket))
             {
                 double pnl = _GetPositionPnLFromHistory(m_signals[i].positionTicket);
+                Stats.realizedPnL += pnl;
+                Stats.positionsClosed++;
                 PrintFormat("[CLOSE] Position closed externally for signal %s (%s), P&L=%.2f",
                             m_signals[i].signalId, m_signals[i].symbol, pnl);
+
+                _QueueNotification(StringFormat(
+                    "<b>Position Closed</b>\n"
+                    "%s closed externally\n"
+                    "P&L: %.2f",
+                    m_signals[i].symbol, pnl
+                ));
                 m_signals[i].closed = true;
                 m_signals[i].Reset();
                 continue;
@@ -271,9 +387,9 @@ public:
             double currentPrice;
 
             if(m_signals[i].direction > 0)
-                currentPrice = SymbolInfoDouble(sym, SYMBOL_BID);  // close price for longs
+                currentPrice = SymbolInfoDouble(sym, SYMBOL_BID);
             else
-                currentPrice = SymbolInfoDouble(sym, SYMBOL_ASK);  // close price for shorts
+                currentPrice = SymbolInfoDouble(sym, SYMBOL_ASK);
 
             // If partial TP is disabled, just close 100% at TP1
             if(!m_enablePartialTP)
@@ -310,7 +426,150 @@ public:
         return count;
     }
 
+    //--- Get count of pending (not yet activated) orders
+    int PendingCount()
+    {
+        int count = 0;
+        for(int i = 0; i < MAX_SIGNALS; i++)
+            if(m_signals[i].active && !m_signals[i].activated) count++;
+        return count;
+    }
+
+    //--- Get count of live (activated, not closed) positions
+    int LiveCount()
+    {
+        int count = 0;
+        for(int i = 0; i < MAX_SIGNALS; i++)
+            if(m_signals[i].active && m_signals[i].activated && !m_signals[i].closed) count++;
+        return count;
+    }
+
+    //--- Get total unrealized P&L across all live positions
+    double GetUnrealizedPnL()
+    {
+        double total = 0;
+        for(int i = 0; i < MAX_SIGNALS; i++)
+        {
+            if(!m_signals[i].active || !m_signals[i].activated || m_signals[i].closed)
+                continue;
+            if(PositionSelectByTicket(m_signals[i].positionTicket))
+                total += PositionGetDouble(POSITION_PROFIT);
+        }
+        return total;
+    }
+
+    //--- Build dashboard string for chart Comment()
+    string GetDashboardText(bool apiConnected, datetime lastPollTime, int lastSeq)
+    {
+        double unrealizedPnL = GetUnrealizedPnL();
+        double totalPnL = Stats.realizedPnL + unrealizedPnL;
+
+        string dash = "";
+        dash += "========================================\n";
+        dash += "         TELETRADER EA v2.0\n";
+        dash += "========================================\n";
+        dash += "\n";
+
+        // Connection
+        dash += StringFormat("API Status:    %s\n", apiConnected ? "CONNECTED" : "DISCONNECTED");
+        dash += StringFormat("Last Poll:     %s\n", (lastPollTime > 0) ? TimeToString(lastPollTime, TIME_DATE|TIME_SECONDS) : "Never");
+        dash += StringFormat("Signal Cursor: %d\n", lastSeq);
+        dash += "\n";
+
+        // Account
+        dash += StringFormat("Balance:  %.2f %s\n", AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoString(ACCOUNT_CURRENCY));
+        dash += StringFormat("Equity:   %.2f\n", AccountInfoDouble(ACCOUNT_EQUITY));
+        dash += StringFormat("Margin:   %.2f\n", AccountInfoDouble(ACCOUNT_MARGIN_FREE));
+        dash += "\n";
+
+        // P&L
+        dash += "--- P&L ---\n";
+        dash += StringFormat("Realized:    %+.2f\n", Stats.realizedPnL);
+        dash += StringFormat("Unrealized:  %+.2f\n", unrealizedPnL);
+        dash += StringFormat("Total:       %+.2f\n", totalPnL);
+        dash += "\n";
+
+        // Trade counts
+        dash += "--- Trades ---\n";
+        dash += StringFormat("Signals:     %d\n", Stats.totalSignals);
+        dash += StringFormat("Placed:      %d  (Buy: %d | Sell: %d)\n", Stats.ordersPlaced, Stats.buyCount, Stats.sellCount);
+        dash += StringFormat("Failed:      %d\n", Stats.ordersFailed);
+        dash += StringFormat("Activated:   %d\n", Stats.positionsActivated);
+        dash += StringFormat("Closed:      %d\n", Stats.positionsClosed);
+        dash += "\n";
+
+        // TP Stats
+        if(m_enablePartialTP)
+        {
+            dash += "--- Partial TP ---\n";
+            dash += StringFormat("TP1 Hits:  %d\n", Stats.tp1Hits);
+            dash += StringFormat("TP2 Hits:  %d\n", Stats.tp2Hits);
+            dash += StringFormat("TP3 Hits:  %d\n", Stats.tp3Hits);
+            dash += "\n";
+        }
+
+        // Active positions detail
+        dash += "--- Active Positions ---\n";
+        int liveCount = 0;
+        for(int i = 0; i < MAX_SIGNALS; i++)
+        {
+            if(!m_signals[i].active || !m_signals[i].activated || m_signals[i].closed)
+                continue;
+
+            liveCount++;
+            string dir = (m_signals[i].direction > 0) ? "BUY" : "SELL";
+            string tpStatus = "";
+            if(m_signals[i].tp1Hit) tpStatus += "TP1 ";
+            if(m_signals[i].tp2Hit) tpStatus += "TP2 ";
+            if(m_signals[i].tp3Hit) tpStatus += "TP3 ";
+            if(m_signals[i].trailingActive) tpStatus += "[TRAIL]";
+            if(tpStatus == "") tpStatus = "Waiting";
+
+            double posPnL = 0;
+            double posVol = 0;
+            if(PositionSelectByTicket(m_signals[i].positionTicket))
+            {
+                posPnL = PositionGetDouble(POSITION_PROFIT);
+                posVol = PositionGetDouble(POSITION_VOLUME);
+            }
+
+            dash += StringFormat("  %s %s %.2f lots | P&L: %+.2f | %s\n",
+                                 m_signals[i].symbol, dir, posVol, posPnL, tpStatus);
+        }
+
+        // Pending orders
+        for(int i = 0; i < MAX_SIGNALS; i++)
+        {
+            if(!m_signals[i].active || m_signals[i].activated)
+                continue;
+
+            string dir = (m_signals[i].direction > 0) ? "BUY" : "SELL";
+            dash += StringFormat("  %s %s @ %.5f [PENDING]\n",
+                                 m_signals[i].symbol, dir, m_signals[i].entryPrice);
+            liveCount++;
+        }
+
+        if(liveCount == 0)
+            dash += "  (none)\n";
+
+        dash += "========================================\n";
+        return dash;
+    }
+
 private:
+    void _QueueNotification(const string &msg)
+    {
+        if(m_notifyCount >= MAX_NOTIFICATIONS)
+        {
+            // Drop oldest
+            for(int i = 1; i < MAX_NOTIFICATIONS; i++)
+                m_notifications[i-1] = m_notifications[i];
+            m_notifyCount = MAX_NOTIFICATIONS - 1;
+        }
+        m_notifications[m_notifyCount] = msg;
+        m_notifyCount++;
+    }
+
     int _FindFreeSlot()
     {
         for(int i = 0; i < MAX_SIGNALS; i++)
@@ -321,7 +580,6 @@ private:
     bool _IsPositionFromOrder(ulong posTicket, ulong orderTicket)
     {
         if(posTicket == 0 || orderTicket == 0) return false;
-        // Check via history
         if(HistorySelectByPosition(posTicket))
         {
             int total = HistoryDealsTotal();
@@ -335,7 +593,6 @@ private:
         return false;
     }
 
-    //--- Get realized P&L from deal history for a position
     double _GetPositionPnLFromHistory(ulong posTicket)
     {
         double totalPnL = 0;
@@ -365,7 +622,6 @@ private:
         if(hitTP)
         {
             if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
-            double unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
             double volume = PositionGetDouble(POSITION_VOLUME);
 
             if(m_trade.PositionClose(m_signals[idx].positionTicket))
@@ -373,9 +629,19 @@ private:
                 m_signals[idx].tp1Hit = true;
                 m_signals[idx].closed = true;
                 double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                Stats.realizedPnL += finalPnL;
+                Stats.positionsClosed++;
+                Stats.tp1Hits++;
                 PrintFormat("[CLOSE] %s signal=%s: TP1 hit, closed %.2f lots @ %.5f, P&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             volume, currentPrice, finalPnL);
+
+                _QueueNotification(StringFormat(
+                    "<b>TP1 Hit - Full Close</b>\n"
+                    "%s closed %.2f lots @ %.5f\n"
+                    "P&L: %+.2f",
+                    m_signals[idx].symbol, volume, currentPrice, finalPnL
+                ));
             }
         }
     }
@@ -392,13 +658,22 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp1Hit = true;
+                Stats.tp1Hits++;
                 double remainLots = totalLots - closeLots;
                 PrintFormat("[TP1] %s signal=%s: closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             closeLots, currentPrice, remainLots, unrealizedPnL);
-                // Move SL to breakeven
                 _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
                 PrintFormat("[TP1] SL moved to breakeven @ %.5f", m_signals[idx].entryPrice);
+
+                _QueueNotification(StringFormat(
+                    "<b>TP1 Hit</b>\n"
+                    "%s closed %.2f lots @ %.5f\n"
+                    "Remaining: %.2f lots\n"
+                    "SL moved to breakeven (%.5f)",
+                    m_signals[idx].symbol, closeLots, currentPrice,
+                    remainLots, m_signals[idx].entryPrice
+                ));
             }
         }
 
@@ -413,10 +688,18 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp2Hit = true;
+                Stats.tp2Hits++;
                 double remainLots = totalLots - closeLots;
                 PrintFormat("[TP2] %s signal=%s: closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             closeLots, currentPrice, remainLots, unrealizedPnL);
+
+                _QueueNotification(StringFormat(
+                    "<b>TP2 Hit</b>\n"
+                    "%s closed %.2f lots @ %.5f\n"
+                    "Remaining: %.2f lots",
+                    m_signals[idx].symbol, closeLots, currentPrice, remainLots
+                ));
             }
         }
 
@@ -433,26 +716,45 @@ private:
                 if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
                     m_signals[idx].tp3Hit = true;
+                    Stats.tp3Hits++;
                     double remainLots = totalLots - closeLots;
                     double realizedPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
                     PrintFormat("[TP3] %s signal=%s: closed %.2f lots @ %.5f, trailing residual=%.2f lots",
                                 m_signals[idx].symbol, m_signals[idx].signalId,
                                 closeLots, currentPrice, remainLots);
                     PrintFormat("[TP3] Realized P&L so far: %.2f, unrealized: %.2f", realizedPnL, unrealizedPnL);
+
+                    string trailMsg = m_enableTrailing ? "Trailing SL active" : "No trailing (disabled)";
+                    _QueueNotification(StringFormat(
+                        "<b>TP3 Hit</b>\n"
+                        "%s closed %.2f lots @ %.5f\n"
+                        "Residual: %.2f lots\n"
+                        "%s",
+                        m_signals[idx].symbol, closeLots, currentPrice, remainLots, trailMsg
+                    ));
                 }
             }
             else
             {
-                // No residual: close everything
                 if(!PositionSelectByTicket(m_signals[idx].positionTicket)) return;
                 unrealizedPnL = PositionGetDouble(POSITION_PROFIT);
                 m_trade.PositionClose(m_signals[idx].positionTicket);
                 m_signals[idx].tp3Hit = true;
                 m_signals[idx].closed = true;
+                Stats.tp3Hits++;
                 double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                Stats.realizedPnL += finalPnL;
+                Stats.positionsClosed++;
                 PrintFormat("[CLOSE] %s signal=%s: fully closed @ %.5f, final P&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             currentPrice, finalPnL);
+
+                _QueueNotification(StringFormat(
+                    "<b>All TPs Hit - Closed</b>\n"
+                    "%s fully closed @ %.5f\n"
+                    "Final P&L: %+.2f",
+                    m_signals[idx].symbol, currentPrice, finalPnL
+                ));
             }
         }
     }
@@ -469,12 +771,22 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp1Hit = true;
+                Stats.tp1Hits++;
                 double remainLots = totalLots - closeLots;
                 PrintFormat("[TP1] %s signal=%s (short): closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             closeLots, currentPrice, remainLots, unrealizedPnL);
                 _ModifySL(m_signals[idx].positionTicket, m_signals[idx].entryPrice);
                 PrintFormat("[TP1] SL moved to breakeven @ %.5f", m_signals[idx].entryPrice);
+
+                _QueueNotification(StringFormat(
+                    "<b>TP1 Hit (Short)</b>\n"
+                    "%s closed %.2f lots @ %.5f\n"
+                    "Remaining: %.2f lots\n"
+                    "SL moved to breakeven (%.5f)",
+                    m_signals[idx].symbol, closeLots, currentPrice,
+                    remainLots, m_signals[idx].entryPrice
+                ));
             }
         }
 
@@ -489,10 +801,18 @@ private:
             if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
             {
                 m_signals[idx].tp2Hit = true;
+                Stats.tp2Hits++;
                 double remainLots = totalLots - closeLots;
                 PrintFormat("[TP2] %s signal=%s (short): closed %.2f lots @ %.5f, remaining=%.2f lots, unrealizedP&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             closeLots, currentPrice, remainLots, unrealizedPnL);
+
+                _QueueNotification(StringFormat(
+                    "<b>TP2 Hit (Short)</b>\n"
+                    "%s closed %.2f lots @ %.5f\n"
+                    "Remaining: %.2f lots",
+                    m_signals[idx].symbol, closeLots, currentPrice, remainLots
+                ));
             }
         }
 
@@ -509,12 +829,22 @@ private:
                 if(closeLots > 0 && m_trade.PositionClosePartial(m_signals[idx].positionTicket, closeLots))
                 {
                     m_signals[idx].tp3Hit = true;
+                    Stats.tp3Hits++;
                     double remainLots = totalLots - closeLots;
                     double realizedPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
                     PrintFormat("[TP3] %s signal=%s (short): closed %.2f lots @ %.5f, trailing residual=%.2f lots",
                                 m_signals[idx].symbol, m_signals[idx].signalId,
                                 closeLots, currentPrice, remainLots);
                     PrintFormat("[TP3] Realized P&L so far: %.2f, unrealized: %.2f", realizedPnL, unrealizedPnL);
+
+                    string trailMsg = m_enableTrailing ? "Trailing SL active" : "No trailing (disabled)";
+                    _QueueNotification(StringFormat(
+                        "<b>TP3 Hit (Short)</b>\n"
+                        "%s closed %.2f lots @ %.5f\n"
+                        "Residual: %.2f lots\n"
+                        "%s",
+                        m_signals[idx].symbol, closeLots, currentPrice, remainLots, trailMsg
+                    ));
                 }
             }
             else
@@ -524,10 +854,20 @@ private:
                 m_trade.PositionClose(m_signals[idx].positionTicket);
                 m_signals[idx].tp3Hit = true;
                 m_signals[idx].closed = true;
+                Stats.tp3Hits++;
                 double finalPnL = _GetPositionPnLFromHistory(m_signals[idx].positionTicket);
+                Stats.realizedPnL += finalPnL;
+                Stats.positionsClosed++;
                 PrintFormat("[CLOSE] %s signal=%s (short): fully closed @ %.5f, final P&L=%.2f",
                             m_signals[idx].symbol, m_signals[idx].signalId,
                             currentPrice, finalPnL);
+
+                _QueueNotification(StringFormat(
+                    "<b>All TPs Hit - Closed (Short)</b>\n"
+                    "%s fully closed @ %.5f\n"
+                    "Final P&L: %+.2f",
+                    m_signals[idx].symbol, currentPrice, finalPnL
+                ));
             }
         }
     }
@@ -543,7 +883,6 @@ private:
 
         if(m_signals[idx].direction > 0)
         {
-            // Long: trail SL below price
             double newSL = NormalizeDouble(currentPrice - m_trailingPoints * point, digits);
             if(newSL > currentSL && newSL > m_signals[idx].entryPrice)
             {
@@ -557,7 +896,6 @@ private:
         }
         else
         {
-            // Short: trail SL above price
             double newSL = NormalizeDouble(currentPrice + m_trailingPoints * point, digits);
             if((currentSL == 0 || newSL < currentSL) && newSL < m_signals[idx].entryPrice)
             {

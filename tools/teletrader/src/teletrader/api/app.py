@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -38,6 +39,10 @@ app.state.signal_store = signal_store
 class SignalIngestRequest(BaseModel):
     raw_text: str
     source: str = "unknown"
+
+
+class NotifyRequest(BaseModel):
+    message: str
 
 
 @app.get("/health")
@@ -131,3 +136,34 @@ def get_signals(since: int = 0) -> dict:
     return {
         "signals": [s.to_ea_dict() for s in signals],
     }
+
+
+@app.post("/api/v1/notify")
+async def send_notification(body: NotifyRequest) -> dict:
+    """Send a notification message to Telegram via the bot.
+
+    Called by the EA to report trade events back to the user.
+    """
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        logger.warning("[NOTIFY] Bot token or chat ID not configured")
+        raise HTTPException(status_code=503, detail="Telegram bot not configured")
+
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    payload = {
+        "chat_id": settings.telegram_chat_id,
+        "text": body.message,
+        "parse_mode": "HTML",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                logger.info("[NOTIFY] Telegram message sent: %s", body.message[:80])
+                return {"status": "sent"}
+            else:
+                logger.warning("[NOTIFY] Telegram API error: %s", resp.text)
+                return {"status": "error", "detail": resp.text}
+    except Exception as e:
+        logger.exception("[NOTIFY] Failed to send Telegram message")
+        raise HTTPException(status_code=502, detail=str(e))
