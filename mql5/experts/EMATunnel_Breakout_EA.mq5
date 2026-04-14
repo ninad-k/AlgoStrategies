@@ -1,40 +1,29 @@
 //+------------------------------------------------------------------+
 //|                                    EMATunnel_Breakout_EA.mq5    |
 //|                                         AlgoStrategies           |
-//|  Triple EMA Tunnel Breakout Strategy                             |
+//|  EMA Point Tunnel Breakout Strategy                              |
 //|                                                                  |
-//|  Three EMAs (Fast/Mid/Slow) form a price "tunnel".               |
-//|  Entries are taken ONLY when price breaks OUTSIDE the tunnel,    |
+//|  Single EMA with fixed point tunnel above/below.                 |
+//|  Entries taken ONLY when price breaks OUTSIDE the tunnel,        |
 //|  eliminating low-quality trades during consolidation.            |
 //|                                                                  |
-//|  New vs EMA200Squeeze_EA:                                        |
-//|  + EMA Fast (150) + EMA Slow (250) added alongside EMA Mid (200) |
-//|  + Band Breakout filter  - close must be outside Fast/Slow band  |
-//|  + EMA Stack filter      - all 3 EMAs must be aligned            |
-//|  + Minimum Band Width    - tunnel must be wide (not compressed)  |
-//|  + EMA Slope filter      - Mid EMA must slope in trade direction  |
-//|  + Candle Body filter    - signal bar must have directional body  |
+//|  Tunnel = EMA(200) +/- TunnelPoints                              |
+//|  Upper band = EMA + TunnelPoints * _Point                        |
+//|  Lower band = EMA - TunnelPoints * _Point                        |
+//|                                                                  |
+//|  Consolidation avoidance filters:                                |
+//|  1. Point tunnel breakout: close beyond EMA +/- tunnel points    |
+//|  2. EMA slope: EMA must be rising/falling in trade direction     |
+//|  3. Candle body: strong directional candle on signal bar         |
+//|  4. ADX filter: inherited from EMA200Squeeze                     |
+//|                                                                  |
 //|  All original features preserved: 3 partial TPs, trailing SL,   |
 //|  SuperTrend trail, ADX filter, P&L dashboard, reverse on exit.   |
-//|                                                                  |
-//|  Consolidation avoidance — implemented filters:                  |
-//|  1. Tunnel breakout  : close beyond EMA_Fast/EMA_Slow band       |
-//|  2. EMA stack align  : 150>200>250 (bull) or 150<200<250 (bear)  |
-//|  3. Band width       : min pips between EMA_Fast & EMA_Slow      |
-//|  4. EMA slope        : Mid EMA must be rising/falling            |
-//|  5. Candle body      : strong directional candle on signal bar   |
-//|  6. ADX filter       : inherited from EMA200Squeeze              |
-//|                                                                  |
-//|  Future consolidation filters (not yet implemented):             |
-//|  - Bollinger Band Width < threshold => skip (BB squeeze)         |
-//|  - Choppiness Index > 61.8 => skip (CI consolidation zone)       |
-//|  - Volume < N-bar avg => skip (low participation)                |
-//|  - Fractal swing breakout confirmation                           |
 //+------------------------------------------------------------------+
 #property copyright "AlgoStrategies"
 #property link      ""
-#property version   "1.00"
-#property description "Triple EMA Tunnel Breakout: trade only on breakout outside the EMA Fast/Mid/Slow band"
+#property version   "2.00"
+#property description "EMA Point Tunnel Breakout: trade only on breakout outside EMA +/- fixed point band"
 
 #include <Trade\Trade.mqh>
 
@@ -42,8 +31,8 @@
 //| Enums                                                            |
 //+------------------------------------------------------------------+
 enum ENUM_EXIT_MODE {
-   EXIT_CANDLE_CLOSE,   // Candle Close (close crosses Mid EMA)
-   EXIT_CANDLE_TOUCH    // Candle Touch (wick crosses Mid EMA)
+   EXIT_CANDLE_CLOSE,   // Candle Close (close crosses EMA)
+   EXIT_CANDLE_TOUCH    // Candle Touch (wick crosses EMA)
 };
 
 enum ENUM_LOT_MODE {
@@ -54,18 +43,15 @@ enum ENUM_LOT_MODE {
 //+------------------------------------------------------------------+
 //| Input Parameters                                                 |
 //+------------------------------------------------------------------+
-sinput string sep0 = "=== Triple EMA Tunnel ===";
-input int              InpEMAFastLen    = 150;                        // Fast EMA Length
-input int              InpEMAMidLen     = 200;                        // Mid EMA Length  (core signal)
-input int              InpEMASlowLen    = 250;                        // Slow EMA Length
-input ENUM_EXIT_MODE   InpExitMode      = EXIT_CANDLE_CLOSE;          // Exit Mode (based on Mid EMA)
+sinput string sep0 = "=== EMA Point Tunnel ===";
+input int              InpEMALen        = 200;                        // EMA Length
+input int              InpTunnelPoints  = 50;                         // Tunnel Width (points above & below EMA)
+input ENUM_EXIT_MODE   InpExitMode      = EXIT_CANDLE_CLOSE;          // Exit Mode (based on EMA line)
 
 sinput string sep0b = "=== Consolidation Filters ===";
-input bool             InpUseBandBreak  = true;                       // Require close OUTSIDE Fast/Slow band
-input int              InpMinBandPips   = 5;                          // Min band width in pips (0=OFF)
+input bool             InpUseBandBreak  = true;                       // Require close OUTSIDE tunnel band
 input int              InpMinGapPips    = 0;                          // Min extra pips beyond band (0=OFF)
-input bool             InpUseEMAStack   = true;                       // Require full EMA alignment (150>200>250)
-input bool             InpUseEMASlope   = false;                      // Require Mid EMA sloping in trade direction
+input bool             InpUseEMASlope   = false;                      // Require EMA sloping in trade direction
 input bool             InpUseBodyFilter = false;                      // Require directional candle body
 input int              InpMinBodyPips   = 3;                          // Min candle body size in pips
 
@@ -102,7 +88,7 @@ input double           InpTSLTriggerPct = 1.5;
 input double           InpTSLOffsetPct  = 0.5;
 
 sinput string sep4 = "=== Display ===";
-input bool             InpShowEMA       = true;                       // Plot all 3 EMA Lines
+input bool             InpShowEMA       = true;                       // Plot EMA Line + Tunnel Bands
 input bool             InpShowSignals   = true;
 input bool             InpShowTPLines   = true;
 input bool             InpShowDashboard = true;
@@ -116,18 +102,17 @@ input string           InpComment       = "EMATunnel";
 //+------------------------------------------------------------------+
 CTrade g_Trade;
 
-// Triple EMA
-double g_EMA_FAST     = 0;
-double g_EMA_MID      = 0;
-double g_EMA_SLOW     = 0;
+// EMA
+double g_EMA          = 0;
 bool   g_EMAInitialized = false;
-double g_PrevEMA_FAST = 0;
-double g_PrevEMA_MID  = 0;
-double g_PrevEMA_SLOW = 0;
+double g_PrevEMA      = 0;
+double g_PrevClose    = 0;
+double g_PrevHigh     = 0;
+double g_PrevLow      = 0;
 datetime g_PrevBarTime = 0;
-int    g_EMAFastLineCount = 0;
-int    g_EMAMidLineCount  = 0;
-int    g_EMASlowLineCount = 0;
+int    g_EMALineCount = 0;
+int    g_BandUpperCount = 0;
+int    g_BandLowerCount = 0;
 
 // SuperTrend
 double g_STUpperBand  = 0;
@@ -153,9 +138,6 @@ double g_SmoothedMinusDM = 0;
 double g_SmoothedDX   = 0;
 int    g_ADXBarCount  = 0;
 bool   g_ADXInitialized = false;
-double g_PrevClose    = 0;
-double g_PrevHigh     = 0;
-double g_PrevLow      = 0;
 
 // Trade state
 int    g_TradeState   = 0;
@@ -170,7 +152,7 @@ bool   g_TSLActive    = false;
 
 // Dashboard
 #define DASH_PREFIX "EMATunnel_"
-#define DASH_ROWS   17
+#define DASH_ROWS   15
 
 // Stats
 int    g_TotalTrades  = 0;
@@ -188,15 +170,15 @@ double g_TotalLossAmt = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   if(InpEMAFastLen <= 0 || InpEMAMidLen <= 0 || InpEMASlowLen <= 0)
-   { Print("All EMA lengths must be > 0"); return INIT_FAILED; }
-   if(InpEMAFastLen >= InpEMAMidLen || InpEMAMidLen >= InpEMASlowLen)
-   { Print("Required: EMAFast < EMAMid < EMASlow (e.g. 150 < 200 < 250)"); return INIT_FAILED; }
+   if(InpEMALen <= 0)
+   { Print("EMA length must be > 0"); return INIT_FAILED; }
+   if(InpTunnelPoints <= 0)
+   { Print("Tunnel points must be > 0"); return INIT_FAILED; }
 
-   g_EMA_FAST = g_EMA_MID = g_EMA_SLOW = 0;
-   g_PrevEMA_FAST = g_PrevEMA_MID = g_PrevEMA_SLOW = 0;
+   g_EMA = 0;
+   g_PrevEMA = 0;
    g_PrevBarTime = 0;
-   g_EMAFastLineCount = g_EMAMidLineCount = g_EMASlowLineCount = 0;
+   g_EMALineCount = g_BandUpperCount = g_BandLowerCount = 0;
    g_EMAInitialized = false;
 
    g_STInitialized = false;
@@ -260,72 +242,50 @@ void OnTick()
    double lowPrice   = iLow(_Symbol, PERIOD_CURRENT, 1);
    datetime barTime  = iTime(_Symbol, PERIOD_CURRENT, 1);
 
-   // Warmup: seed all three EMAs with first close
+   // Warmup: seed EMA with first close
    if(!g_EMAInitialized)
    {
-      g_EMA_FAST = g_EMA_MID = g_EMA_SLOW = closePrice;
+      g_EMA = closePrice;
       g_EMAInitialized = true;
       return;
    }
 
-   // Update all three EMAs
-   double kF = 2.0 / (InpEMAFastLen + 1);
-   double kM = 2.0 / (InpEMAMidLen  + 1);
-   double kS = 2.0 / (InpEMASlowLen + 1);
-   g_EMA_FAST = closePrice * kF + g_EMA_FAST * (1.0 - kF);
-   g_EMA_MID  = closePrice * kM + g_EMA_MID  * (1.0 - kM);
-   g_EMA_SLOW = closePrice * kS + g_EMA_SLOW * (1.0 - kS);
+   // Update EMA
+   double k = 2.0 / (InpEMALen + 1);
+   g_EMA = closePrice * k + g_EMA * (1.0 - k);
 
-   // SuperTrend + ADX (use Mid EMA bar data)
+   // SuperTrend + ADX
    if(InpUseSTTrail) CalcSuperTrend(highPrice, lowPrice, closePrice);
    if(InpUseADX)     CalcADX(highPrice, lowPrice, closePrice);
 
    SyncTradeState();
 
-   // ── Tunnel geometry ────────────────────────────────────────────
-   double upperBand  = MathMax(g_EMA_FAST, g_EMA_SLOW);   // top of tunnel
-   double lowerBand  = MathMin(g_EMA_FAST, g_EMA_SLOW);   // bottom of tunnel
-   double bandWidth  = upperBand - lowerBand;
+   // ── Point tunnel geometry ──────────────────────────────────────
+   double tunnelDist = InpTunnelPoints * _Point;
+   double upperBand  = g_EMA + tunnelDist;     // EMA + points
+   double lowerBand  = g_EMA - tunnelDist;     // EMA - points
 
-   // ── Core signal (same as EMA200Squeeze) ────────────────────────
-   bool emaTouched   = (lowPrice <= g_EMA_MID && highPrice >= g_EMA_MID);
-   bool prevBarBelow = (g_PrevClose < g_PrevEMA_MID);
-   bool prevBarAbove = (g_PrevClose > g_PrevEMA_MID);
+   // ── Core signal: price touches EMA and closes on the other side
+   bool emaTouched   = (lowPrice <= g_EMA && highPrice >= g_EMA);
+   bool prevBarBelow = (g_PrevClose < g_PrevEMA);
+   bool prevBarAbove = (g_PrevClose > g_PrevEMA);
 
-   // ── Consolidation filter 1: Band Breakout ──────────────────────
-   // Price must close cleanly OUTSIDE the EMA_Fast/EMA_Slow tunnel.
-   // If price is inside the tunnel, the EMAs haven't separated yet
-   // — we are likely in a consolidation / mean-reversion phase.
+   // ── Filter 1: Point Tunnel Breakout ────────────────────────────
+   // Close must be cleanly OUTSIDE the EMA +/- tunnel band.
+   // If price is inside the band, we're in the consolidation zone.
    bool aboveTunnel = !InpUseBandBreak ||
                       (closePrice >= upperBand + InpMinGapPips * _Point);
    bool belowTunnel = !InpUseBandBreak ||
                       (closePrice <= lowerBand - InpMinGapPips * _Point);
 
-   // ── Consolidation filter 2: Band Width ─────────────────────────
-   // If the tunnel is very narrow the three EMAs are compressed —
-   // a classic consolidation signature. Skip until the band opens.
-   bool bandWide = (InpMinBandPips <= 0) ||
-                   (bandWidth >= InpMinBandPips * _Point);
+   // ── Filter 2: EMA Slope ────────────────────────────────────────
+   // EMA must be sloping in the trade direction.
+   bool emaRising   = (g_EMA > g_PrevEMA);
+   bool emaFalling  = (g_EMA < g_PrevEMA);
+   bool slopeOKBuy  = !InpUseEMASlope || emaRising;
+   bool slopeOKSell = !InpUseEMASlope || emaFalling;
 
-   // ── Consolidation filter 3: EMA Stack Alignment ────────────────
-   // A true trend requires all three EMAs in perfect order.
-   // Mixed or flat stacks indicate sideways / transitional price action.
-   bool bullishStack = (g_EMA_FAST > g_EMA_MID && g_EMA_MID > g_EMA_SLOW);
-   bool bearishStack = (g_EMA_FAST < g_EMA_MID && g_EMA_MID < g_EMA_SLOW);
-   bool stackOKBuy   = !InpUseEMAStack || bullishStack;
-   bool stackOKSell  = !InpUseEMAStack || bearishStack;
-
-   // ── Consolidation filter 4: EMA Slope ──────────────────────────
-   // Mid EMA must currently be sloping in the trade direction.
-   // A flat or reversing Mid EMA suggests fading momentum.
-   bool emaMidRising  = (g_EMA_MID > g_PrevEMA_MID);
-   bool emaMidFalling = (g_EMA_MID < g_PrevEMA_MID);
-   bool slopeOKBuy    = !InpUseEMASlope || emaMidRising;
-   bool slopeOKSell   = !InpUseEMASlope || emaMidFalling;
-
-   // ── Consolidation filter 5: Candle Body ────────────────────────
-   // Doji / spinning-top candles signal indecision; require a
-   // meaningful directional body on the signal bar.
+   // ── Filter 3: Candle Body ──────────────────────────────────────
    double bodySize     = MathAbs(closePrice - openPrice);
    bool   bodyIsBull   = (closePrice > openPrice);
    bool   bodyIsBear   = (closePrice < openPrice);
@@ -334,26 +294,22 @@ void OnTick()
    bool   bodyOKSell   = !InpUseBodyFilter ||
                          (bodyIsBear && bodySize >= InpMinBodyPips * _Point);
 
-   // ── Composite entry conditions ──────────────────────────────────
+   // ── Composite entry conditions ─────────────────────────────────
    bool buyCondition  = emaTouched
-                        && closePrice > g_EMA_MID   // closes above Mid
-                        && prevBarBelow              // previous bar was below Mid
-                        && aboveTunnel               // close above the full tunnel
-                        && bandWide                  // tunnel is wide enough
-                        && stackOKBuy                // EMAs bullishly stacked
-                        && slopeOKBuy                // Mid EMA sloping up
-                        && bodyOKBuy;                // directional candle body
+                        && closePrice > g_EMA       // closes above EMA
+                        && prevBarBelow             // previous bar was below EMA
+                        && aboveTunnel              // close above upper tunnel band
+                        && slopeOKBuy               // EMA sloping up
+                        && bodyOKBuy;               // directional candle body
 
    bool sellCondition = emaTouched
-                        && closePrice < g_EMA_MID
+                        && closePrice < g_EMA
                         && prevBarAbove
                         && belowTunnel
-                        && bandWide
-                        && stackOKSell
                         && slopeOKSell
                         && bodyOKSell;
 
-   // Store previous bar values AFTER entry conditions (uses bar[2] in next call)
+   // Store previous bar values AFTER entry conditions
    g_PrevClose = closePrice;
    g_PrevHigh  = highPrice;
    g_PrevLow   = lowPrice;
@@ -362,19 +318,19 @@ void OnTick()
    if(InpUseADX && g_ADXInitialized && g_ADX < InpADXThreshold)
    { buyCondition = false; sellCondition = false; }
 
-   // ── Exit conditions (Mid EMA based, same as EMA200Squeeze) ─────
+   // ── Exit conditions (EMA based) ────────────────────────────────
    bool longEmaExit  = false;
    bool shortEmaExit = false;
 
    if(g_TradeState == 1)
    {
-      if(InpExitMode == EXIT_CANDLE_CLOSE) longEmaExit = (closePrice < g_EMA_MID);
-      else                                 longEmaExit = (lowPrice   <= g_EMA_MID);
+      if(InpExitMode == EXIT_CANDLE_CLOSE) longEmaExit = (closePrice < g_EMA);
+      else                                 longEmaExit = (lowPrice   <= g_EMA);
    }
    if(g_TradeState == -1)
    {
-      if(InpExitMode == EXIT_CANDLE_CLOSE) shortEmaExit = (closePrice > g_EMA_MID);
-      else                                 shortEmaExit = (highPrice  >= g_EMA_MID);
+      if(InpExitMode == EXIT_CANDLE_CLOSE) shortEmaExit = (closePrice > g_EMA);
+      else                                 shortEmaExit = (highPrice  >= g_EMA);
    }
 
    // ── SuperTrend trailing exit ───────────────────────────────────
@@ -384,20 +340,20 @@ void OnTick()
       {
          CloseAllPositions("ST Trail Long");
          if(InpShowSignals) DrawArrow(barTime, highPrice, false, clrOrange, "ST_EXIT");
-         Print("SuperTrend flipped bearish — closed remaining LONG qty");
+         Print("SuperTrend flipped bearish - closed remaining LONG qty");
       }
       else if(g_TradeState == -1 && g_STDirection == 1)
       {
          CloseAllPositions("ST Trail Short");
          if(InpShowSignals) DrawArrow(barTime, lowPrice, true, clrOrange, "ST_EXIT");
-         Print("SuperTrend flipped bullish — closed remaining SHORT qty");
+         Print("SuperTrend flipped bullish - closed remaining SHORT qty");
       }
    }
 
    // ── EMA Exit + Reverse ─────────────────────────────────────────
    if(longEmaExit && g_TradeState == 1)
    {
-      CloseAllPositions("Exit Long → Reverse Short");
+      CloseAllPositions("Exit Long -> Reverse Short");
       if(InpShowSignals)
       {
          DrawArrow(barTime, highPrice, false, clrRed, "EXIT");
@@ -408,7 +364,7 @@ void OnTick()
    }
    else if(shortEmaExit && g_TradeState == -1)
    {
-      CloseAllPositions("Exit Short → Reverse Long");
+      CloseAllPositions("Exit Short -> Reverse Long");
       if(InpShowSignals)
       {
          DrawArrow(barTime, lowPrice, true, clrGreen, "EXIT");
@@ -425,21 +381,26 @@ void OnTick()
    else if(g_TradeState == 0 && sellCondition)
       OpenEntry(-1, barTime, highPrice, lowPrice);
 
-   // ── Plot EMA lines (3 coloured segments per bar) ───────────────
+   // ── Plot EMA line + tunnel bands ───────────────────────────────
    if(InpShowEMA && g_PrevBarTime > 0)
    {
-      DrawEMAsegment(DASH_PREFIX + "EMAF_" + IntegerToString(g_EMAFastLineCount++),
-                     g_PrevBarTime, g_PrevEMA_FAST, barTime, g_EMA_FAST, clrCyan, 1);
-      DrawEMAsegment(DASH_PREFIX + "EMAM_" + IntegerToString(g_EMAMidLineCount++),
-                     g_PrevBarTime, g_PrevEMA_MID,  barTime, g_EMA_MID,  clrYellow, 2);
-      DrawEMAsegment(DASH_PREFIX + "EMAS_" + IntegerToString(g_EMASlowLineCount++),
-                     g_PrevBarTime, g_PrevEMA_SLOW, barTime, g_EMA_SLOW, clrOrange, 1);
+      // EMA center line (yellow, width 2)
+      DrawEMAsegment(DASH_PREFIX + "EMA_" + IntegerToString(g_EMALineCount++),
+                     g_PrevBarTime, g_PrevEMA, barTime, g_EMA, clrYellow, 2);
+      // Upper tunnel band (cyan)
+      double prevUpper = g_PrevEMA + tunnelDist;
+      DrawEMAsegment(DASH_PREFIX + "BANDU_" + IntegerToString(g_BandUpperCount++),
+                     g_PrevBarTime, prevUpper, barTime, upperBand, clrCyan, 1);
+      // Lower tunnel band (orange)
+      double prevLower = g_PrevEMA - tunnelDist;
+      DrawEMAsegment(DASH_PREFIX + "BANDL_" + IntegerToString(g_BandLowerCount++),
+                     g_PrevBarTime, prevLower, barTime, lowerBand, clrOrange, 1);
    }
 
    // ── Plot SuperTrend dots ───────────────────────────────────────
    if(InpShowEMA && g_STInitialized && InpUseSTTrail)
    {
-      string stName = DASH_PREFIX + "ST_" + IntegerToString(g_EMAMidLineCount);
+      string stName = DASH_PREFIX + "ST_" + IntegerToString(g_EMALineCount);
       color stClr = (g_STDirection == 1) ? clrLime : clrRed;
       ObjectCreate(0, stName, OBJ_ARROW, 0, barTime, g_SuperTrend);
       ObjectSetInteger(0, stName, OBJPROP_ARROWCODE, 159);
@@ -448,10 +409,8 @@ void OnTick()
       ObjectSetInteger(0, stName, OBJPROP_BACK, true);
    }
 
-   g_PrevEMA_FAST = g_EMA_FAST;
-   g_PrevEMA_MID  = g_EMA_MID;
-   g_PrevEMA_SLOW = g_EMA_SLOW;
-   g_PrevBarTime  = barTime;
+   g_PrevEMA     = g_EMA;
+   g_PrevBarTime = barTime;
 
    if(InpShowTPLines) PlotTPLines(); else RemoveTPLines();
    if(InpShowDashboard) UpdateDashboard();
@@ -487,7 +446,7 @@ void OpenEntry(int direction, datetime barTime, double highPrice, double lowPric
          g_OriginalLots = lots;
          g_TP1Hit = g_TP2Hit = g_TP3Hit = false;
          g_TrailStop = 0; g_TSLActive = false;
-         Print("BUY opened @ ", ask, " | Tunnel upper=", DoubleToString(MathMax(g_EMA_FAST, g_EMA_SLOW), _Digits));
+         Print("BUY opened @ ", ask, " | Tunnel upper=", DoubleToString(g_EMA + InpTunnelPoints * _Point, _Digits));
          if(InpShowSignals) DrawArrow(barTime, lowPrice, true, clrGreen, "BUY");
       }
       else Print("BUY FAILED: ", g_Trade.ResultRetcode(), " ", g_Trade.ResultComment());
@@ -502,7 +461,7 @@ void OpenEntry(int direction, datetime barTime, double highPrice, double lowPric
          g_OriginalLots = lots;
          g_TP1Hit = g_TP2Hit = g_TP3Hit = false;
          g_TrailStop = 0; g_TSLActive = false;
-         Print("SELL opened @ ", bid, " | Tunnel lower=", DoubleToString(MathMin(g_EMA_FAST, g_EMA_SLOW), _Digits));
+         Print("SELL opened @ ", bid, " | Tunnel lower=", DoubleToString(g_EMA - InpTunnelPoints * _Point, _Digits));
          if(InpShowSignals) DrawArrow(barTime, highPrice, false, clrRed, "SELL");
       }
       else Print("SELL FAILED: ", g_Trade.ResultRetcode(), " ", g_Trade.ResultComment());
@@ -817,13 +776,13 @@ void CreateDashboard()
    ObjectSetInteger(0, bgName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(0, bgName, OBJPROP_BACK, false);
 
-   CreateLabel(DASH_PREFIX + "TITLE", x + cellW / 2, y, "EMA Tunnel Breakout", 10, clrDodgerBlue);
+   CreateLabel(DASH_PREFIX + "TITLE", x + cellW / 2, y, "EMA Point Tunnel", 10, clrDodgerBlue);
 
    string labels[] = {"",
       "Net Profit", "Open P&L",    "Gross Profit",  "Gross Loss",
       "Total Trades","Win / Loss",  "Win Rate",      "Profit Factor",
       "Avg Win",    "Avg Loss",    "Avg R:R",       "Max Drawdown",
-      "Status",     "Band Width",  "EMA Stack",     "ADX"};
+      "Status",     "Tunnel Width"};
 
    for(int r = 1; r < DASH_ROWS; r++)
    {
@@ -870,14 +829,6 @@ void UpdateDashboard()
       openPnL += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
    }
 
-   double upperBand = MathMax(g_EMA_FAST, g_EMA_SLOW);
-   double lowerBand = MathMin(g_EMA_FAST, g_EMA_SLOW);
-   double bandPips  = (upperBand - lowerBand) / _Point;
-   bool bullStack   = g_EMA_FAST > g_EMA_MID && g_EMA_MID > g_EMA_SLOW;
-   bool bearStack   = g_EMA_FAST < g_EMA_MID && g_EMA_MID < g_EMA_SLOW;
-   string stackStr  = bullStack ? "BULLISH" : (bearStack ? "BEARISH" : "MIXED");
-   color  stackClr  = bullStack ? clrLime : (bearStack ? clrRed : clrYellow);
-
    SetDashValue(1,  DoubleToString(netProfit, 2) + " (" + DoubleToString(netProfitPct, 1) + "%)", netProfit >= 0 ? clrLime : clrRed);
    SetDashValue(2,  DoubleToString(openPnL, 2),                                                    openPnL   >= 0 ? clrLime : clrRed);
    SetDashValue(3,  DoubleToString(g_GrossProfit, 2),                                              clrLime);
@@ -893,10 +844,7 @@ void UpdateDashboard()
 
    string status = g_TradeState == 1 ? "LONG" : (g_TradeState == -1 ? "SHORT" : "FLAT");
    SetDashValue(13, status, g_TradeState == 1 ? clrLime : (g_TradeState == -1 ? clrRed : clrGray));
-   SetDashValue(14, DoubleToString(bandPips, 1) + " pts", bandPips >= InpMinBandPips ? clrLime : clrYellow);
-   SetDashValue(15, stackStr, stackClr);
-   SetDashValue(16, g_ADXInitialized ? DoubleToString(g_ADX, 1) : "n/a",
-                    g_ADX >= InpADXThreshold ? clrLime : clrYellow);
+   SetDashValue(14, IntegerToString(InpTunnelPoints) + " pts (+/-)", clrCyan);
 
    ChartRedraw(0);
 }
