@@ -540,19 +540,19 @@ Write-Host "     TELETRADER SETUP COMPLETE!" -ForegroundColor Green
 Write-Host "  =============================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Files:" -ForegroundColor Cyan
-Write-Host "    Install dir : $InstallDir" -ForegroundColor White
-Write-Host "    Config      : $envFile" -ForegroundColor White
-Write-Host "    Start       : $InstallDir\start_teletrader.bat" -ForegroundColor White
-Write-Host "    Stop        : $InstallDir\stop_teletrader.bat" -ForegroundColor White
-Write-Host "    Logs        : $logsDir" -ForegroundColor White
-Write-Host "    MQL5 source : $mql5Src" -ForegroundColor White
+Write-Host ("    Install dir : " + $InstallDir) -ForegroundColor White
+Write-Host ("    Config      : " + $envFile) -ForegroundColor White
+Write-Host ("    Start       : " + $InstallDir + "\start_teletrader.bat") -ForegroundColor White
+Write-Host ("    Stop        : " + $InstallDir + "\stop_teletrader.bat") -ForegroundColor White
+Write-Host ("    Logs        : " + $logsDir) -ForegroundColor White
+Write-Host ("    MQL5 source : " + $mql5Src) -ForegroundColor White
 Write-Host ""
 Write-Host "  BEFORE FIRST RUN:" -ForegroundColor Yellow
 Write-Host ""
 if (-not $SkipMT5) {
     Write-Host "    1. Open MetaTrader 5 and login to your broker" -ForegroundColor White
     Write-Host "    2. Tools > Options > Expert Advisors > Allow WebRequest" -ForegroundColor White
-    Write-Host "       Add URL: http://127.0.0.1:$ApiPort" -ForegroundColor White
+    Write-Host ("       Add URL: http://127.0.0.1:" + $ApiPort) -ForegroundColor White
     Write-Host "    3. Attach TelegramSignalTrader_EA to any chart" -ForegroundColor White
     Write-Host "    4. Click AutoTrading button (must be GREEN)" -ForegroundColor White
     Write-Host ""
@@ -560,26 +560,26 @@ if (-not $SkipMT5) {
 Write-Host "  FIRST-TIME FORWARDER SETUP:" -ForegroundColor Yellow
 Write-Host "    The channel forwarder needs a one-time Telegram login." -ForegroundColor White
 Write-Host "    Run this once manually to enter the verification code:" -ForegroundColor White
-Write-Host "      cd $InstallDir" -ForegroundColor White
-Write-Host "      $venvDir\Scripts\python.exe -m teletrader.telegram.forwarder" -ForegroundColor White
+Write-Host ("      cd " + $InstallDir) -ForegroundColor White
+Write-Host ("      " + $venvDir + "\Scripts\python.exe -m teletrader.telegram.forwarder") -ForegroundColor White
 Write-Host "    After login, a session file is saved. Future starts are automatic." -ForegroundColor White
 Write-Host ""
 Write-Host "  SERVICES (3 processes):" -ForegroundColor Cyan
-Write-Host "    1. API Server   — stores signals (port $ApiPort)" -ForegroundColor White
-Write-Host "    2. Telegram Bot — receives direct/forwarded signals" -ForegroundColor White
-Write-Host "    3. Forwarder    — auto-copies from monitored channels" -ForegroundColor White
+Write-Host ("    1. API Server   - stores signals (port " + $ApiPort + ")") -ForegroundColor White
+Write-Host "    2. Telegram Bot - receives direct/forwarded signals" -ForegroundColor White
+Write-Host "    3. Forwarder    - auto-copies from monitored channels" -ForegroundColor White
 Write-Host ""
 Write-Host "  TO START:" -ForegroundColor Cyan
-Write-Host "    Double-click : $InstallDir\start_teletrader.bat" -ForegroundColor White
+Write-Host ("    Double-click : " + $InstallDir + "\start_teletrader.bat") -ForegroundColor White
 Write-Host "    Or run       : schtasks /Run /TN TeleTrader" -ForegroundColor White
 Write-Host ""
 Write-Host "  TO STOP:" -ForegroundColor Cyan
-Write-Host "    Double-click : $InstallDir\stop_teletrader.bat" -ForegroundColor White
+Write-Host ("    Double-click : " + $InstallDir + "\stop_teletrader.bat") -ForegroundColor White
 Write-Host ""
 Write-Host "  LOGS:" -ForegroundColor Cyan
-Write-Host "    API:       $logsDir\api.log" -ForegroundColor White
-Write-Host "    Bot:       $logsDir\bot.log" -ForegroundColor White
-Write-Host "    Forwarder: $logsDir\forwarder.log" -ForegroundColor White
+Write-Host ("    API:       " + $logsDir + "\api.log") -ForegroundColor White
+Write-Host ("    Bot:       " + $logsDir + "\bot.log") -ForegroundColor White
+Write-Host ("    Forwarder: " + $logsDir + "\forwarder.log") -ForegroundColor White
 Write-Host ""
-Write-Host "  API:  http://127.0.0.1:$ApiPort/health" -ForegroundColor Cyan
+Write-Host ("  API:  http://127.0.0.1:" + $ApiPort + "/health") -ForegroundColor Cyan
 Write-Host ""
