@@ -7,6 +7,7 @@ import threading
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yfinance as yf
 
@@ -23,6 +24,26 @@ TIMEFRAME_MAP = {
     "1h": "1h", "4h": "1h", "1d": "1d", "1wk": "1wk",
     "M1": "1m", "M5": "5m", "M15": "15m", "M30": "30m",
     "H1": "1h", "H4": "1h", "D1": "1d", "W1": "1wk",
+}
+
+# Intraday: chunk by calendar days so each copy_rates_range stays under terminal maxbars (~100k).
+MT5_CHUNK_DAYS: dict[str, int | None] = {
+    "1m": 45,
+    "M1": 45,
+    "5m": 120,
+    "M5": 120,
+    "15m": 180,
+    "M15": 180,
+    "30m": 240,
+    "M30": 240,
+    "1h": 500,
+    "H1": 500,
+    "4h": 730,
+    "H4": 730,
+    "1d": None,
+    "D1": None,
+    "1wk": None,
+    "W1": None,
 }
 
 MT5_TIMEFRAME_MAP = {
@@ -184,20 +205,67 @@ def search_symbols(query: str) -> list[dict]:
         return [{"symbol": query.upper(), "yf_symbol": query.upper(), "name": query.upper()}]
 
 
+def _copy_rates_range_mt5(
+    mt5: object,
+    symbol: str,
+    mt5_tf: int,
+    start_dt: datetime,
+    end_dt: datetime,
+    timeframe: str,
+) -> tuple[np.ndarray | None, tuple | None]:
+    """Single or chunked copy_rates_range. Returns (rates_array_or_none, last_error_if_failed).
+
+    MT5 terminals cap history (~maxbars 100000); long M1/M5 ranges must be requested in chunks.
+    Datetimes must be naive (local/server) — see _parse_mt5_date_range.
+    """
+    chunk_days = MT5_CHUNK_DAYS.get(timeframe)
+    span = end_dt - start_dt
+    use_chunks = chunk_days is not None and span > timedelta(days=chunk_days)
+
+    if not use_chunks:
+        rates = mt5.copy_rates_range(symbol, mt5_tf, start_dt, end_dt)
+        if rates is None:
+            return None, mt5.last_error()
+        return rates, None
+
+    log.info(
+        "MT5 chunking copy_rates_range: timeframe=%r chunk_days=%d span_days=%d",
+        timeframe,
+        chunk_days,
+        span.days,
+    )
+    chunks: list[np.ndarray] = []
+    cur = start_dt
+    step = timedelta(days=chunk_days)
+    while cur < end_dt:
+        chunk_end = min(cur + step, end_dt)
+        rates = mt5.copy_rates_range(symbol, mt5_tf, cur, chunk_end)
+        if rates is None:
+            return None, mt5.last_error()
+        if len(rates) > 0:
+            chunks.append(rates)
+        if chunk_end >= end_dt:
+            break
+        cur = chunk_end + timedelta(seconds=1)
+
+    if not chunks:
+        return None, mt5.last_error()
+
+    combined = np.concatenate(chunks)
+    order = np.argsort(combined["time"])
+    combined = combined[order]
+    times = combined["time"]
+    _, keep = np.unique(times, return_index=True)
+    combined = combined[np.sort(keep)]
+    return combined, None
+
+
 def download_mt5_ohlcv(
     symbol: str,
     timeframe: str = "1d",
     start_date: str = "2020-01-01",
     end_date: str = "",
 ) -> pd.DataFrame:
-    log.debug(
-        "Preparing MT5 download symbol=%s timeframe=%s start_date=%s end_date=%s thread=%s",
-        symbol,
-        timeframe,
-        start_date,
-        end_date or "<latest>",
-        threading.current_thread().name,
-    )
     try:
         import MetaTrader5 as mt5
     except ImportError as exc:
@@ -213,6 +281,15 @@ def download_mt5_ohlcv(
 
     start_date = (start_date or "").strip() or "2020-01-01"
     end_date = (end_date or "").strip()
+
+    log.info(
+        "MT5 OHLCV normalized inputs: symbol=%r timeframe=%r start_date=%r end_date=%r thread=%s",
+        symbol,
+        timeframe,
+        start_date,
+        end_date if end_date else "<empty -> current UTC time>",
+        threading.current_thread().name,
+    )
 
     mt5_tf_name = MT5_TIMEFRAME_MAP.get(timeframe)
     if not mt5_tf_name:
@@ -237,13 +314,26 @@ def download_mt5_ohlcv(
     with _MT5_LOCK:
         log.debug("Acquired MT5 lock for symbol=%s timeframe=%s", symbol, timeframe)
         if not mt5.initialize():
-            log.error("MT5 initialize failed for symbol=%s timeframe=%s", symbol, timeframe)
+            log.error(
+                "MT5 initialize failed for symbol=%s timeframe=%s last_error=%r session=%s",
+                symbol,
+                timeframe,
+                getattr(mt5, "last_error", lambda: None)(),
+                _describe_mt5_session(mt5),
+            )
             raise RuntimeError(_format_mt5_error(mt5, "Failed to initialize MT5 connection"))
 
+        symbol_select_ok = False
         try:
-            log.debug("MT5 initialized successfully. %s", _describe_mt5_session(mt5))
-            if not mt5.symbol_select(symbol, True):
-                log.error("MT5 symbol_select failed for symbol=%s", symbol)
+            log.info("MT5 initialized. %s", _describe_mt5_session(mt5))
+            symbol_select_ok = bool(mt5.symbol_select(symbol, True))
+            if not symbol_select_ok:
+                log.error(
+                    "MT5 symbol_select failed symbol=%r last_error=%r symbol_info=%s",
+                    symbol,
+                    getattr(mt5, "last_error", lambda: None)(),
+                    _snapshot_symbol_info(mt5, symbol),
+                )
                 raise RuntimeError(_format_mt5_error(mt5, f"MT5 symbol '{symbol}' is not available"))
 
             symbol_info = mt5.symbol_info(symbol)
@@ -258,25 +348,42 @@ def download_mt5_ohlcv(
                     getattr(symbol_info, "path", None),
                 )
             else:
-                log.debug("MT5 symbol_info returned None for symbol=%s", symbol)
+                log.warning("MT5 symbol_info returned None after symbol_select for symbol=%s", symbol)
 
-            log.debug(
-                "Calling mt5.copy_rates_range symbol=%s timeframe=%s start=%s end=%s",
-                symbol,
-                mt5_tf_name,
-                start_dt.isoformat(),
-                end_dt.isoformat(),
+            _log_mt5_copy_rates_request(
+                symbol=symbol,
+                timeframe=timeframe,
+                start_date_in=start_date,
+                end_date_in=end_date,
+                start_dt=start_dt,
+                end_dt=end_dt,
+                mt5_tf_name=mt5_tf_name,
+                mt5_tf=int(mt5_tf),
             )
-            rates = mt5.copy_rates_range(symbol, mt5_tf, start_dt, end_dt)
+            rates, copy_err = _copy_rates_range_mt5(
+                mt5, symbol, mt5_tf, start_dt, end_dt, timeframe
+            )
             if rates is None:
-                log.error("MT5 copy_rates_range returned None for symbol=%s timeframe=%s", symbol, timeframe)
-                raise RuntimeError(
-                    _format_mt5_error(
-                        mt5,
-                        "MT5 returned no data (check symbol spelling including broker suffix, "
-                        "timeframe, and that start date is before end date)",
-                    )
+                _log_mt5_copy_rates_failure(
+                    mt5,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    start_date_in=start_date,
+                    end_date_in=end_date,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    mt5_tf_name=mt5_tf_name,
+                    mt5_tf=int(mt5_tf),
+                    symbol_select_ok=symbol_select_ok,
+                    last_error_captured=copy_err,
                 )
+                msg = (
+                    "MT5 returned no data (check symbol spelling including broker suffix, "
+                    "timeframe, and that start date is before end date)"
+                )
+                if copy_err:
+                    raise RuntimeError(f"{msg}. MT5 error: {copy_err}")
+                raise RuntimeError(msg)
             if len(rates) == 0:
                 log.warning("MT5 copy_rates_range returned 0 rows for symbol=%s timeframe=%s", symbol, timeframe)
                 return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
@@ -346,7 +453,7 @@ def save_mt5_temp_data(
 
 
 def _parse_mt5_date_range(start_date: str, end_date: str) -> tuple[datetime, datetime]:
-    """Naive datetimes for copy_rates_range — timezone-aware values often trigger MT5 (-2) Invalid params."""
+    """Naive local datetimes for copy_rates_range — aware UTC values trigger (-2) Invalid params."""
     start = datetime.combine(datetime.strptime(start_date.strip(), "%Y-%m-%d").date(), time.min)
     if end_date and end_date.strip():
         end = datetime.combine(datetime.strptime(end_date.strip(), "%Y-%m-%d").date(), time.max)
@@ -365,6 +472,124 @@ def _describe_mt5_session(mt5: object) -> str:
     account_info = getattr(mt5, "account_info", lambda: None)()
     version_info = getattr(mt5, "version", lambda: None)()
     return "version=%s terminal=%s account=%s" % (version_info, terminal_info, account_info)
+
+
+def _describe_datetime_for_mt5(dt: datetime) -> str:
+    """Human-readable datetime details for MT5 request logging."""
+    try:
+        ts = dt.timestamp()
+    except Exception:
+        ts = None
+    tz = dt.tzinfo
+    return (
+        f"iso={dt.isoformat()!r} repr={dt!r} tzinfo={tz!r} "
+        f"unix_ts={ts!r} date={dt.date()!r} time={dt.time()!r}"
+    )
+
+
+def _snapshot_terminal_info(mt5: object) -> str:
+    try:
+        ti = getattr(mt5, "terminal_info", lambda: None)()
+        if ti is None:
+            return "None"
+        if hasattr(ti, "_asdict"):
+            return str(ti._asdict())
+        return repr(ti)
+    except Exception as exc:
+        return f"<error: {exc}>"
+
+
+def _snapshot_symbol_info(mt5: object, symbol: str) -> str:
+    try:
+        fn = getattr(mt5, "symbol_info", None)
+        si = fn(symbol) if callable(fn) else None
+        if si is None:
+            return "symbol_info=None"
+        if hasattr(si, "_asdict"):
+            return str(si._asdict())
+        attrs = (
+            "name", "path", "description", "currency_base", "currency_profit",
+            "visible", "select", "session_deals", "digits", "spread", "trade_mode",
+            "volume_min", "volume_max", "volume_step",
+        )
+        parts = []
+        for attr in attrs:
+            if hasattr(si, attr):
+                parts.append(f"{attr}={getattr(si, attr)!r}")
+        return ", ".join(parts) if parts else repr(si)
+    except Exception as exc:
+        return f"<error: {exc}>"
+
+
+def _log_mt5_copy_rates_request(
+    *,
+    symbol: str,
+    timeframe: str,
+    start_date_in: str,
+    end_date_in: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    mt5_tf_name: str,
+    mt5_tf: int,
+) -> None:
+    log.info(
+        "MT5 copy_rates_range request: symbol=%r timeframe_key=%r start_date_in=%r end_date_in=%r "
+        "mt5_constant=%s mt5_tf_int=%s start_dt[%s] end_dt[%s]",
+        symbol,
+        timeframe,
+        start_date_in,
+        end_date_in or "<empty -> current UTC time>",
+        mt5_tf_name,
+        mt5_tf,
+        _describe_datetime_for_mt5(start_dt),
+        _describe_datetime_for_mt5(end_dt),
+    )
+
+
+def _log_mt5_copy_rates_failure(
+    mt5: object,
+    *,
+    symbol: str,
+    timeframe: str,
+    start_date_in: str,
+    end_date_in: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    mt5_tf_name: str,
+    mt5_tf: int,
+    symbol_select_ok: bool,
+    last_error_captured: tuple | None = None,
+) -> None:
+    # Capture before other MT5 calls — terminal_info/symbol_info reset last_error to Success.
+    last_err = last_error_captured if last_error_captured is not None else getattr(mt5, "last_error", lambda: None)()
+    log.error(
+        "MT5 copy_rates_range returned None - full context:\n"
+        "  symbol=%r timeframe_key=%r\n"
+        "  start_date_in=%r end_date_in=%r\n"
+        "  mt5_constant=%s mt5_tf_int=%s\n"
+        "  symbol_select_ok=%s\n"
+        "  start_dt: %s\n"
+        "  end_dt: %s\n"
+        "  last_error_at_failure=%r\n"
+        "  terminal_info=%s\n"
+        "  version=%r\n"
+        "  symbol_info=%s\n"
+        "  session: %s",
+        symbol,
+        timeframe,
+        start_date_in,
+        end_date_in or "<empty>",
+        mt5_tf_name,
+        mt5_tf,
+        symbol_select_ok,
+        _describe_datetime_for_mt5(start_dt),
+        _describe_datetime_for_mt5(end_dt),
+        last_err,
+        _snapshot_terminal_info(mt5),
+        getattr(mt5, "version", lambda: None)(),
+        _snapshot_symbol_info(mt5, symbol),
+        _describe_mt5_session(mt5),
+    )
 
 
 def _format_mt5_error(mt5: object, message: str) -> str:

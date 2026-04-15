@@ -201,11 +201,13 @@ async def _run_mt5_backtest(bt_id: int, req: BacktestRequest):
 
     effective_end = (req.end_date or "").strip() or datetime.now().strftime("%Y-%m-%d")
     log.info(
-        "Starting MT5 backtest id=%d symbol=%s timeframe=%s start=%s end=%s",
+        "Starting MT5 backtest id=%d symbol=%r timeframe=%r start_date=%r "
+        "end_date_raw=%r end_date_effective=%r",
         bt_id,
         req.symbol,
         req.timeframe,
         req.start_date,
+        (req.end_date or "").strip() or "<empty>",
         effective_end,
     )
 
