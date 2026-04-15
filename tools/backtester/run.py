@@ -12,6 +12,7 @@ if __name__ == "__main__":
         "server.main:app",
         host="0.0.0.0",
         port=8002,
+        log_level="debug",
         reload=True,
         reload_dirs=[str(Path(__file__).parent / "server")],
     )

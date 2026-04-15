@@ -38,6 +38,18 @@ A comprehensive algorithmic trading workspace for quant development, research, a
    pip install -r requirements.txt
    ```
 
+   PyCharm: prefer a repo-local interpreter for this project. Do not use an unrelated
+   `PyCharmMiscProject\.venv` or another scratch-project environment.
+
+   For the Pine backtester specifically:
+   ```bash
+   cd tools/backtester
+   python -m venv .venv
+   .venv\Scripts\python.exe -m pip install -r requirements.txt
+   ```
+   Then point the PyCharm project interpreter to `tools/backtester/.venv/Scripts/python.exe`
+   before running the shared `Backtester` configuration.
+
 3. **Configure broker credentials**
    ```bash
    cp configs/broker_config.example.yaml configs/broker_config.yaml

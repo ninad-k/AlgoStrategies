@@ -106,7 +106,9 @@ def expr_to_str(expr: Any) -> str:
         fv = expr_to_str(expr.false_val)
         return f"{cond} ? {tv} : {fv}"
     if isinstance(expr, SwitchBlock):
-        parts_list = [f"switch {expr_to_str(expr.expr)}"]
+        parts_list = ["switch"]
+        if expr.expr is not None:
+            parts_list[0] = f"switch {expr_to_str(expr.expr)}"
         for match_val, body in expr.cases:
             body_str = expr_to_str(body[0]) if body else "na"
             parts_list.append(f"  {expr_to_str(match_val)} => {body_str}")

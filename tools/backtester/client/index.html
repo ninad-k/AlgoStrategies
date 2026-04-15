@@ -138,7 +138,7 @@ if ta.crossunder(fast, slow)
                 <div class="data-source-toggle">
                     <button class="data-source-btn active" onclick="setDataSource('yahoo')" id="ds-yahoo">Yahoo Finance (Auto-download)</button>
                     <button class="data-source-btn" onclick="setDataSource('csv')" id="ds-csv">Upload CSV File</button>
-                    <button class="data-source-btn" onclick="setDataSource('mt5')" id="ds-mt5">MT5 Export Script</button>
+                    <button class="data-source-btn" onclick="setDataSource('mt5')" id="ds-mt5">Via MT5</button>
                 </div>
                 <div id="csv-upload-section" style="display:none;">
                     <div class="csv-upload-area" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click();">
@@ -150,9 +150,15 @@ if ta.crossunder(fast, slow)
                 </div>
                 <div id="mt5-export-section" style="display:none;">
                     <p style="font-size:0.84rem;color:var(--text-secondary);margin-bottom:12px;">
-                        Generate a pre-configured MQL5 script based on your settings above. Run it in MetaTrader 5 to export OHLCV data, then upload the resulting CSV.
+                        Direct Run downloads bars from your open MT5 terminal in the background, saves a temporary local CSV, and immediately starts the backtest.
                     </p>
-                    <button class="btn btn-secondary btn-sm" onclick="generateMT5Script()">Generate MT5 DataExporter Script</button>
+                    <div class="mt5-actions">
+                        <button class="btn btn-primary btn-sm" onclick="runBacktest()">Direct Run</button>
+                        <button class="btn btn-secondary btn-sm" onclick="generateMT5Script()">Generate MT5 Script</button>
+                    </div>
+                    <p class="mt5-helper-text">
+                        Direct MT5 download requires the local `MetaTrader5` Python package and an already open, logged-in MT5 terminal on this machine.
+                    </p>
                     <div id="mt5-script-output"></div>
                 </div>
             </div>

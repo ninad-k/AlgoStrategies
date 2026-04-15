@@ -141,6 +141,35 @@ class PineScriptParser:
                 break
         return ".".join(parts)
 
+    def _is_type_hint_ident(self, tok: Token | None = None) -> bool:
+        if tok is None:
+            tok = self._cur()
+        return tok.type == TokenType.IDENT and tok.value.lower() in (
+            "bool", "float", "int", "string", "color", "table", "array", "matrix"
+        )
+
+    def _is_function_decl_ahead(self) -> bool:
+        if self._cur().type != TokenType.IDENT or self._peek(1).type != TokenType.LPAREN:
+            return False
+
+        idx = self.pos + 1
+        depth = 0
+        while idx < len(self.tokens):
+            tok = self.tokens[idx]
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    next_idx = idx + 1
+                    return (
+                        next_idx + 1 < len(self.tokens)
+                        and self.tokens[next_idx].type == TokenType.ASSIGN
+                        and self.tokens[next_idx + 1].type == TokenType.GT
+                    )
+            idx += 1
+        return False
+
     # ------------------------------------------------------------------
     # Top-level parse
     # ------------------------------------------------------------------
@@ -202,6 +231,11 @@ class PineScriptParser:
         if tok.type == TokenType.VAR:
             return self._parse_var_decl()
 
+        # Typed declaration without var: float x = ..., bool ready = ...
+        if self._is_type_hint_ident(tok) and self._peek(1).type == TokenType.IDENT:
+            if self._peek(2).type in (TokenType.ASSIGN, TokenType.REASSIGN):
+                return self._parse_typed_decl()
+
         # if block
         if tok.type == TokenType.IF:
             return self._parse_if_block()
@@ -213,6 +247,11 @@ class PineScriptParser:
         # Destructuring: [a, b, c] = ...
         if tok.type == TokenType.LBRACKET:
             return self._parse_destruct_assign()
+
+        # User-defined function declarations: my_func(x, y) =>
+        if tok.type == TokenType.IDENT and self._is_function_decl_ahead():
+            self._skip_function_decl()
+            return None
 
         # Identifier-led statements (assignments, function calls, strategy.*, etc.)
         if tok.type == TokenType.IDENT:
@@ -269,6 +308,49 @@ class PineScriptParser:
         self._expect(TokenType.ASSIGN)
         expr = self._parse_expression()
         return VarAssign(name=var_name, expr=expr, is_var=True, type_hint=type_hint)
+
+    def _parse_typed_decl(self) -> VarAssign:
+        type_hint = self._expect(TokenType.IDENT).value
+        var_name = self._expect(TokenType.IDENT).value
+        is_reassign = self._match(TokenType.REASSIGN) is not None
+        if not is_reassign:
+            self._expect(TokenType.ASSIGN)
+        expr = self._parse_expression()
+        return VarAssign(name=var_name, expr=expr, is_reassign=is_reassign, type_hint=type_hint)
+
+    def _skip_function_decl(self) -> None:
+        self._expect(TokenType.IDENT)
+        self._expect(TokenType.LPAREN)
+
+        depth = 1
+        while not self._at_end() and depth > 0:
+            tok = self._advance()
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                depth -= 1
+
+        self._expect(TokenType.ASSIGN)
+        self._expect(TokenType.GT)
+
+        if self._cur().type == TokenType.NEWLINE:
+            self._skip_newlines()
+            if self._cur().type == TokenType.INDENT:
+                block_depth = 0
+                while not self._at_end():
+                    tok = self._advance()
+                    if tok.type == TokenType.INDENT:
+                        block_depth += 1
+                    elif tok.type == TokenType.DEDENT:
+                        if block_depth == 0:
+                            break
+                        block_depth -= 1
+                        if block_depth == 0:
+                            break
+            return
+
+        while self._cur().type not in (TokenType.NEWLINE, TokenType.EOF):
+            self._advance()
 
     # ------------------------------------------------------------------
     # if block
@@ -548,9 +630,15 @@ class PineScriptParser:
     # ------------------------------------------------------------------
 
     def _parse_switch_block(self) -> SwitchBlock:
-        """Parse: switch expr \\n INDENT case1 => result \\n ... DEDENT"""
+        """Parse:
+
+        - `switch expr` followed by indented cases
+        - `switch` followed by boolean cases / default branch
+        """
         self._expect(TokenType.SWITCH)
-        expr = self._parse_expression()
+        expr = None
+        if self._cur().type not in (TokenType.NEWLINE, TokenType.INDENT, TokenType.EOF):
+            expr = self._parse_expression()
         self._skip_newlines()
 
         cases: list[tuple[Expr, list]] = []

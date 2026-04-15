@@ -251,6 +251,11 @@ textarea.code-editor {
     font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
     font-size: 0.82rem;
     line-height: 1.7;
+    display: block;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     min-height: 320px;
     resize: vertical;
     tab-size: 4;
@@ -575,6 +580,10 @@ td.sell { color: var(--red); }
     background: var(--bg-secondary);
 }
 
+#tab-pinescript {
+    width: 100%;
+}
+
 /* CSV Upload */
 .csv-upload-area {
     border: 2px dashed var(--border-light);
@@ -620,6 +629,18 @@ td.sell { color: var(--red); }
     color: var(--accent);
     background: var(--accent-glow);
     box-shadow: 0 0 0 1px var(--accent);
+}
+
+.mt5-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mt5-helper-text {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 8px;
 }
 
 /* MQL5 Script Preview */

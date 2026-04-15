@@ -61,6 +61,28 @@ function setDataSource(source) {
     document.getElementById('ds-' + source).classList.add('active');
     document.getElementById('csv-upload-section').style.display = source === 'csv' ? 'block' : 'none';
     document.getElementById('mt5-export-section').style.display = source === 'mt5' ? 'block' : 'none';
+    updateRunButtonLabel();
+}
+
+function updateRunButtonLabel() {
+    const btn = document.getElementById('run-btn');
+    if (!btn) return;
+    btn.textContent = dataSource === 'mt5' ? 'Direct Run' : 'Run Backtest';
+}
+
+function getBacktestConfig() {
+    return {
+        pinescript: document.getElementById('pinescript-code').value.trim(),
+        symbol: document.getElementById('symbol').value.trim() || 'XAUUSD',
+        timeframe: document.getElementById('timeframe').value,
+        start_date: document.getElementById('start-date').value,
+        end_date: document.getElementById('end-date').value,
+        initial_capital: parseFloat(document.getElementById('initial-capital').value) || 10000,
+        leverage: parseFloat(document.getElementById('leverage').value) || 1,
+        commission_pct: parseFloat(document.getElementById('commission').value) || 0,
+        slippage_points: parseFloat(document.getElementById('slippage').value) || 0,
+        input_overrides: getInputOverrides(),
+    };
 }
 
 function onCsvFileSelected(event) {
@@ -73,6 +95,7 @@ function onCsvFileSelected(event) {
 
 // Drag & drop support
 document.addEventListener('DOMContentLoaded', () => {
+    updateRunButtonLabel();
     const dropZone = document.getElementById('csv-drop-zone');
     if (!dropZone) return;
     ['dragenter', 'dragover'].forEach(ev => {
@@ -316,12 +339,11 @@ function getInputOverrides() {
 // -- Run Backtest -------------------------------------------------------------
 
 async function runBacktest() {
-    const code = document.getElementById('pinescript-code').value.trim();
+    const config = getBacktestConfig();
+    const code = config.pinescript;
     if (!code) { alert('Please enter PineScript strategy code.'); return; }
 
-    const effectiveSource = dataSource === 'mt5' ? 'csv' : dataSource;
-
-    if (effectiveSource === 'csv' && !csvFile) {
+    if (dataSource === 'csv' && !csvFile) {
         alert('Please select a CSV file for historical data.');
         return;
     }
@@ -332,16 +354,16 @@ async function runBacktest() {
     try {
         let btId;
 
-        if (effectiveSource === 'csv') {
+        if (dataSource === 'csv') {
             const formData = new FormData();
             formData.append('file', csvFile);
             formData.append('pinescript', code);
             formData.append('symbol', document.getElementById('symbol').value.trim() || 'CUSTOM');
-            formData.append('timeframe', document.getElementById('timeframe').value);
-            formData.append('initial_capital', document.getElementById('initial-capital').value || '10000');
-            formData.append('leverage', document.getElementById('leverage').value || '1');
-            formData.append('commission_pct', document.getElementById('commission').value || '0');
-            formData.append('slippage_points', document.getElementById('slippage').value || '0');
+            formData.append('timeframe', config.timeframe);
+            formData.append('initial_capital', String(config.initial_capital));
+            formData.append('leverage', String(config.leverage));
+            formData.append('commission_pct', String(config.commission_pct));
+            formData.append('slippage_points', String(config.slippage_points));
             formData.append('input_overrides', JSON.stringify(getInputOverrides()));
 
             const res = await fetch(API + '/api/backtest/csv', { method: 'POST', body: formData });
@@ -349,26 +371,24 @@ async function runBacktest() {
             if (!res.ok) { alert(data.detail || 'CSV upload failed'); return; }
             btId = data.id;
             currentBacktestId = btId;
+        } else if (dataSource === 'mt5') {
+            const res = await fetch(API + '/api/backtest/mt5', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            const data = await res.json();
+            if (!res.ok) { alert(data.detail || 'MT5 backtest submission failed'); return; }
+            btId = data.id;
+            currentBacktestId = btId;
         } else {
-            const body = {
-                pinescript: code,
-                symbol: document.getElementById('symbol').value.trim() || 'XAUUSD',
-                timeframe: document.getElementById('timeframe').value,
-                start_date: document.getElementById('start-date').value,
-                end_date: document.getElementById('end-date').value,
-                initial_capital: parseFloat(document.getElementById('initial-capital').value) || 10000,
-                leverage: parseFloat(document.getElementById('leverage').value) || 1,
-                commission_pct: parseFloat(document.getElementById('commission').value) || 0,
-                slippage_points: parseFloat(document.getElementById('slippage').value) || 0,
-                input_overrides: getInputOverrides(),
-            };
-
             const res = await fetch(API + '/api/backtest', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+                body: JSON.stringify(config)
             });
             const data = await res.json();
+            if (!res.ok) { alert(data.detail || 'Backtest submission failed'); return; }
             btId = data.id;
             currentBacktestId = btId;
 
@@ -448,6 +468,7 @@ function renderReport(report) {
 
 function renderSettings(report) {
     const el = document.getElementById('report-settings');
+    const downloadedCandles = report?.metrics?.bars ?? '-';
     const inputs = (report.inputs || []).map(i =>
         `<span class="label">${i.title || i.name}:</span><span class="value">${i.default}</span>`
     ).join('');
@@ -460,6 +481,7 @@ function renderSettings(report) {
             <span class="label">Initial Capital:</span><span class="value">${fmt(report.initial_capital)}</span>
             <span class="label">Leverage:</span><span class="value">1:${report.leverage}</span>
             <span class="label">Commission:</span><span class="value">${report.commission_pct}%</span>
+            <span class="label">Downloaded Candles:</span><span class="value">${downloadedCandles}</span>
             ${inputs}
         </div>
     `;

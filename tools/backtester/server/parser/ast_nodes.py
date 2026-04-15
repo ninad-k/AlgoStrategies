@@ -117,7 +117,7 @@ class IfBlock:
 @dataclass
 class SwitchBlock:
     """switch block."""
-    expr: Expr
+    expr: Optional[Expr]
     cases: list[tuple[Expr, list]]  # (match_value, body statements)
     default: Optional[list] = None
 

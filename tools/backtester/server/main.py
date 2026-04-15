@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -39,8 +40,17 @@ from .data import (
 )
 from .models import BacktestRequest, BacktestReport, BacktestStatus, BacktestSummary, ParseResult
 
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stdout,
+        force=True,
+    )
+
+
+configure_logging()
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(title="PineScript Backtester", version="1.0.0")
 
@@ -151,6 +161,15 @@ async def submit_mt5_backtest(req: BacktestRequest):
     from datetime import datetime
 
     end_date = req.end_date or datetime.now().strftime("%Y-%m-%d")
+    log.info(
+        "Received MT5 backtest request symbol=%s timeframe=%s start=%s end=%s initial_capital=%s leverage=%s",
+        req.symbol,
+        req.timeframe,
+        req.start_date,
+        end_date,
+        req.initial_capital,
+        req.leverage,
+    )
 
     bt_data = {
         "name": req.name or f"{req.symbol} {req.timeframe} (MT5)",
@@ -181,6 +200,14 @@ async def _run_mt5_backtest(bt_id: int, req: BacktestRequest):
     from .report.generator import generate_report
 
     effective_end = (req.end_date or "").strip() or datetime.now().strftime("%Y-%m-%d")
+    log.info(
+        "Starting MT5 backtest id=%d symbol=%s timeframe=%s start=%s end=%s",
+        bt_id,
+        req.symbol,
+        req.timeframe,
+        req.start_date,
+        effective_end,
+    )
 
     loop = asyncio.get_event_loop()
     try:
@@ -189,19 +216,28 @@ async def _run_mt5_backtest(bt_id: int, req: BacktestRequest):
             None,
             lambda: download_mt5_ohlcv(req.symbol, req.timeframe, req.start_date, effective_end),
         )
+        log.debug(
+            "MT5 download completed for backtest id=%d rows=%d columns=%s",
+            bt_id,
+            len(df),
+            list(df.columns),
+        )
 
         if df.empty:
+            log.warning("MT5 download returned no rows for backtest id=%d", bt_id)
             db.update_backtest_status(bt_id, "error", 0, error="No MT5 data available for this symbol/timeframe/period")
             return
 
         db.update_backtest_status(bt_id, "downloading", 20, "Saving temporary MT5 data locally...")
-        await loop.run_in_executor(
+        saved_path = await loop.run_in_executor(
             None,
             lambda: save_mt5_temp_data(req.symbol, req.timeframe, req.start_date, effective_end, df),
         )
+        log.debug("Saved MT5 temp data for backtest id=%d to %s", bt_id, saved_path)
 
         db.update_backtest_status(bt_id, "running", 35, "Parsing strategy and running backtest...")
         await loop.run_in_executor(None, lambda: generate_report(bt_id, req, df))
+        log.info("Completed MT5 backtest id=%d", bt_id)
         db.update_backtest_status(bt_id, "complete", 100, "Done")
     except Exception as e:
         log.exception("Backtest %d failed (MT5)", bt_id)
@@ -321,14 +357,41 @@ def download_mt5_data(
     start_date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     end_date: str = Query(""),
 ):
+    log.info(
+        "Received MT5 CSV download request symbol=%s timeframe=%s start=%s end=%s",
+        symbol,
+        timeframe,
+        start_date,
+        end_date or "<latest>",
+    )
     try:
         df = download_mt5_ohlcv(symbol, timeframe, start_date, end_date)
     except Exception as exc:
+        log.exception(
+            "MT5 CSV download failed symbol=%s timeframe=%s start=%s end=%s",
+            symbol,
+            timeframe,
+            start_date,
+            end_date or "<latest>",
+        )
         raise HTTPException(400, str(exc)) from exc
 
     if df.empty:
+        log.warning(
+            "MT5 CSV download returned no data symbol=%s timeframe=%s start=%s end=%s",
+            symbol,
+            timeframe,
+            start_date,
+            end_date or "<latest>",
+        )
         raise HTTPException(404, "No MT5 data available for this symbol/timeframe/period")
 
+    log.info(
+        "MT5 CSV download succeeded symbol=%s timeframe=%s rows=%d",
+        symbol,
+        timeframe,
+        len(df),
+    )
     filename = f"{symbol}_{timeframe}_{start_date}_{end_date or 'latest'}_mt5.csv"
     headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
     return Response(content=dataframe_to_csv_bytes(df), media_type="text/csv", headers=headers)

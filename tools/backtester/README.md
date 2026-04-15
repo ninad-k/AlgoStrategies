@@ -16,6 +16,14 @@ cd tools/backtester
 pip install -r requirements.txt
 ```
 
+Recommended for local IDE use:
+
+```bash
+cd tools/backtester
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
 2. (Optional) Copy and configure environment variables:
 
 ```bash
@@ -39,6 +47,16 @@ A shared run configuration is included. Open the project in PyCharm and select *
 
 The configuration runs `tools/backtester/run.py` with the working directory set to `tools/backtester/`.
 
+Use a repo-local interpreter, not a global PyCharm scratch-project environment:
+
+1. Create `tools/backtester/.venv` if it does not exist.
+2. In PyCharm, open **Settings > Project > Python Interpreter**.
+3. Choose **Add Interpreter > Existing** and select `tools/backtester/.venv/Scripts/python.exe`.
+4. Re-open the **Backtester** run configuration and confirm it uses the project interpreter.
+5. Run `Backtester` again.
+
+If PyCharm shows an interpreter like `C:\Users\...\PyCharmMiscProject\.venv\Scripts\python.exe`, that is the wrong environment for this repo.
+
 ## Usage
 
 1. Open http://localhost:8002 in your browser
@@ -47,7 +65,7 @@ The configuration runs `tools/backtester/run.py` with the working directory set 
 4. Choose a data source:
    - **Yahoo Finance** -- auto-downloads OHLCV data (best for daily/weekly timeframes)
    - **Upload CSV** -- drag & drop your own CSV file
-   - **MT5 Export Script** -- generates a configured MQL5 script to export data from MetaTrader 5
+   - **MT5 Direct / Export Script** -- either download bars from the already open MT5 terminal via Python or generate a configured MQL5 export script
 5. Click **Run Backtest**
 6. View the MQL5-style report with equity curves, drawdown charts, orders, and deals
 
@@ -55,6 +73,7 @@ The configuration runs `tools/backtester/run.py` with the working directory set 
 
 - **Yahoo Finance intraday limits:** 1m/5m/15m data covers ~60 days; 1h covers ~730 days. For 5-10 year backtests, use daily or weekly timeframes.
 - **CSV format:** requires Date, Open, High, Low, Close, Volume columns (flexible column name matching).
+- **MT5 direct download:** requires the local `MetaTrader5` Python package and an already running, logged-in MetaTrader 5 terminal on the same machine as the backtester server.
 - **MT5 Export:** generates a `.mq5` script pre-configured with your symbol/timeframe/dates. Run it in MetaTrader 5, then upload the exported CSV.
 
 ## API Endpoints
@@ -64,7 +83,9 @@ The configuration runs `tools/backtester/run.py` with the working directory set 
 | GET | `/` | Frontend UI |
 | POST | `/api/parse` | Parse PineScript, return extracted parameters |
 | POST | `/api/backtest` | Submit backtest (Yahoo Finance data) |
+| POST | `/api/backtest/mt5` | Submit backtest (direct MT5 terminal data) |
 | POST | `/api/backtest/csv` | Submit backtest (CSV upload) |
+| GET | `/api/mt5/download` | Download OHLCV CSV from the running MT5 terminal |
 | GET | `/api/backtest/{id}/status` | Poll backtest progress |
 | GET | `/api/backtest/{id}/report` | Full report JSON |
 | GET | `/api/backtests` | List previous backtests |

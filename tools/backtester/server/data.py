@@ -190,15 +190,25 @@ def download_mt5_ohlcv(
     start_date: str = "2020-01-01",
     end_date: str = "",
 ) -> pd.DataFrame:
+    log.debug(
+        "Preparing MT5 download symbol=%s timeframe=%s start_date=%s end_date=%s thread=%s",
+        symbol,
+        timeframe,
+        start_date,
+        end_date or "<latest>",
+        threading.current_thread().name,
+    )
     try:
         import MetaTrader5 as mt5
     except ImportError as exc:
+        log.exception("MetaTrader5 import failed")
         raise RuntimeError(
             "MetaTrader5 Python package is not installed. Install it with `pip install MetaTrader5`."
         ) from exc
 
     symbol = (symbol or "").strip()
     if not symbol:
+        log.error("MT5 download rejected because symbol is empty")
         raise RuntimeError("MT5 symbol is empty.")
 
     start_date = (start_date or "").strip() or "2020-01-01"
@@ -206,24 +216,60 @@ def download_mt5_ohlcv(
 
     mt5_tf_name = MT5_TIMEFRAME_MAP.get(timeframe)
     if not mt5_tf_name:
+        log.error("Unsupported MT5 timeframe requested: %s", timeframe)
         raise RuntimeError(f"Unsupported MT5 timeframe: {timeframe}")
 
     mt5_tf = getattr(mt5, mt5_tf_name, None)
     if mt5_tf is None:
+        log.error("MT5 package is missing timeframe constant %s", mt5_tf_name)
         raise RuntimeError(f"MetaTrader5 package does not expose timeframe constant {mt5_tf_name}")
 
     start_dt, end_dt = _parse_mt5_date_range(start_date, end_date)
+    log.debug(
+        "Resolved MT5 date range symbol=%s timeframe=%s start=%s end=%s constant=%s",
+        symbol,
+        timeframe,
+        start_dt.isoformat(),
+        end_dt.isoformat(),
+        mt5_tf_name,
+    )
 
     with _MT5_LOCK:
+        log.debug("Acquired MT5 lock for symbol=%s timeframe=%s", symbol, timeframe)
         if not mt5.initialize():
+            log.error("MT5 initialize failed for symbol=%s timeframe=%s", symbol, timeframe)
             raise RuntimeError(_format_mt5_error(mt5, "Failed to initialize MT5 connection"))
 
         try:
+            log.debug("MT5 initialized successfully. %s", _describe_mt5_session(mt5))
             if not mt5.symbol_select(symbol, True):
+                log.error("MT5 symbol_select failed for symbol=%s", symbol)
                 raise RuntimeError(_format_mt5_error(mt5, f"MT5 symbol '{symbol}' is not available"))
 
+            symbol_info = mt5.symbol_info(symbol)
+            if symbol_info is not None:
+                log.debug(
+                    "MT5 symbol info symbol=%s visible=%s select=%s digits=%s trade_mode=%s path=%s",
+                    symbol,
+                    getattr(symbol_info, "visible", None),
+                    getattr(symbol_info, "select", None),
+                    getattr(symbol_info, "digits", None),
+                    getattr(symbol_info, "trade_mode", None),
+                    getattr(symbol_info, "path", None),
+                )
+            else:
+                log.debug("MT5 symbol_info returned None for symbol=%s", symbol)
+
+            log.debug(
+                "Calling mt5.copy_rates_range symbol=%s timeframe=%s start=%s end=%s",
+                symbol,
+                mt5_tf_name,
+                start_dt.isoformat(),
+                end_dt.isoformat(),
+            )
             rates = mt5.copy_rates_range(symbol, mt5_tf, start_dt, end_dt)
             if rates is None:
+                log.error("MT5 copy_rates_range returned None for symbol=%s timeframe=%s", symbol, timeframe)
                 raise RuntimeError(
                     _format_mt5_error(
                         mt5,
@@ -232,9 +278,11 @@ def download_mt5_ohlcv(
                     )
                 )
             if len(rates) == 0:
+                log.warning("MT5 copy_rates_range returned 0 rows for symbol=%s timeframe=%s", symbol, timeframe)
                 return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
 
             df = pd.DataFrame(rates)
+            log.debug("MT5 copy_rates_range returned rows=%d columns=%s", len(df), list(df.columns))
             df["datetime"] = pd.to_datetime(df["time"], unit="s", utc=True)
             df.set_index("datetime", inplace=True)
             df.rename(
@@ -249,9 +297,19 @@ def download_mt5_ohlcv(
             )
             df = df[["open", "high", "low", "close", "volume"]].copy()
             df.index.name = "datetime"
+            log.info(
+                "MT5 download succeeded symbol=%s timeframe=%s rows=%d first=%s last=%s",
+                symbol,
+                timeframe,
+                len(df),
+                df.index.min(),
+                df.index.max(),
+            )
             return df
         finally:
+            log.debug("Shutting down MT5 session for symbol=%s timeframe=%s", symbol, timeframe)
             mt5.shutdown()
+            log.debug("MT5 shutdown complete for symbol=%s timeframe=%s", symbol, timeframe)
 
 
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
@@ -302,8 +360,16 @@ def _parse_mt5_date_range(start_date: str, end_date: str) -> tuple[datetime, dat
     return start, end
 
 
+def _describe_mt5_session(mt5: object) -> str:
+    terminal_info = getattr(mt5, "terminal_info", lambda: None)()
+    account_info = getattr(mt5, "account_info", lambda: None)()
+    version_info = getattr(mt5, "version", lambda: None)()
+    return "version=%s terminal=%s account=%s" % (version_info, terminal_info, account_info)
+
+
 def _format_mt5_error(mt5: object, message: str) -> str:
     error = getattr(mt5, "last_error", lambda: None)()
+    log.debug("MT5 last_error=%s message=%s", error, message)
     if error:
         return f"{message}. MT5 error: {error}"
     return message

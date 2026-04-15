@@ -250,10 +250,17 @@ def tokenize(source: str) -> list[Token]:
         if all_tokens:
             # Walk backwards past NEWLINEs to find last real token
             last_real = None
+            prev_real = None
             for t in reversed(all_tokens):
                 if t.type != TokenType.NEWLINE:
-                    last_real = t
-                    break
+                    if last_real is None:
+                        last_real = t
+                    else:
+                        prev_real = t
+                        break
+            # Do not treat Pine function arrows (`=>`) as line continuation.
+            if last_real and last_real.type == TokenType.GT and prev_real and prev_real.type == TokenType.ASSIGN:
+                last_real = None
             if last_real and last_real.type in (
                 TokenType.AND, TokenType.OR,
                 TokenType.PLUS, TokenType.MINUS,
