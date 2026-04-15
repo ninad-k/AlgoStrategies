@@ -18,17 +18,25 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from urllib.parse import quote
 
 import io
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import database as db
-from .data import download_ohlcv, get_data_warning, search_symbols
+from .data import (
+    dataframe_to_csv_bytes,
+    download_mt5_ohlcv,
+    download_ohlcv,
+    get_data_warning,
+    save_mt5_temp_data,
+    search_symbols,
+)
 from .models import BacktestRequest, BacktestReport, BacktestStatus, BacktestSummary, ParseResult
 
 log = logging.getLogger(__name__)
@@ -138,6 +146,70 @@ async def _run_backtest(bt_id: int, req: BacktestRequest):
         _running_tasks.pop(bt_id, None)
 
 
+@app.post("/api/backtest/mt5")
+async def submit_mt5_backtest(req: BacktestRequest):
+    from datetime import datetime
+
+    end_date = req.end_date or datetime.now().strftime("%Y-%m-%d")
+
+    bt_data = {
+        "name": req.name or f"{req.symbol} {req.timeframe} (MT5)",
+        "symbol": req.symbol,
+        "timeframe": req.timeframe,
+        "start_date": req.start_date,
+        "end_date": end_date,
+        "initial_capital": req.initial_capital,
+        "leverage": req.leverage,
+        "commission_pct": req.commission_pct,
+        "slippage_points": req.slippage_points,
+        "strategy_source": req.pinescript,
+        "strategy_config": req.strategy_config or {},
+        "input_overrides": req.input_overrides,
+    }
+
+    bt_id = db.create_backtest(bt_data)
+
+    task = asyncio.create_task(_run_mt5_backtest(bt_id, req))
+    _running_tasks[bt_id] = task
+
+    return {"id": bt_id, "status": "pending"}
+
+
+async def _run_mt5_backtest(bt_id: int, req: BacktestRequest):
+    from datetime import datetime
+
+    from .report.generator import generate_report
+
+    effective_end = (req.end_date or "").strip() or datetime.now().strftime("%Y-%m-%d")
+
+    loop = asyncio.get_event_loop()
+    try:
+        db.update_backtest_status(bt_id, "downloading", 10, "Downloading historical data from MT5 terminal...")
+        df = await loop.run_in_executor(
+            None,
+            lambda: download_mt5_ohlcv(req.symbol, req.timeframe, req.start_date, effective_end),
+        )
+
+        if df.empty:
+            db.update_backtest_status(bt_id, "error", 0, error="No MT5 data available for this symbol/timeframe/period")
+            return
+
+        db.update_backtest_status(bt_id, "downloading", 20, "Saving temporary MT5 data locally...")
+        await loop.run_in_executor(
+            None,
+            lambda: save_mt5_temp_data(req.symbol, req.timeframe, req.start_date, effective_end, df),
+        )
+
+        db.update_backtest_status(bt_id, "running", 35, "Parsing strategy and running backtest...")
+        await loop.run_in_executor(None, lambda: generate_report(bt_id, req, df))
+        db.update_backtest_status(bt_id, "complete", 100, "Done")
+    except Exception as e:
+        log.exception("Backtest %d failed (MT5)", bt_id)
+        db.update_backtest_status(bt_id, "error", 0, error=str(e))
+    finally:
+        _running_tasks.pop(bt_id, None)
+
+
 @app.get("/api/backtest/{bt_id}/status")
 def backtest_status(bt_id: int):
     bt = db.get_backtest(bt_id)
@@ -240,6 +312,26 @@ def delete_backtest(bt_id: int):
         raise HTTPException(404, "Backtest not found")
     db.delete_backtest(bt_id)
     return {"status": "deleted"}
+
+
+@app.get("/api/mt5/download")
+def download_mt5_data(
+    symbol: str = Query(..., min_length=1),
+    timeframe: str = Query("1d"),
+    start_date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    end_date: str = Query(""),
+):
+    try:
+        df = download_mt5_ohlcv(symbol, timeframe, start_date, end_date)
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    if df.empty:
+        raise HTTPException(404, "No MT5 data available for this symbol/timeframe/period")
+
+    filename = f"{symbol}_{timeframe}_{start_date}_{end_date or 'latest'}_mt5.csv"
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"}
+    return Response(content=dataframe_to_csv_bytes(df), media_type="text/csv", headers=headers)
 
 
 # -- CSV Upload backtest ------------------------------------------------------
