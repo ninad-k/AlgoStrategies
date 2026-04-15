@@ -1,0 +1,402 @@
+//@version=5
+strategy("SuperTrend Flat Breakout + 23 EMA", shorttitle="ST Flat BO",
+         overlay=true, default_qty_type=strategy.percent_of_equity,
+         default_qty_value=100, initial_capital=500000,
+         commission_type=strategy.commission.percent, commission_value=0.03,
+         slippage=2, calc_on_every_tick=false, pyramiding=0)
+
+// ============================================================================
+// INPUTS
+// ============================================================================
+
+// --- SuperTrend Settings ---
+grpST = "SuperTrend Settings"
+stPeriod     = input.int(10,    "ATR Period",      minval=1,   group=grpST)
+stMultiplier = input.float(3.0, "Multiplier",      minval=0.1, step=0.1, group=grpST)
+
+// --- Flat Detection ---
+grpFlat = "Flat Detection"
+minFlatDays  = input.int(5,     "Min Flat Days",   minval=2,   group=grpFlat)
+flatTolPct   = input.float(0.1, "Flat Tolerance %", minval=0.01, step=0.01, group=grpFlat,
+     tooltip="Max % change in SuperTrend value to count as flat")
+
+// --- Entry Settings ---
+grpEntry = "Entry Settings"
+retestZonePct = input.float(3.0, "Retest Zone %",  minval=0.5, step=0.5, group=grpEntry,
+     tooltip="If breakout candle closes > this % above swing high, wait for retest")
+dualResBuffer = input.float(3.0, "Dual Resistance Buffer %", minval=1.0, step=0.5, group=grpEntry,
+     tooltip="If two swing highs are within this %, use the higher one")
+
+// --- EMA Settings ---
+grpEMA = "EMA Settings"
+emaLen = input.int(23, "EMA Length", minval=1, group=grpEMA)
+
+// --- Exit Mode ---
+grpExit = "Exit Mode"
+exitMode = input.string("Momentum", "Exit Strategy",
+     options=["Target", "Momentum", "Combined"], group=grpExit)
+tp1Pct   = input.float(10.0, "TP1 %",         minval=1,  step=1, group=grpExit)
+tp2Pct   = input.float(20.0, "TP2 %",         minval=1,  step=1, group=grpExit)
+tp1QtyPct = input.float(50,  "TP1 Close Qty %", minval=1, maxval=100, group=grpExit)
+
+// --- Stop Loss ---
+grpSL = "Stop Loss"
+slMode       = input.string("Swing Low", "Initial SL Mode",
+     options=["Swing Low", "Fixed %"], group=grpSL)
+fixedSLPct   = input.float(5.0, "Fixed SL %",         minval=1,  step=0.5, group=grpSL)
+slLookback   = input.int(10,    "Swing Low Lookback",  minval=3,  group=grpSL)
+trailActPct  = input.float(10.0, "Trail Activation %", minval=3,  step=1, group=grpSL,
+     tooltip="Shift SL to 23 EMA after this % gain from entry")
+
+// --- Re-entry ---
+grpReentry = "Re-entry"
+enableReentry = input.bool(true, "Enable Re-entry After SL Hit", group=grpReentry)
+
+// --- Display ---
+grpDisp = "Display Settings"
+showEMA       = input.bool(true,  "Plot 23 EMA Line",         group=grpDisp)
+showST        = input.bool(true,  "Plot SuperTrend Line",     group=grpDisp)
+showFlatZone  = input.bool(true,  "Highlight Flat Zones",     group=grpDisp)
+showSwingHigh = input.bool(true,  "Show Swing High Level",    group=grpDisp)
+showSignals   = input.bool(true,  "Plot Entry/Exit Signals",  group=grpDisp)
+showDashboard = input.bool(true,  "Show P&L Dashboard",       group=grpDisp)
+
+// --- Dashboard Position ---
+grpDash = "Dashboard"
+dashPosX = input.string("right", "Dashboard X Position", options=["left", "center", "right"], group=grpDash)
+dashPosY = input.string("top",   "Dashboard Y Position", options=["top", "middle", "bottom"], group=grpDash)
+
+// ============================================================================
+// INDICATOR CALCULATIONS
+// ============================================================================
+
+ema23 = ta.ema(close, emaLen)
+[stValue, stDir] = ta.supertrend(stMultiplier, stPeriod)
+stBullish = stDir < 0   // ta.supertrend returns -1 for bullish, 1 for bearish
+stBearish = stDir > 0
+
+// ============================================================================
+// SUPERTREND FLAT DETECTION
+// ============================================================================
+
+// Track SuperTrend color shift: RED -> GREEN
+stWasRed   = stDir[1] > 0
+stNowGreen = stDir < 0
+colorShift = stWasRed and stNowGreen
+
+// Detect flatness: ST value barely changes bar-to-bar
+stChangePct = stValue[1] != 0 ? math.abs(stValue - stValue[1]) / stValue[1] * 100 : 0.0
+isFlat = stBullish and stChangePct < flatTolPct
+
+// Count consecutive flat bars
+var int flatCount = 0
+if isFlat
+    flatCount += 1
+else
+    flatCount := 0
+
+// Reset flat count on color shift (start fresh)
+if colorShift
+    flatCount := 0
+
+// Track if we've had a valid watchlist event (RED->GREEN occurred)
+var bool inWatchlist = false
+if colorShift
+    inWatchlist := true
+if stBearish
+    inWatchlist := false
+
+// Track swing high during flat zone
+var float flatSwingHigh = na
+var float prevSwingHigh = na  // for dual-resistance check
+
+if inWatchlist and isFlat
+    if flatCount == 1
+        prevSwingHigh := flatSwingHigh
+        flatSwingHigh := high
+    else
+        flatSwingHigh := math.max(nz(flatSwingHigh), high)
+if colorShift
+    flatSwingHigh := na
+    prevSwingHigh := na
+
+// Check for dual resistance: if previous swing high is within buffer %, use the higher one
+float breakoutLevel = flatSwingHigh
+if not na(prevSwingHigh) and not na(flatSwingHigh)
+    float gapPct = math.abs(prevSwingHigh - flatSwingHigh) / flatSwingHigh * 100
+    if gapPct <= dualResBuffer
+        breakoutLevel := math.max(flatSwingHigh, prevSwingHigh)
+
+// Valid flat zone: minimum days met
+bool flatReady = inWatchlist and flatCount >= minFlatDays and not na(breakoutLevel)
+
+// ============================================================================
+// ENTRY / EXIT CONDITIONS
+// ============================================================================
+
+// Trade state
+var int   tradeState   = 0    // 0=flat, 1=long
+var float entryPrice   = na
+var float currentSL    = na
+var bool  tp1Hit       = false
+var bool  slTrailing   = false // SL shifted to 23 EMA
+var bool  reentryMode  = false // waiting for re-entry after SL hit
+var float reentryLevel = na   // wave high to break for re-entry
+
+// --- Breakout entry signal ---
+bool breakoutEntry = false
+if tradeState == 0 and not reentryMode
+    if flatReady and close > breakoutLevel and close[1] <= breakoutLevel
+        // Check if breakout is within retest zone (not too far from level)
+        float gapFromBO = (close - breakoutLevel) / breakoutLevel * 100
+        breakoutEntry := gapFromBO <= retestZonePct
+
+// --- Retest entry: price pulled back into the zone ---
+bool retestEntry = false
+if tradeState == 0 and not reentryMode and flatReady
+    float gapFromBO_prev = close[1] > breakoutLevel ? (close[1] - breakoutLevel) / breakoutLevel * 100 : 0
+    if gapFromBO_prev > retestZonePct
+        // Previous bar was too far above — now check if current bar is back in zone
+        float gapNow = (close - breakoutLevel) / breakoutLevel * 100
+        retestEntry := gapNow >= 0 and gapNow <= retestZonePct and close > open // green candle in retest zone
+
+// --- Re-entry after SL hit ---
+bool reenterSignal = false
+if tradeState == 0 and reentryMode and enableReentry and not na(reentryLevel)
+    if close > reentryLevel and close[1] <= reentryLevel
+        reenterSignal := true
+
+buySignal = breakoutEntry or retestEntry or reenterSignal
+
+// --- Exit conditions ---
+bool emaExit = false
+if tradeState == 1
+    emaExit := close < ema23 and close[1] >= ema23   // red candle closes below 23 EMA
+
+bool tp1Exit = false
+bool tp2Exit = false
+if tradeState == 1 and not na(entryPrice)
+    float tp1Price = entryPrice * (1 + tp1Pct / 100)
+    float tp2Price = entryPrice * (1 + tp2Pct / 100)
+
+    if (exitMode == "Target" or exitMode == "Combined") and not tp1Hit and high >= tp1Price
+        tp1Exit := true
+
+    if exitMode == "Target" and high >= tp2Price
+        tp2Exit := true
+
+// SL hit check
+bool slHit = false
+if tradeState == 1 and not na(currentSL)
+    if slTrailing
+        // Trailing SL: 23 EMA break (use candle close, not intrabar)
+        slHit := close < ema23 and close < currentSL
+    else
+        slHit := low <= currentSL
+
+// ============================================================================
+// STRATEGY EXECUTION
+// ============================================================================
+
+// --- SL HIT ---
+if slHit and tradeState == 1
+    strategy.close("Long", comment="SL Hit")
+    // Setup re-entry if this was initial SL (not trailing)
+    if not slTrailing and enableReentry
+        reentryMode  := true
+        reentryLevel := high  // wave high that triggered SL
+    tradeState  := 0
+    entryPrice  := na
+    currentSL   := na
+    tp1Hit      := false
+    slTrailing  := false
+
+// --- TP1 PARTIAL CLOSE ---
+if tp1Exit and tradeState == 1
+    strategy.close("Long", comment="TP1", qty_percent=tp1QtyPct)
+    tp1Hit := true
+
+// --- TP2 FULL CLOSE ---
+if tp2Exit and tradeState == 1
+    strategy.close("Long", comment="TP2")
+    tradeState  := 0
+    entryPrice  := na
+    currentSL   := na
+    tp1Hit      := false
+    slTrailing  := false
+    reentryMode := false
+    reentryLevel := na
+
+// --- EMA MOMENTUM EXIT (for Momentum and Combined modes) ---
+if emaExit and tradeState == 1 and (exitMode == "Momentum" or exitMode == "Combined")
+    strategy.close("Long", comment="EMA Exit")
+    tradeState  := 0
+    entryPrice  := na
+    currentSL   := na
+    tp1Hit      := false
+    slTrailing  := false
+    reentryMode := false
+    reentryLevel := na
+
+// --- NEW ENTRY ---
+if buySignal and tradeState == 0
+    strategy.entry("Long", strategy.long)
+    entryPrice := close
+    tradeState := 1
+    tp1Hit     := false
+    slTrailing := false
+    reentryMode := false
+    reentryLevel := na
+
+    // Set initial SL
+    if slMode == "Swing Low"
+        currentSL := ta.lowest(low, slLookback)
+    else
+        currentSL := close * (1 - fixedSLPct / 100)
+
+// --- TRAILING SL ACTIVATION ---
+if tradeState == 1 and not na(entryPrice) and not slTrailing
+    float gainPct = (close - entryPrice) / entryPrice * 100
+    if gainPct >= trailActPct
+        slTrailing := true
+        currentSL  := ema23
+
+// Update trailing SL to follow 23 EMA upward
+if tradeState == 1 and slTrailing
+    currentSL := math.max(nz(currentSL), ema23)
+
+// ============================================================================
+// PLOTS
+// ============================================================================
+
+// 23 EMA
+plot(showEMA ? ema23 : na, "23 EMA", color=color.new(color.orange, 0), linewidth=2)
+
+// SuperTrend
+plot(showST ? stValue : na, "SuperTrend",
+     color=stBullish ? color.lime : color.red,
+     linewidth=2, style=plot.style_stepline_diamond)
+
+// Flat zone background
+bgcolor(showFlatZone and isFlat and inWatchlist ? color.new(color.yellow, 90) : na, title="Flat Zone")
+
+// Swing high / breakout level
+plot(showSwingHigh and flatReady ? breakoutLevel : na, "Breakout Level",
+     color=color.new(color.white, 20), linewidth=1, style=plot.style_circles)
+
+// Re-entry level
+plot(showSignals and reentryMode and not na(reentryLevel) ? reentryLevel : na, "Re-entry Level",
+     color=color.new(color.aqua, 30), linewidth=1, style=plot.style_cross)
+
+// Entry signals
+plotshape(showSignals and breakoutEntry and tradeState == 0, title="Breakout BUY",
+     location=location.belowbar, style=shape.labelup, color=color.green,
+     text="BUY", textcolor=color.white, size=size.small)
+plotshape(showSignals and retestEntry and tradeState == 0, title="Retest BUY",
+     location=location.belowbar, style=shape.labelup, color=color.teal,
+     text="RETEST", textcolor=color.white, size=size.small)
+plotshape(showSignals and reenterSignal and tradeState == 0, title="Re-entry BUY",
+     location=location.belowbar, style=shape.labelup, color=color.aqua,
+     text="RE-ENTRY", textcolor=color.white, size=size.small)
+
+// Exit signals
+plotshape(showSignals and emaExit and tradeState == 1, title="EMA Exit",
+     location=location.abovebar, style=shape.xcross, color=color.fuchsia,
+     size=size.tiny, text="EMA")
+plotshape(showSignals and tp1Exit and tradeState == 1, title="TP1",
+     location=location.abovebar, style=shape.diamond, color=color.lime,
+     size=size.tiny, text="TP1")
+plotshape(showSignals and tp2Exit and tradeState == 1, title="TP2",
+     location=location.abovebar, style=shape.diamond, color=color.aqua,
+     size=size.tiny, text="TP2")
+plotshape(showSignals and slHit and tradeState == 1, title="SL Hit",
+     location=location.abovebar, style=shape.xcross, color=color.red,
+     size=size.tiny, text="SL")
+
+// SL level line
+plot(tradeState == 1 and not na(currentSL) ? currentSL : na, "Stop Loss",
+     color=slTrailing ? color.new(color.orange, 30) : color.new(color.red, 30),
+     linewidth=1, style=plot.style_stepline)
+
+// TP level lines
+float tpLine1 = na
+float tpLine2 = na
+if tradeState == 1 and not na(entryPrice) and (exitMode == "Target" or exitMode == "Combined")
+    tpLine1 := not tp1Hit ? entryPrice * (1 + tp1Pct / 100) : na
+    tpLine2 := entryPrice * (1 + tp2Pct / 100)
+
+plot(tpLine1, "TP1 Level", color=color.new(color.lime, 40), style=plot.style_circles, linewidth=1)
+plot(tpLine2, "TP2 Level", color=color.new(color.aqua, 40), style=plot.style_circles, linewidth=1)
+
+// ============================================================================
+// P&L DASHBOARD
+// ============================================================================
+if showDashboard and barstate.islastconfirmedhistory
+
+    tblPosY = dashPosY == "top" ? position.top_right : dashPosY == "middle" ? position.middle_right : position.bottom_right
+    if dashPosX == "left"
+        tblPosY := dashPosY == "top" ? position.top_left : dashPosY == "middle" ? position.middle_left : position.bottom_left
+    if dashPosX == "center"
+        tblPosY := dashPosY == "top" ? position.top_center : dashPosY == "middle" ? position.middle_center : position.bottom_center
+
+    var table dash = table.new(tblPosY, 2, 16,
+         bgcolor=color.new(color.black, 20),
+         border_color=color.gray, border_width=1,
+         frame_color=color.gray, frame_width=2)
+
+    table.cell(dash, 0, 0, "ST Flat Breakout + 23 EMA", text_color=color.white, text_size=size.normal, bgcolor=color.new(#1565C0, 0), text_halign=text.align_center)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    float netProfit     = strategy.netprofit
+    float grossProfit   = strategy.grossprofit
+    float grossLoss     = strategy.grossloss
+    int   totalTrades   = strategy.closedtrades
+    int   winTrades     = strategy.wintrades
+    int   lossTrades    = strategy.losstrades
+    float winRate       = totalTrades > 0 ? (winTrades / totalTrades) * 100 : 0.0
+    float profitFactor  = grossLoss != 0 ? math.abs(grossProfit / grossLoss) : 0.0
+    float maxDD         = strategy.max_drawdown
+    float maxDDPct      = strategy.initial_capital > 0 ? (maxDD / strategy.initial_capital) * 100 : 0.0
+    float avgWin        = winTrades  > 0 ? grossProfit / winTrades  : 0.0
+    float avgLoss       = lossTrades > 0 ? math.abs(grossLoss) / lossTrades : 0.0
+    float avgRR         = avgLoss > 0 ? avgWin / avgLoss : 0.0
+    float netProfitPct  = strategy.initial_capital > 0 ? (netProfit / strategy.initial_capital) * 100 : 0.0
+    float openPnL       = strategy.openprofit
+
+    color netColor  = netProfit >= 0 ? color.lime : color.red
+    color openColor = openPnL  >= 0 ? color.lime : color.red
+    color wrColor   = winRate >= 50 ? color.lime : color.red
+    color pfColor   = profitFactor >= 1.5 ? color.lime : profitFactor >= 1.0 ? color.yellow : color.red
+    color ddColor   = maxDDPct <= 10 ? color.lime : maxDDPct <= 20 ? color.yellow : color.red
+    color rrColor   = avgRR >= 2 ? color.lime : avgRR >= 1 ? color.yellow : color.red
+
+    rowAdd(tbl, row, label, value, valColor) =>
+        table.cell(tbl, 0, row, label, text_color=color.silver, text_size=size.small, text_halign=text.align_left, bgcolor=color.new(color.black, 60))
+        table.cell(tbl, 1, row, value, text_color=valColor,     text_size=size.small, text_halign=text.align_right, bgcolor=color.new(color.black, 60))
+
+    rowAdd(dash, 1,  "Net Profit",      str.tostring(netProfit, format.mintick) + " (" + str.tostring(netProfitPct, "#.##") + "%)", netColor)
+    rowAdd(dash, 2,  "Open P&L",        str.tostring(openPnL, format.mintick),     openColor)
+    rowAdd(dash, 3,  "Gross Profit",    str.tostring(grossProfit, format.mintick),  color.lime)
+    rowAdd(dash, 4,  "Gross Loss",      str.tostring(math.abs(grossLoss), format.mintick), color.red)
+    rowAdd(dash, 5,  "Total Trades",    str.tostring(totalTrades),                 color.white)
+    rowAdd(dash, 6,  "Win / Loss",      str.tostring(winTrades) + " / " + str.tostring(lossTrades), color.white)
+    rowAdd(dash, 7,  "Win Rate",        str.tostring(winRate, "#.##") + "%",       wrColor)
+    rowAdd(dash, 8,  "Profit Factor",   str.tostring(profitFactor, "#.##"),        pfColor)
+    rowAdd(dash, 9,  "Avg Win",         str.tostring(avgWin, format.mintick),      color.lime)
+    rowAdd(dash, 10, "Avg Loss",        str.tostring(avgLoss, format.mintick),     color.red)
+    rowAdd(dash, 11, "Avg R:R",         str.tostring(avgRR, "#.##"),               rrColor)
+    rowAdd(dash, 12, "Max Drawdown",    str.tostring(maxDD, format.mintick) + " (" + str.tostring(maxDDPct, "#.##") + "%)", ddColor)
+    rowAdd(dash, 13, "Flat Days",       str.tostring(flatCount),                   flatReady ? color.lime : color.yellow)
+    rowAdd(dash, 14, "Breakout Level",  not na(breakoutLevel) ? str.tostring(breakoutLevel, format.mintick) : "—", color.white)
+    rowAdd(dash, 15, "Status",          tradeState == 1 ? "LONG" : reentryMode ? "RE-ENTRY WAIT" : flatReady ? "READY" : inWatchlist ? "WATCHING" : "SCANNING",
+         tradeState == 1 ? color.lime : reentryMode ? color.aqua : flatReady ? color.yellow : color.gray)
+
+// ============================================================================
+// ALERTS
+// ============================================================================
+alertcondition(breakoutEntry, title="Breakout Entry",    message="SuperTrend Flat Breakout: BUY signal")
+alertcondition(retestEntry,   title="Retest Entry",      message="SuperTrend Flat Breakout: Retest BUY signal")
+alertcondition(reenterSignal, title="Re-entry Signal",   message="SuperTrend Flat Breakout: Re-entry BUY signal")
+alertcondition(emaExit,       title="EMA Exit",          message="SuperTrend Flat Breakout: 23 EMA exit")
+alertcondition(colorShift,    title="Watchlist Alert",   message="SuperTrend shifted RED to GREEN — add to watchlist")
+alertcondition(flatReady,     title="Flat Zone Ready",   message="SuperTrend flat for min days — breakout watch")
