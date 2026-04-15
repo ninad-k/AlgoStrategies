@@ -52,10 +52,17 @@ Use a repo-local interpreter, not a global PyCharm scratch-project environment:
 1. Create `tools/backtester/.venv` if it does not exist.
 2. In PyCharm, open **Settings > Project > Python Interpreter**.
 3. Choose **Add Interpreter > Existing** and select `tools/backtester/.venv/Scripts/python.exe`.
-4. Re-open the **Backtester** run configuration and confirm it uses the project interpreter.
+4. Open **Run → Edit Configurations… → Backtester** and confirm **Python interpreter** is
+   `$PROJECT_DIR$/tools/backtester/.venv/Scripts/python.exe` (or the repo-local `.venv`), not
+   PyCharm’s global scratch project (`PyCharmMiscProject`).
 5. Run `Backtester` again.
 
-If PyCharm shows an interpreter like `C:\Users\...\PyCharmMiscProject\.venv\Scripts\python.exe`, that is the wrong environment for this repo.
+The shared run configuration pins `SDK_HOME` to `tools/backtester/.venv` and leaves `SDK_NAME` empty
+so PyCharm does **not** override it with a random registered SDK (which caused `ModuleNotFoundError: uvicorn`).
+
+If you still see `PyCharmMiscProject\.venv` in the run command line, delete the interpreter override in
+**Edit Configurations** → **Backtester** → **Python interpreter** → select **Add Interpreter → Existing**
+→ `tools\backtester\.venv\Scripts\python.exe`.
 
 ## Usage
 
