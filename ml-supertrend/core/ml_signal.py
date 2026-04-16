@@ -11,7 +11,7 @@ import pandas as pd
 from typing import Optional, Dict
 
 from .ml_trainer import load_trained_model
-from .feature_engine import build_full_feature_matrix
+from .feature_engine import build_features_for_inference
 from .data_fetcher import add_base_indicators
 
 logger = logging.getLogger(__name__)
@@ -67,22 +67,17 @@ class MLSignalGenerator:
             for htf_name, htf_df in higher_tf_data.items():
                 htf_processed[htf_name] = add_base_indicators(htf_df)
 
-        # Build features (same pipeline as training)
-        X, _ = build_full_feature_matrix(
-            target_df,
-            higher_tf_data=htf_processed,
-            forward_bars=1,     # minimal, we only need features not labels
-            min_move_atr=1.0,
-        )
+        latest = build_features_for_inference(target_df, higher_tf_data=htf_processed)
 
-        if len(X) == 0:
+        if len(latest) == 0:
             return {"signal": 0, "confidence": 0.0, "probabilities": {}}
 
-        # Use only the latest row
-        latest = X.iloc[[-1]]
-
-        # Align columns with what the model expects
-        model_features = model.get_booster().feature_names if hasattr(model, 'get_booster') else None
+        if hasattr(model, "feature_names_in_"):
+            model_features = list(model.feature_names_in_)
+        elif hasattr(model, "get_booster"):
+            model_features = model.get_booster().feature_names
+        else:
+            model_features = None
         if model_features:
             missing = set(model_features) - set(latest.columns)
             for col in missing:

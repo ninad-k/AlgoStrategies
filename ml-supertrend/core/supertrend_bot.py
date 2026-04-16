@@ -97,15 +97,65 @@ class SuperTrendBot:
             self.logger.error("Failed to get rates")
             return None
 
-        df = pd.DataFrame(rates)
-        df['time'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('time', inplace=True)
-        df['hl2'] = (df['high'] + df['low']) / 2
-        df['atr'] = talib.ATR(df['high'], df['low'], df['close'], timeperiod=self.config.atr_period)
-        df['volume_ma'] = df['tick_volume'].rolling(window=self.config.volume_ma_period).mean()
-        df['volatility'] = df['close'].rolling(window=self.config.atr_period).std()
-        df['norm_volatility'] = df['volatility'] / df['volatility'].rolling(window=50).mean()
-        return df
+        raw = pd.DataFrame(rates)
+        return self.prepare_dataframe(raw)
+
+    def prepare_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add bot indicator columns to raw MT5 OHLCV (``time`` column or datetime index)."""
+        out = df.copy()
+        if "time" in out.columns:
+            out["time"] = pd.to_datetime(out["time"], unit="s")
+            out = out.set_index("time")
+        out.index = pd.to_datetime(out.index)
+        out["hl2"] = (out["high"] + out["low"]) / 2
+        out["atr"] = talib.ATR(out["high"], out["low"], out["close"], timeperiod=self.config.atr_period)
+        out["volume_ma"] = out["tick_volume"].rolling(window=self.config.volume_ma_period).mean()
+        out["volatility"] = out["close"].rolling(window=self.config.atr_period).std()
+        out["norm_volatility"] = out["volatility"] / out["volatility"].rolling(window=50).mean()
+        return out
+
+    def evaluate_signal(self, df: pd.DataFrame) -> dict:
+        """Evaluate cluster SuperTrend signal from a prepared dataframe (same schema as ``get_data()``).
+
+        Returns ``direction`` 1 = buy, -1 = sell, 0 = none; plus ``price``, ``sl``, ``tp``, ``atr`` when applicable.
+        """
+        if df is None or len(df) < 200:
+            return {"direction": 0}
+
+        supertrends = self.calculate_supertrends(df)
+        optimal_factor, _ = self.perform_clustering(supertrends)
+        current_st = supertrends[
+            min(supertrends.keys(), key=lambda x: abs(float(x) - float(optimal_factor)))
+        ]
+        current_trend = current_st["trend"].iloc[-1]
+        prev_trend = current_st["trend"].iloc[-2]
+        current_price = float(df["close"].iloc[-1])
+        current_atr = float(df["atr"].iloc[-1])
+
+        buy_signal = current_trend > prev_trend and self.check_volume_condition(df)
+        sell_signal = current_trend < prev_trend and self.check_volume_condition(df)
+
+        if buy_signal:
+            sl = current_price - current_atr * self.config.sl_multiplier
+            tp = current_price + current_atr * self.config.tp_multiplier
+            return {
+                "direction": 1,
+                "price": current_price,
+                "sl": sl,
+                "tp": tp,
+                "atr": current_atr,
+            }
+        if sell_signal:
+            sl = current_price + current_atr * self.config.sl_multiplier
+            tp = current_price - current_atr * self.config.tp_multiplier
+            return {
+                "direction": -1,
+                "price": current_price,
+                "sl": sl,
+                "tp": tp,
+                "atr": current_atr,
+            }
+        return {"direction": 0}
 
     def calculate_supertrends(self, df: pd.DataFrame) -> dict:
         """Calculate SuperTrend for each ATR factor and score by volatility-adjusted EMA performance."""
@@ -167,11 +217,13 @@ class SuperTrendBot:
         performances = []
         factors = []
         for factor, st in supertrends.items():
-            perf = st['vol_adj_perf'].iloc[-100:].mean()
-            performances.append(perf)
+            perf = st["vol_adj_perf"].iloc[-100:].mean()
+            if perf is None or (isinstance(perf, float) and np.isnan(perf)):
+                perf = 0.0
+            performances.append(float(perf))
             factors.append(factor)
 
-        performances = np.array(performances).reshape(-1, 1)
+        performances = np.array(performances, dtype=np.float64).reshape(-1, 1)
 
         if len(set(performances.flatten())) < 3:
             self.logger.warning("Not enough variation for clustering")
@@ -294,15 +346,8 @@ class SuperTrendBot:
         if df is None or len(df) < 200:
             return
 
-        supertrends = self.calculate_supertrends(df)
-        optimal_factor, perf_score = self.perform_clustering(supertrends)
-
-        # Pick the pre-computed SuperTrend closest to the clustered optimal factor
-        current_st = supertrends[min(supertrends.keys(), key=lambda x: abs(x - optimal_factor))]
-        current_trend = current_st['trend'].iloc[-1]
-        prev_trend = current_st['trend'].iloc[-2]
-        current_price = df['close'].iloc[-1]
-        current_atr = df['atr'].iloc[-1]
+        current_price = float(df["close"].iloc[-1])
+        current_atr = float(df["atr"].iloc[-1])
 
         # Manage existing positions (trailing stop)
         positions = mt5.positions_get(symbol=self.config.symbol)
@@ -311,17 +356,13 @@ class SuperTrendBot:
                 if position.magic == self.config.magic_number:
                     self.update_trailing_stop(position, current_price, current_atr)
 
-        # Signal detection: trend flip + volume confirmation
-        buy_signal = current_trend > prev_trend and self.check_volume_condition(df)
-        sell_signal = current_trend < prev_trend and self.check_volume_condition(df)
-
+        sig = self.evaluate_signal(df)
         open_positions = (
             len([p for p in positions if p.magic == self.config.magic_number]) if positions else 0
         )
 
-        if buy_signal and open_positions < self.config.max_positions:
-            sl = current_price - current_atr * self.config.sl_multiplier
-            tp = current_price + current_atr * self.config.tp_multiplier
+        if sig.get("direction") == 1 and open_positions < self.config.max_positions:
+            sl, tp = sig["sl"], sig["tp"]
             sl_points = (current_price - sl) / mt5.symbol_info(self.config.symbol).point
             volume = self.calculate_position_size(sl_points)
             ticket = self.place_order(mt5.ORDER_TYPE_BUY, volume, current_price, sl, tp)
@@ -332,9 +373,8 @@ class SuperTrendBot:
                 )
                 self.logger.info(f"BUY at {current_price}, SL: {sl}, TP: {tp}")
 
-        elif sell_signal and open_positions < self.config.max_positions:
-            sl = current_price + current_atr * self.config.sl_multiplier
-            tp = current_price - current_atr * self.config.tp_multiplier
+        elif sig.get("direction") == -1 and open_positions < self.config.max_positions:
+            sl, tp = sig["sl"], sig["tp"]
             sl_points = (sl - current_price) / mt5.symbol_info(self.config.symbol).point
             volume = self.calculate_position_size(sl_points)
             ticket = self.place_order(mt5.ORDER_TYPE_SELL, volume, current_price, sl, tp)

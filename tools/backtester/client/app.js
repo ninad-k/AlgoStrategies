@@ -3,7 +3,8 @@
 const API = '';
 let currentBacktestId = null;
 let pollInterval = null;
-let equityChart = null;
+let balanceEquityChart = null;
+let depositLoadChart = null;
 let drawdownChart = null;
 let currentReport = null;
 let dataSource = 'yahoo';
@@ -20,7 +21,7 @@ function setTheme(theme) {
     document.getElementById('theme-dark').classList.toggle('active', theme === 'dark');
     // Re-render charts if they exist (to update grid/text colors)
     if (currentReport) {
-        renderEquityChart(currentReport.equity_curve);
+        renderMT5PerformanceCharts(currentReport.equity_curve);
         renderDrawdownChart(currentReport.equity_curve);
     }
 }
@@ -32,7 +33,21 @@ function getChartColors() {
         text: style.getPropertyValue('--chart-text').trim(),
         accent: style.getPropertyValue('--accent').trim(),
         red: style.getPropertyValue('--red').trim(),
+        balance: style.getPropertyValue('--chart-balance').trim() || '#2e75b6',
+        equity: style.getPropertyValue('--chart-equity').trim() || '#548235',
+        deposit: style.getPropertyValue('--chart-deposit').trim() || '#548235',
     };
+}
+
+/** Downsample equity curve for Chart.js (large bar counts). */
+function downsampleCurve(curve, maxPoints) {
+    if (!curve || !curve.length || curve.length <= maxPoints) return curve;
+    const step = Math.ceil(curve.length / maxPoints);
+    const out = [];
+    for (let i = 0; i < curve.length; i += step) out.push(curve[i]);
+    const last = curve[curve.length - 1];
+    if (out[out.length - 1] !== last) out.push(last);
+    return out;
 }
 
 // -- Navigation ---------------------------------------------------------------
@@ -459,7 +474,7 @@ async function loadReport(btId) {
 function renderReport(report) {
     renderSettings(report);
     renderMetrics(report.metrics);
-    renderEquityChart(report.equity_curve);
+    renderMT5PerformanceCharts(report.equity_curve);
     renderDrawdownChart(report.equity_curve);
     renderOrdersTable(report.orders);
     renderDealsTable(report.deals);
@@ -556,35 +571,149 @@ function metricRow(label, value, colorVal) {
     return `<div class="metric-row"><span class="metric-label">${label}</span><span class="${cls}">${value ?? '-'}</span></div>`;
 }
 
-function renderEquityChart(curve) {
-    if (equityChart) equityChart.destroy();
+function renderMT5PerformanceCharts(curve) {
+    if (balanceEquityChart) balanceEquityChart.destroy();
+    if (depositLoadChart) depositLoadChart.destroy();
     if (!curve || !curve.length) return;
 
+    const sampled = downsampleCurve(curve, 2000);
+    const labels = sampled.map(p => {
+        const t = p.timestamp || '';
+        return t.length >= 16 ? t.slice(0, 16) : (t.slice(0, 10) || '');
+    });
+    const balances = sampled.map(p => p.balance);
+    const equities = sampled.map(p => p.equity);
+    const loads = sampled.map(p => (p.deposit_load != null ? p.deposit_load : 0));
+
     const cc = getChartColors();
-    const ctx = document.getElementById('equity-chart').getContext('2d');
-    equityChart = new Chart(ctx, {
+    const legendColor = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#8892a4';
+
+    const ctxBe = document.getElementById('balance-equity-chart');
+    const ctxDl = document.getElementById('deposit-load-chart');
+    if (!ctxBe || !ctxDl) return;
+
+    balanceEquityChart = new Chart(ctxBe.getContext('2d'), {
         type: 'line',
         data: {
-            labels: curve.map(p => p.timestamp ? p.timestamp.slice(0, 10) : ''),
-            datasets: [{
-                label: 'Balance',
-                data: curve.map(p => p.balance),
-                borderColor: cc.accent,
-                backgroundColor: cc.accent + '14',
-                fill: true,
-                borderWidth: 1.5,
-                pointRadius: 0,
-                tension: 0.1,
-            }]
+            labels,
+            datasets: [
+                {
+                    label: 'Balance',
+                    data: balances,
+                    borderColor: cc.balance,
+                    backgroundColor: 'transparent',
+                    stepped: 'before',
+                    borderWidth: 1.75,
+                    pointRadius: 0,
+                    tension: 0,
+                    fill: false,
+                },
+                {
+                    label: 'Equity',
+                    data: equities,
+                    borderColor: cc.equity,
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.05,
+                    fill: false,
+                },
+            ],
         },
         options: {
             responsive: true,
-            plugins: { legend: { display: false } },
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    align: 'start',
+                    labels: {
+                        color: legendColor,
+                        boxWidth: 10,
+                        boxHeight: 10,
+                        usePointStyle: true,
+                        padding: 12,
+                        font: { size: 11 },
+                    },
+                },
+                tooltip: {
+                    callbacks: {
+                        label(ctx) {
+                            const v = ctx.parsed.y;
+                            if (v == null) return '';
+                            return `${ctx.dataset.label}: ${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                        },
+                    },
+                },
+            },
             scales: {
-                x: { ticks: { maxTicksLimit: 12, color: cc.text, font: { size: 10 } }, grid: { color: cc.grid } },
-                y: { ticks: { color: cc.text, font: { size: 10 } }, grid: { color: cc.grid } }
-            }
-        }
+                x: {
+                    ticks: { maxTicksLimit: 14, color: cc.text, font: { size: 9 }, maxRotation: 0 },
+                    grid: { color: cc.grid },
+                },
+                y: {
+                    ticks: {
+                        color: cc.text,
+                        font: { size: 10 },
+                        callback(v) {
+                            if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+                            if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+                            return Number(v).toFixed(0);
+                        },
+                    },
+                    grid: { color: cc.grid },
+                },
+            },
+        },
+    });
+
+    depositLoadChart = new Chart(ctxDl.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Deposit load',
+                data: loads,
+                backgroundColor: cc.deposit,
+                borderWidth: 0,
+                barPercentage: 1,
+                categoryPercentage: 1,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label(ctx) {
+                            const v = ctx.parsed.y;
+                            return v != null ? `Load: ${Number(v).toFixed(2)}%` : '';
+                        },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    display: false,
+                    grid: { display: false },
+                },
+                y: {
+                    min: 0,
+                    max: 100,
+                    ticks: {
+                        color: cc.text,
+                        font: { size: 9 },
+                        stepSize: 25,
+                        callback(v) { return v + '%'; },
+                    },
+                    grid: { color: cc.grid, drawBorder: false },
+                },
+            },
+        },
     });
 }
 
@@ -592,15 +721,19 @@ function renderDrawdownChart(curve) {
     if (drawdownChart) drawdownChart.destroy();
     if (!curve || !curve.length) return;
 
+    const sampled = downsampleCurve(curve, 2000);
     const cc = getChartColors();
     const ctx = document.getElementById('drawdown-chart').getContext('2d');
     drawdownChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: curve.map(p => p.timestamp ? p.timestamp.slice(0, 10) : ''),
+            labels: sampled.map(p => {
+                const t = p.timestamp || '';
+                return t.length >= 16 ? t.slice(0, 16) : (t.slice(0, 10) || '');
+            }),
             datasets: [{
                 label: 'Drawdown %',
-                data: curve.map(p => -(p.drawdown_pct || 0)),
+                data: sampled.map(p => -(p.drawdown_pct || 0)),
                 borderColor: cc.red,
                 backgroundColor: cc.red + '18',
                 fill: true,
@@ -611,9 +744,10 @@ function renderDrawdownChart(curve) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-                x: { ticks: { maxTicksLimit: 12, color: cc.text, font: { size: 10 } }, grid: { color: cc.grid } },
+                x: { ticks: { maxTicksLimit: 12, color: cc.text, font: { size: 10 }, maxRotation: 0 }, grid: { color: cc.grid } },
                 y: { ticks: { color: cc.text, font: { size: 10 }, callback: v => v.toFixed(1) + '%' }, grid: { color: cc.grid } }
             }
         }

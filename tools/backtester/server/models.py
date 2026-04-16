@@ -111,6 +111,7 @@ class EquityPoint(BaseModel):
     equity: float
     drawdown: float = 0.0
     drawdown_pct: float = 0.0
+    deposit_load: float = 0.0  # % margin used vs equity (MT5-style)
 
 
 class MetricsReport(BaseModel):

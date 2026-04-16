@@ -194,14 +194,23 @@ if ta.crossunder(fast, slow)
             <div class="report-header" id="report-settings"></div>
             <div id="report-metrics"></div>
 
-            <div class="charts-row">
-                <div class="chart-card">
-                    <h3>Equity Curve</h3>
-                    <canvas id="equity-chart"></canvas>
+            <div class="charts-row charts-row--stack">
+                <div class="chart-card chart-card--mt5">
+                    <h3>Balance / Equity</h3>
+                    <p class="mt5-chart-legend-hint">MT5-style graph: stepped balance (blue), floating equity (green)</p>
+                    <div class="mt5-chart-main">
+                        <canvas id="balance-equity-chart"></canvas>
+                    </div>
+                    <div class="mt5-deposit-block">
+                        <div class="mt5-deposit-title">Deposit load</div>
+                        <div class="mt5-chart-deposit">
+                            <canvas id="deposit-load-chart"></canvas>
+                        </div>
+                    </div>
                 </div>
-                <div class="chart-card">
+                <div class="chart-card chart-card--drawdown">
                     <h3>Drawdown</h3>
-                    <canvas id="drawdown-chart"></canvas>
+                    <div class="drawdown-chart-wrap"><canvas id="drawdown-chart"></canvas></div>
                 </div>
             </div>
 

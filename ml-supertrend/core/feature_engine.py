@@ -238,3 +238,40 @@ def build_full_feature_matrix(
     X = X.fillna(0)
 
     return X, labels
+
+
+def build_features_for_inference(
+    target_df: pd.DataFrame,
+    higher_tf_data: Dict[str, pd.DataFrame] = None,
+    min_bars: int = 120,
+) -> pd.DataFrame:
+    """Single-row feature vector for the latest bar (same columns as training ``X``).
+
+    Use this for live/backtest inference. Training uses ``build_full_feature_matrix`` with
+    row trimming for labels; this returns only the last row with no look-ahead.
+    """
+    from .data_fetcher import add_base_indicators
+
+    if target_df is None or len(target_df) < min_bars:
+        return pd.DataFrame()
+
+    df = add_base_indicators(target_df)
+    st_features = build_supertrend_features(df)
+    features = pd.concat([df, st_features], axis=1)
+
+    if higher_tf_data:
+        features = build_mtf_features(features, higher_tf_data)
+
+    drop_cols = [
+        "open", "high", "low", "close", "tick_volume", "spread", "real_volume",
+        "hl2", "atr", "volume_ma", "volatility",
+    ]
+    feature_cols = [
+        c for c in features.columns
+        if c not in drop_cols and features[c].dtype in [np.float64, np.float32, np.int32, np.int64]
+    ]
+
+    X = features[feature_cols].copy()
+    X = X.replace([np.inf, -np.inf], np.nan)
+    X = X.fillna(0)
+    return X.iloc[[-1]]

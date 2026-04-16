@@ -328,11 +328,43 @@ class _ASTWalker:
                 args_dict["period"] = _expr_to_value(call.args[3])
             args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
 
+        elif func_name == "ta.bb":
+            if call.args:
+                args_dict["source"] = expr_to_str(call.args[0])
+            if len(call.args) > 1:
+                args_dict["length"] = _expr_to_value(call.args[1])
+            if len(call.args) > 2:
+                args_dict["std_dev"] = _expr_to_value(call.args[2])
+            args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
+
+        elif func_name == "ta.dmi":
+            if len(call.args) >= 1:
+                args_dict["period"] = _expr_to_value(call.args[0])
+            if len(call.args) >= 2:
+                args_dict["smoothing"] = _expr_to_value(call.args[1])
+            args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
+
         elif func_name in ("ta.highest", "ta.lowest"):
             if call.args:
                 args_dict["source"] = expr_to_str(call.args[0])
             if len(call.args) > 1:
                 args_dict["period"] = _expr_to_value(call.args[1])
+            args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
+
+        elif func_name == "ta.supertrend":
+            if len(call.args) >= 2:
+                args_dict["factor"] = _expr_to_value(call.args[0])
+                args_dict["atr_period"] = _expr_to_value(call.args[1])
+            args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
+
+        elif func_name == "ta.adx":
+            if len(call.args) >= 4:
+                args_dict["high"] = expr_to_str(call.args[0])
+                args_dict["low"] = expr_to_str(call.args[1])
+                args_dict["close"] = expr_to_str(call.args[2])
+                args_dict["period"] = _expr_to_value(call.args[3])
+            elif len(call.args) >= 1:
+                args_dict["period"] = _expr_to_value(call.args[0])
             args_dict.update({k: _expr_to_value(v) for k, v in call.kwargs.items()})
 
         else:
@@ -355,9 +387,36 @@ class _ASTWalker:
     # ----- Destructuring / Security -----
 
     def _visit_destruct_assign(self, node: DestructAssign) -> None:
-        # Record variables
+        expr = node.expr
+        if isinstance(expr, FuncCall) and expr.name == "ta.supertrend":
+            args_dict: dict[str, Any] = {}
+            if len(expr.args) >= 2:
+                args_dict["factor"] = _expr_to_value(expr.args[0])
+                args_dict["atr_period"] = _expr_to_value(expr.args[1])
+            args_dict.update({k: _expr_to_value(v) for k, v in expr.kwargs.items()})
+            line_var = node.names[0] if node.names else "st"
+            dir_var = node.names[1] if len(node.names) > 1 else None
+            self.indicators.append({
+                "name": "supertrend",
+                "var": line_var,
+                "direction_var": dir_var,
+                "func": "ta.supertrend",
+                "args": args_dict,
+            })
+            if "SuperTrend" not in self.indicators_found:
+                self.indicators_found.append("SuperTrend")
+            return
+
+        if isinstance(expr, FuncCall) and expr.name.startswith("ta.") and node.names:
+            self._record_indicator(node.names[0], expr)
+            # Store ALL destructured variable names so the engine can
+            # map sub-outputs (e.g. macd → signal → histogram) to them.
+            if len(node.names) > 1:
+                self.indicators[-1]["destruct_names"] = list(node.names)
+            return
+
         for name in node.names:
-            self.variables[name] = f"destructured from {expr_to_str(node.expr)}"
+            self.variables[name] = f"destructured from {expr_to_str(expr)}"
 
     def _visit_security_call(self, node: SecurityCall) -> None:
         info = {
@@ -464,9 +523,10 @@ class _ASTWalker:
 
             self.exit_rules.append(exit_info)
 
+
         elif method == "close":
             close_id = _expr_to_value(args.get("id", StringLit("")))
-            close_info: dict[str, Any] = {
+            close_info = {
                 "type": "close",
                 "id": close_id,
                 "condition": condition_str,
@@ -477,7 +537,7 @@ class _ASTWalker:
             self.exit_rules.append(close_info)
 
         elif method == "close_all":
-            close_all_info: dict[str, Any] = {
+            close_all_info = {
                 "type": "close_all",
                 "condition": condition_str,
             }
@@ -487,7 +547,7 @@ class _ASTWalker:
 
     # ----- Build output -----
 
-    def build_result(self) -> dict[str, Any]:
+    def build_result(self):
         """Construct the final output dict."""
         return {
             "strategy_name": self.strategy_name,
@@ -505,13 +565,376 @@ class _ASTWalker:
         }
 
 
-def parse_pinescript(source: str) -> dict[str, Any]:
-    """Main entry point: parse PineScript source and return a strategy definition dict.
+import re as _re
+import logging as _logging
 
-    Returns a dict compatible with the ParseResult model, plus additional
-    fields for the backtesting engine (indicators, variables, entry_long, etc.).
-    """
-    result: dict[str, Any] = {
+_fb_log = _logging.getLogger(__name__)
+
+
+def _fallback_extract(source: str, result: dict) -> dict:
+    """Regex-based enrichment: fix truncated multi-line variables,
+    fill in missing indicators/inputs, and add strategy calls if AST missed them."""
+    lines = source.split("\n")
+
+    # ---- strategy name ----
+    if not result.get("strategy_name"):
+        m = _re.search(r'strategy\s*\(\s*"([^"]*)"', source)
+        if m:
+            result["strategy_name"] = m.group(1)
+
+    # ---- inputs ----
+    existing_input_names = {inp["name"] for inp in result.get("inputs", [])}
+    for m in _re.finditer(
+        r'(\w+)\s*=\s*input\.(int|float|bool|string|color)\s*\(([^)]*)\)',
+        source,
+    ):
+        var_name, inp_type, args_str = m.group(1), m.group(2), m.group(3)
+        if var_name in existing_input_names or inp_type == "color":
+            continue
+        default = None
+        title = var_name
+        dm = _re.match(r'\s*(-?[\d.]+|true|false|"[^"]*")', args_str)
+        if dm:
+            raw = dm.group(1)
+            if raw in ("true", "false"):
+                default = raw == "true"
+            elif raw.startswith('"'):
+                default = raw.strip('"')
+            else:
+                try:
+                    default = int(raw) if "." not in raw else float(raw)
+                except ValueError:
+                    default = raw
+        tm = _re.search(r'"([^"]+)"', args_str)
+        if tm and dm and tm.group(0) != dm.group(0):
+            title = tm.group(1)
+        result["inputs"].append({
+            "name": var_name,
+            "type": inp_type,
+            "default": default,
+            "title": title,
+        })
+        existing_input_names.add(var_name)
+
+    # ---- indicators (ta.*) ----
+    existing_ind_vars = {ind["var"] for ind in result.get("indicators", [])}
+    for m in _re.finditer(r'(\w+)\s*=\s*(ta\.\w+)\s*\(([^)]*)\)', source):
+        var_name, func_name, args_str = m.group(1), m.group(2), m.group(3)
+        if var_name in existing_ind_vars:
+            continue
+        short = func_name.replace("ta.", "").lower()
+        args_dict = _parse_indicator_args(func_name, args_str)
+        result["indicators"].append({
+            "name": short,
+            "var": var_name,
+            "func": func_name,
+            "args": args_dict,
+        })
+        existing_ind_vars.add(var_name)
+        human = _INDICATOR_NAMES.get(func_name, short.upper())
+        if human not in result["indicators_found"]:
+            result["indicators_found"].append(human)
+
+    # Destructured: [a, b] = ta.supertrend(...)
+    for m in _re.finditer(r'\[([^\]]+)\]\s*=\s*(ta\.\w+)\s*\(([^)]*)\)', source):
+        names_str, func_name, args_str = m.group(1), m.group(2), m.group(3)
+        names = [n.strip() for n in names_str.split(",")]
+        primary = names[0]
+        if primary in existing_ind_vars:
+            continue
+        short = func_name.replace("ta.", "").lower()
+        args_dict = _parse_indicator_args(func_name, args_str)
+        ind = {
+            "name": short,
+            "var": primary,
+            "func": func_name,
+            "args": args_dict,
+        }
+        if len(names) > 1:
+            ind["destruct_names"] = names
+            if short == "supertrend":
+                ind["direction_var"] = names[1]
+        result["indicators"].append(ind)
+        existing_ind_vars.add(primary)
+        human = _INDICATOR_NAMES.get(func_name, short.upper())
+        if human not in result["indicators_found"]:
+            result["indicators_found"].append(human)
+
+    # crossover / crossunder
+    for m in _re.finditer(r'(\w+)\s*=\s*(ta\.cross(?:over|under))\s*\(([^)]*)\)', source):
+        var_name, func_name, args_str = m.group(1), m.group(2), m.group(3)
+        if var_name in existing_ind_vars:
+            continue
+        parts = [p.strip() for p in args_str.split(",")]
+        args_dict = {}
+        if len(parts) >= 2:
+            args_dict["source1"] = parts[0]
+            args_dict["source2"] = parts[1]
+        short = func_name.replace("ta.", "").lower()
+        result["indicators"].append({
+            "name": short,
+            "var": var_name,
+            "func": func_name,
+            "args": args_dict,
+        })
+        existing_ind_vars.add(var_name)
+        human = _INDICATOR_NAMES.get(func_name, short.upper())
+        if human not in result["indicators_found"]:
+            result["indicators_found"].append(human)
+
+    # ---- variables (override truncated AST versions with longer regex versions) ----
+    existing_vars = result.get("variables", {})
+    joined_source = _join_continuation_lines(source)
+    for m in _re.finditer(r'^(\w+)\s*=\s*(.+)$', joined_source, _re.MULTILINE):
+        var_name, expr_str = m.group(1), m.group(2).strip()
+        if _re.match(r'(input\.|ta\.|request\.|strategy\s*\(|array\.|/)', expr_str):
+            continue
+        if _re.match(r'\w+\[\]', expr_str):
+            continue
+        old_val = existing_vars.get(var_name)
+        if old_val is None or len(expr_str) > len(str(old_val)):
+            result["variables"][var_name] = expr_str
+
+    # ---- strategy calls (only if AST didn't already find them) ----
+    if not result.get("entry_long") and not result.get("entry_short"):
+        _extract_strategy_calls_from_source(lines, result)
+
+    return result
+
+
+def _join_continuation_lines(source):
+    """Join PineScript continuation lines."""
+    out = []
+    for line in source.split("\n"):
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("//"):
+            out.append(line)
+            continue
+        if line and line[0] in (" ", "\t") and out:
+            if stripped.startswith(("and ", "or ", "and(", "or(")):
+                out[-1] = out[-1] + " " + stripped
+                continue
+        out.append(line)
+    return "\n".join(out)
+
+
+def _parse_indicator_args(func_name, args_str):
+    args_dict = {}
+    parts = _split_args(args_str)
+    positional = []
+    for part in parts:
+        part = part.strip()
+        kv = _re.match(r'(\w+)\s*=\s*(.*)', part)
+        if kv:
+            args_dict[kv.group(1)] = _try_numeric(kv.group(2).strip())
+        else:
+            positional.append(part)
+    short = func_name.replace("ta.", "")
+    if short in ("ema", "sma", "wma", "hma", "rma"):
+        if len(positional) > 0:
+            args_dict.setdefault("source", positional[0])
+        if len(positional) > 1:
+            args_dict.setdefault("period", _try_numeric(positional[1]))
+    elif short == "rsi":
+        if len(positional) > 0:
+            args_dict.setdefault("source", positional[0])
+        if len(positional) > 1:
+            args_dict.setdefault("period", _try_numeric(positional[1]))
+    elif short == "macd":
+        if len(positional) > 0:
+            args_dict.setdefault("source", positional[0])
+        if len(positional) > 1:
+            args_dict.setdefault("fast_length", _try_numeric(positional[1]))
+        if len(positional) > 2:
+            args_dict.setdefault("slow_length", _try_numeric(positional[2]))
+        if len(positional) > 3:
+            args_dict.setdefault("signal_length", _try_numeric(positional[3]))
+    elif short == "atr":
+        if len(positional) > 0:
+            args_dict.setdefault("period", _try_numeric(positional[0]))
+    elif short == "supertrend":
+        if len(positional) > 0:
+            args_dict.setdefault("factor", _try_numeric(positional[0]))
+        if len(positional) > 1:
+            args_dict.setdefault("atr_period", _try_numeric(positional[1]))
+    elif short == "adx":
+        if len(positional) > 0:
+            args_dict.setdefault("period", _try_numeric(positional[0]))
+    elif short in ("dmi",):
+        if len(positional) > 0:
+            args_dict.setdefault("period", _try_numeric(positional[0]))
+        if len(positional) > 1:
+            args_dict.setdefault("smoothing", _try_numeric(positional[1]))
+    else:
+        for i, p in enumerate(positional):
+            args_dict["arg{}".format(i)] = _try_numeric(p)
+    return args_dict
+
+
+def _split_args(s):
+    parts = []
+    depth = 0
+    current = []
+    for ch in s:
+        if ch in ("(", "["):
+            depth += 1
+        elif ch in (")", "]"):
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append("".join(current))
+            current = []
+            continue
+        current.append(ch)
+    if current:
+        parts.append("".join(current))
+    return parts
+
+
+def _try_numeric(s):
+    s = str(s).strip()
+    try:
+        if "." in s:
+            return float(s)
+        return int(s)
+    except ValueError:
+        return s
+
+
+def _extract_strategy_calls_from_source(lines, result):
+    """Walk source lines to find if-blocks containing strategy.* calls."""
+    i = 0
+    n = len(lines)
+    while i < n:
+        stripped = lines[i].lstrip()
+        m = _re.match(r'^if\s+(.+)$', stripped)
+        if m:
+            condition = m.group(1).strip()
+            if_indent = len(lines[i]) - len(lines[i].lstrip())
+            i += 1
+            while i < n:
+                line = lines[i]
+                if not line.strip() or line.strip().startswith("//"):
+                    i += 1
+                    continue
+                line_indent = len(line) - len(line.lstrip())
+                if line_indent <= if_indent:
+                    break
+                body_stripped = line.strip()
+                _process_strategy_line(body_stripped, condition, result)
+                i += 1
+            continue
+        if stripped.startswith("strategy."):
+            _process_strategy_line(stripped, "", result)
+        i += 1
+
+
+def _process_strategy_line(line, condition, result):
+    m = _re.match(r'strategy\.entry\s*\((.+)\)$', line)
+    if m:
+        args_str = m.group(1)
+        parts = _split_args(args_str)
+        kw = _parse_kw_args(parts)
+        entry_id = _unquote(kw.get("_pos0", kw.get("id", "")))
+        direction_raw = kw.get("_pos1", kw.get("direction", ""))
+        is_long = "long" in str(direction_raw).lower() or "long" in entry_id.lower() or "buy" in entry_id.lower()
+        is_short = "short" in str(direction_raw).lower() or "short" in entry_id.lower() or "sell" in entry_id.lower()
+        entry_info = {
+            "id": entry_id,
+            "direction": "long" if is_long else "short" if is_short else str(direction_raw),
+            "condition": condition,
+        }
+        for k in ("qty", "comment", "qty_percent", "when", "alert_message"):
+            if k in kw:
+                entry_info[k] = _try_numeric(_unquote(kw[k]))
+        if is_long:
+            result["entry_long"].append(entry_info)
+            desc = "Long entry '{}': {}".format(entry_id, condition) if condition else "Long entry '{}'".format(entry_id)
+            if desc not in result["entry_conditions"]:
+                result["entry_conditions"].append(desc)
+        elif is_short:
+            result["entry_short"].append(entry_info)
+            desc = "Short entry '{}': {}".format(entry_id, condition) if condition else "Short entry '{}'".format(entry_id)
+            if desc not in result["entry_conditions"]:
+                result["entry_conditions"].append(desc)
+        return
+
+    m = _re.match(r'strategy\.exit\s*\((.+)\)$', line)
+    if m:
+        args_str = m.group(1)
+        parts = _split_args(args_str)
+        kw = _parse_kw_args(parts)
+        exit_id = _unquote(kw.get("_pos0", kw.get("id", "")))
+        from_entry = _unquote(kw.get("_pos1", kw.get("from_entry", "")))
+        exit_info = {
+            "type": "exit",
+            "id": exit_id,
+            "from_entry": from_entry,
+            "condition": condition,
+        }
+        for k in ("stop", "limit", "qty_percent", "qty", "comment",
+                   "trail_price", "trail_points", "trail_offset",
+                   "loss", "profit", "alert_message"):
+            if k in kw:
+                exit_info[k] = kw[k]
+        result["exit_rules"].append(exit_info)
+        return
+
+    m = _re.match(r'strategy\.close\s*\((.+)\)$', line)
+    if m:
+        args_str = m.group(1)
+        parts = _split_args(args_str)
+        kw = _parse_kw_args(parts)
+        close_id = _unquote(kw.get("_pos0", kw.get("id", "")))
+        close_info = {
+            "type": "close",
+            "id": close_id,
+            "condition": condition,
+        }
+        for k in ("comment", "qty", "qty_percent", "when", "alert_message"):
+            if k in kw:
+                close_info[k] = _unquote(kw[k])
+        result["exit_rules"].append(close_info)
+        return
+
+    m = _re.match(r'strategy\.close_all\s*\((.+)\)$', line)
+    if m:
+        args_str = m.group(1)
+        parts = _split_args(args_str)
+        kw = _parse_kw_args(parts)
+        close_all_info = {
+            "type": "close_all",
+            "condition": condition,
+        }
+        if "comment" in kw:
+            close_all_info["comment"] = _unquote(kw["comment"])
+        result["exit_rules"].append(close_all_info)
+        return
+
+
+def _parse_kw_args(parts):
+    kw = {}
+    pos_idx = 0
+    for part in parts:
+        part = part.strip()
+        m = _re.match(r'(\w+)\s*=\s*(.*)', part)
+        if m:
+            kw[m.group(1)] = m.group(2).strip()
+        else:
+            kw["_pos{}".format(pos_idx)] = part
+            pos_idx += 1
+    return kw
+
+
+def _unquote(s):
+    s = str(s).strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        return s[1:-1]
+    return s
+
+
+def parse_pinescript(source):
+    """Main entry point: parse PineScript source and return a strategy definition dict."""
+    result = {
         "strategy_name": "",
         "inputs": [],
         "indicators": [],
@@ -529,7 +952,7 @@ def parse_pinescript(source: str) -> dict[str, Any]:
     try:
         tokens = tokenize(source)
     except Exception as e:
-        result["errors"].append(f"Lexer error: {e}")
+        result["errors"].append("Lexer error: {}".format(e))
         return result
 
     try:
@@ -537,16 +960,21 @@ def parse_pinescript(source: str) -> dict[str, Any]:
         ast_nodes = parser.parse()
         result["warnings"].extend(parser.warnings)
     except Exception as e:
-        result["errors"].append(f"Parser error: {e}")
+        result["errors"].append("Parser error: {}".format(e))
         return result
 
     try:
         walker = _ASTWalker()
         walker.walk(ast_nodes)
         output = walker.build_result()
-        # Merge walker warnings with parser warnings
         output["warnings"] = result["warnings"] + walker.warnings
-        return output
     except Exception as e:
-        result["errors"].append(f"Transpiler error: {e}")
-        return result
+        output = result
+        output["errors"].append("Transpiler error: {}".format(e))
+
+    # ------- FALLBACK / ENRICHMENT -------
+    # Always run regex-based enrichment to fix truncated multi-line variables,
+    # fill in missing indicators/inputs, and add strategy calls if AST missed them.
+    _fallback_extract(source, output)
+
+    return output

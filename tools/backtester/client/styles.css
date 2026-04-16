@@ -29,6 +29,9 @@
     --header-bg: linear-gradient(135deg, #ffffff 0%, #f0f4f8 100%);
     --chart-grid: rgba(200,210,225,0.5);
     --chart-text: #8892a4;
+    --chart-balance: #2e75b6;
+    --chart-equity: #548235;
+    --chart-deposit: rgba(84, 131, 53, 0.85);
     --logo-poly-fill: #1B4FBE;
 }
 
@@ -58,6 +61,9 @@
     --header-bg: linear-gradient(135deg, #111827 0%, #0f172a 100%);
     --chart-grid: rgba(30,41,59,0.5);
     --chart-text: #5c6478;
+    --chart-balance: #5b9bd5;
+    --chart-equity: #70ad47;
+    --chart-deposit: rgba(112, 173, 71, 0.9);
     --logo-poly-fill: #1B4FBE;
 }
 
@@ -404,6 +410,10 @@ textarea.code-editor {
     gap: 18px;
     margin-bottom: 18px;
 }
+.charts-row--stack {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+}
 .chart-card {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -418,6 +428,49 @@ textarea.code-editor {
     font-weight: 600;
 }
 .chart-card canvas { width: 100% !important; }
+
+/* Drawdown chart card: fill the available column height */
+.chart-card--drawdown {
+    display: flex;
+    flex-direction: column;
+}
+.chart-card--drawdown h3 { flex-shrink: 0; }
+.chart-card--drawdown .drawdown-chart-wrap {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 200px;
+}
+
+/* MT5-style Balance / Equity + Deposit load */
+.chart-card--mt5 {
+    padding-bottom: 14px;
+}
+.mt5-chart-legend-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.mt5-chart-main {
+    position: relative;
+    height: 300px;
+    margin-bottom: 4px;
+}
+.mt5-deposit-block {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+.mt5-deposit-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--chart-equity);
+    margin-bottom: 6px;
+    letter-spacing: 0.4px;
+}
+.mt5-chart-deposit {
+    position: relative;
+    height: 72px;
+}
 
 /* Tables */
 .table-card { overflow: hidden; }

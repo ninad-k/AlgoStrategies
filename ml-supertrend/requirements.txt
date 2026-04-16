@@ -1,4 +1,5 @@
 MetaTrader5>=5.0.45
+TA-Lib>=0.4.28
 pandas>=2.0.0
 numpy>=1.24.0
 scikit-learn>=1.3.0
@@ -8,3 +9,4 @@ seaborn>=0.12.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 pyyaml>=6.0
+pytest>=8.0.0
