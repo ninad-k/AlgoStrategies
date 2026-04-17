@@ -1,6 +1,0 @@
-category_id,category_label,match,field,op,value,value2,min,max
-scalping,Scalping,all,duration_minutes,lt,15,,,
-scalping,Scalping,all,profit,between,,,-5,5
-intraday,Intraday,all,duration_minutes,gte,15,,,
-intraday,Intraday,all,duration_minutes,lt,1440,,,
-swing,Swing,all,duration_minutes,gte,1440,,,

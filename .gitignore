@@ -1,16 +1,20 @@
 # ===========================
-# Market Data (large files)
+# Market Data And Runtime Data
 # ===========================
 data/raw/
 data/processed/
 data/alternative/
 !data/**/.gitkeep
 
+apps/dashboards/*/data/
+apps/tools/backtester/data/
+!apps/**/data/.gitkeep
+
 # ===========================
 # Model Artifacts
 # ===========================
-models/saved_models/*
-!models/saved_models/.gitkeep
+shared/ml/models/saved_models/*
+!shared/ml/models/saved_models/.gitkeep
 *.h5
 *.pkl
 *.joblib
@@ -20,14 +24,10 @@ models/saved_models/*
 *.safetensors
 
 # ===========================
-# Backtest Reports (generated)
+# Backtest Reports And Exports
 # ===========================
 backtesting/reports/*
 !backtesting/reports/.gitkeep
-
-# ===========================
-# Backtest Results & Exports
-# ===========================
 backtesting/results/**/*.html
 backtesting/results/**/*.pdf
 backtesting/exports/**/*.csv
@@ -37,7 +37,7 @@ backtesting/exports/**/*.json
 !backtesting/exports/**/.gitkeep
 
 # ===========================
-# Secrets & Credentials
+# Secrets And Credentials
 # ===========================
 .env
 .env.*
@@ -63,35 +63,23 @@ venv/
 .venv/
 env/
 .conda/
+.pytest_cache/
 
 # ===========================
-# Jupyter Notebooks
+# Jupyter
 # ===========================
 .ipynb_checkpoints/
 
 # ===========================
-# MQL5 Compiled
+# MQL5 And Platform Outputs
 # ===========================
 *.ex5
 *.ex4
 MQL5/Logs/
-
-# ===========================
-# Freqtrade
-# ===========================
-freqtrade/user_data/
-freqtrade/tradesv3.sqlite
-freqtrade/tradesv3.dryrun.sqlite
 *.sqlite
 
 # ===========================
-# Options Data
-# ===========================
-options/chain_data/*
-!options/chain_data/.gitkeep
-
-# ===========================
-# Compiled Objects & Binaries
+# Compiled Objects And Binaries
 # ===========================
 *.slo
 *.lo
@@ -117,7 +105,13 @@ options/chain_data/*
 *.dwo
 
 # ===========================
-# IDE & OS
+# Dotnet Build Output
+# ===========================
+bin/
+obj/
+
+# ===========================
+# IDE And OS
 # ===========================
 .idea/*
 **/.idea/
@@ -131,7 +125,7 @@ Thumbs.db
 desktop.ini
 
 # ===========================
-# Logs & Temp
+# Logs And Temp
 # ===========================
 logs/
 *.log
@@ -140,16 +134,9 @@ temp/
 *.tmp
 
 # ===========================
-# Node (webhooks/dashboards)
+# Node
 # ===========================
 node_modules/
-package-lock.json
-
-# ===========================
-# Dashboard & Tool Data (runtime)
-# ===========================
-monitoring/dashboards/*/data/
-tools/backtester/data/
 
 # ===========================
 # Claude Code internals

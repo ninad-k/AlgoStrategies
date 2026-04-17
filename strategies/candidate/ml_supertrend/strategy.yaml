@@ -1,0 +1,59 @@
+name: ml_supertrend
+display_name: ML Supertrend
+status: candidate
+owner: unassigned
+created_on: 2026-04-17
+
+classification:
+  asset_class: fx
+  instruments:
+    - XAUUSD
+  venue: mt5
+  timeframes:
+    - M15
+    - H1
+
+platforms:
+  - python
+  - mql5
+
+strategy:
+  type: trend_following
+  thesis: >
+    Combine Supertrend structure with ML-based signal filtering to reduce low-quality entries.
+  entry_summary: >
+    Enter when the Supertrend regime aligns with the model-generated directional signal and risk checks pass.
+  exit_summary: >
+    Exit on trend invalidation, protective stop, or model/risk shutdown conditions.
+
+risk:
+  max_position_risk_pct: 0.5
+  max_daily_drawdown_pct: 2.0
+  max_concurrent_positions: 1
+
+data_dependencies:
+  market_data:
+    - ohlcv
+  external_inputs: []
+
+backtest:
+  baseline_artifact: backtests/pending-baseline.json
+  cost_model:
+    spread: pending
+    slippage: pending
+    fees: pending
+
+validation:
+  out_of_sample: pending
+  walk_forward: pending
+  paper_trading: pending
+
+deployment:
+  mode: paper
+  target: mt5
+  monitoring_required: true
+
+artifacts:
+  docs_path: docs/
+  tests_path: tests/
+  runbook_path: runbooks/

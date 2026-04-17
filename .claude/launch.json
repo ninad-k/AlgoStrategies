@@ -5,36 +5,35 @@
       "name": "Market Sentiment Dashboard",
       "runtimeExecutable": "py",
       "runtimeArgs": ["-3", "run.py"],
-      "cwd": "monitoring/dashboards/market_sentiment",
+      "cwd": "apps/dashboards/market_sentiment",
       "port": 8000
     },
     {
       "name": "Stock Scanner",
       "runtimeExecutable": "py",
       "runtimeArgs": ["-3", "start.py"],
-      "cwd": "monitoring/dashboards/stock_scanner",
+      "cwd": "apps/dashboards/stock_scanner",
       "port": 8001
     },
     {
       "name": "Backtester",
       "runtimeExecutable": "py",
       "runtimeArgs": ["-3", "run.py"],
-      "cwd": "tools/backtester",
+      "cwd": "apps/tools/backtester",
       "port": 8002
-    }
-  ,
+    },
     {
       "name": "trading-dashboard-frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "trading-dashboard/frontend",
+      "cwd": "apps/dashboards/trading_dashboard/frontend",
       "port": 3000
     },
     {
       "name": "Rey Capital AI Bot",
       "runtimeExecutable": "python",
       "runtimeArgs": ["run.py", "--mode", "paper"],
-      "cwd": "execution/gemma_trader",
+      "cwd": "shared/execution/execution/gemma_trader",
       "port": 8050,
       "autoPort": true
     }

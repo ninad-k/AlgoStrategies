@@ -1,0 +1,57 @@
+name: example_strategy
+display_name: Example Strategy
+status: incubator
+owner: your_name
+created_on: 2026-04-17
+
+classification:
+  asset_class: fx
+  instruments:
+    - XAUUSD
+  venue: mt5
+  timeframes:
+    - M15
+
+platforms:
+  - python
+
+strategy:
+  type: trend_following
+  thesis: >
+    Replace this with the strategy thesis.
+  entry_summary: >
+    Replace this with the entry logic summary.
+  exit_summary: >
+    Replace this with the exit logic summary.
+
+risk:
+  max_position_risk_pct: 0.5
+  max_daily_drawdown_pct: 2.0
+  max_concurrent_positions: 1
+
+data_dependencies:
+  market_data:
+    - ohlcv
+  external_inputs: []
+
+backtest:
+  baseline_artifact: backtests/YYYY-MM-DD/baseline.json
+  cost_model:
+    spread: documented
+    slippage: documented
+    fees: documented
+
+validation:
+  out_of_sample: pending
+  walk_forward: pending
+  paper_trading: pending
+
+deployment:
+  mode: paper
+  target: mt5
+  monitoring_required: true
+
+artifacts:
+  docs_path: docs/
+  tests_path: tests/
+  runbook_path: runbooks/

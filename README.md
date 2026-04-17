@@ -1,25 +1,23 @@
 # AlgoStrategies
 
-A comprehensive algorithmic trading workspace for quant development, research, and live execution.
+A comprehensive algorithmic trading workspace for quant development, research, validation, and live execution.
 
 ## Repository Structure
 
-```
-├── pinescript/          # TradingView Pine Scripts (strategies, indicators, libraries, alerts)
-├── mql5/                # MetaTrader 5 (Expert Advisors, indicators, scripts, libraries)
-├── freqtrade/           # Freqtrade bot strategies, hyperopts, and configs
-├── options/             # Options strategies (Indian market focus: NSE/BSE)
-├── models/              # AI/ML models (training, inference, feature engineering)
-├── backtesting/         # Backtesting engine, reports, results, and CSV exports
-├── data/                # Market data pipeline (raw → processed → alternative)
-├── research/            # Quant research notebooks, alpha signals, statistical tests
-├── risk_management/     # Position sizing, portfolio optimization, drawdown analysis
-├── execution/           # Live execution (broker APIs, OMS, webhooks, schedulers)
-├── monitoring/          # Dashboards, trade logging, notifications (Telegram/Discord)
-├── tools/               # Utilities (screeners, calculators, converters, CLI)
-├── docs/                # Documentation for all components
-├── configs/             # Global configs (symbols, timeframes, environments)
-└── tests/               # Unit, integration, and strategy validation tests
+```text
+AlgoStrategies/
+  strategies/        # Strategy lifecycle: incubator, candidate, production, retired
+  platforms/         # Platform-specific adapters and framework assets (Pine, MT5, Freqtrade, options)
+  shared/            # Reusable analytics, execution, risk, ML, ops, schemas, and utilities
+  apps/              # Deployable dashboards, tools, mobile clients, and operations consoles
+  backtesting/       # Shared backtesting engine, templates, reports, and exports
+  research/          # Exploratory notebooks, papers, experiments, and imported community code
+  data/              # Market data pipeline and datasets
+  configs/           # Global broker, environment, universe, and risk configuration
+  docs/              # Architecture, process, strategy, and setup documentation
+  deploy/            # Deployment assets and service-specific infrastructure
+  scripts/           # Utility automation and helper scripts
+  tests/             # Cross-cutting unit, integration, and strategy validation tests
 ```
 
 ## Quick Start
@@ -30,67 +28,62 @@ A comprehensive algorithmic trading workspace for quant development, research, a
    cd AlgoStrategies
    ```
 
-2. **Set up Python environment**
+2. **Set up a Python environment**
    ```bash
    python -m venv venv
    source venv/bin/activate  # Linux/Mac
    venv\Scripts\activate     # Windows
-   pip install -r requirements.txt
    ```
 
-   PyCharm: prefer a repo-local interpreter for this project. Do not use an unrelated
-   `PyCharmMiscProject\.venv` or another scratch-project environment.
+3. **Install dependencies for the component you want to run**
+   - Dashboards and tools keep their own dependency files under `apps/`
+   - Shared Python modules and strategy packages may also have local `requirements.txt`
 
    For the Pine backtester specifically:
    ```bash
-   cd tools/backtester
+   cd apps/tools/backtester
    python -m venv .venv
    .venv\Scripts\python.exe -m pip install -r requirements.txt
    ```
-   Then point the PyCharm project interpreter to `tools/backtester/.venv/Scripts/python.exe`
-   before running the shared `Backtester` configuration.
 
-3. **Configure broker credentials**
+4. **Configure credentials**
    ```bash
    cp configs/broker_config.example.yaml configs/broker_config.yaml
-   # Edit with your API keys
-   ```
-
-4. **Set up environment variables**
-   ```bash
    cp .env.example .env
-   # Fill in your secrets
    ```
 
-## Platforms & Tools
+## Platforms And Apps
 
-| Platform     | Location         | Purpose                           |
-|-------------|-----------------|-----------------------------------|
-| TradingView | `pinescript/`    | Chart-based strategies & alerts   |
-| MetaTrader 5| `mql5/`          | Automated EA trading              |
-| Freqtrade   | `freqtrade/`     | Crypto & multi-exchange bot       |
-| Options     | `options/`       | NSE/BSE options strategies        |
-| Python ML   | `models/`        | ML-driven signals & predictions   |
+| Area | Location | Purpose |
+|------|----------|---------|
+| Strategy SDLC | `strategies/` | Strategy ownership, validation, and production readiness |
+| Platform adapters | `platforms/` | Pine Script, MQL5, Freqtrade, options, and Python wrappers |
+| Shared libraries | `shared/` | Reusable analytics, execution, risk, ML, and ops modules |
+| Dashboards and tools | `apps/` | User-facing dashboards, scanners, tools, and mobile apps |
+| Backtesting | `backtesting/` | Shared engine, configs, report templates, and exports |
 
 ## Documentation
 
 - Strategy documentation template: `docs/templates/strategy_template.md`
 - Options strategy template: `docs/templates/options_strategy_template.md`
 - Freqtrade strategy template: `docs/templates/freqtrade_strategy_template.md`
-- Setup guides: `docs/setup/`
+- Strategy metadata template: `docs/templates/strategy.yaml.example`
+- Repository structure guide: `docs/architecture/repo_structure.md`
+- Strategy SDLC process: `docs/processes/strategy_sdlc.md`
+- Promotion checklist: `docs/processes/promotion_checklist.md`
 
 ## Conventions
 
-- **Strategy naming**: `<TYPE>_<NAME>_<VERSION>` (e.g., `PINE_MeanReversion_v1.pine`)
-- **Backtest reports**: stored in `backtesting/reports/` with date prefix
-- **Backtest results**: per-platform results in `backtesting/results/<platform>/`
-- **Backtest exports**: CSV/XLSX trade logs and equity curves in `backtesting/exports/`
-- **Config files**: YAML format, secrets never committed (use `.example` templates)
-- **Research notebooks**: numbered prefix for ordering (e.g., `01_data_exploration.ipynb`)
+- Every production-bound strategy should have a `strategy.yaml`
+- Backtest reports live under `backtesting/reports/`
+- Backtest summaries live under `backtesting/results/<platform>/`
+- Exports live under `backtesting/exports/`
+- Secrets are never committed; use `.example` files instead
+- Research notebooks should use a numbered prefix for ordering
 
 ## Contributing
 
 1. Create a feature branch from `main`
-2. Add strategy documentation using templates in `docs/templates/`
-3. Include backtest results for any new strategy
-4. Run tests before merging: `pytest tests/`
+2. Add or update strategy documentation in `docs/` or the strategy package
+3. Include reproducible backtest outputs for strategy changes
+4. Run relevant tests before merging
