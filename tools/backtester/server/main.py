@@ -52,6 +52,36 @@ def configure_logging() -> None:
 configure_logging()
 log = logging.getLogger(__name__)
 
+
+import math as _math
+
+class _SafeJSONEncoder(json.JSONEncoder):
+    """Replace inf/nan with JSON-safe values."""
+    def default(self, o):
+        if isinstance(o, float):
+            if _math.isinf(o):
+                return 9999.99 if o > 0 else -9999.99
+            if _math.isnan(o):
+                return 0.0
+        return super().default(o)
+
+    def encode(self, o):
+        return super().encode(_clean_floats(o))
+
+def _clean_floats(obj):
+    if isinstance(obj, float):
+        if _math.isinf(obj):
+            return 9999.99 if obj > 0 else -9999.99
+        if _math.isnan(obj):
+            return 0.0
+        return obj
+    if isinstance(obj, dict):
+        return {k: _clean_floats(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_clean_floats(v) for v in obj]
+    return obj
+
+
 app = FastAPI(title="PineScript Backtester", version="1.0.0")
 
 app.add_middleware(
@@ -283,6 +313,7 @@ def backtest_report(bt_id: int):
     total_swap = sum(d.get("swap", 0) for d in deals)
     total_profit = sum(d.get("profit", 0) for d in deals if d.get("direction") != "balance")
 
+    metrics_data = _clean_floats(metrics_data) if metrics_data else {}
     return BacktestReport(
         id=bt_id,
         name=bt["name"],

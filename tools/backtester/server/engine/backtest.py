@@ -57,14 +57,53 @@ def _resolve_series_arg(key, df, computed):
 
 
 def _resolve_input_value(val, inputs):
-    if isinstance(val, str) and val in inputs:
-        return inputs[val]
+    if isinstance(val, str):
+        # Direct match
+        if val in inputs:
+            return inputs[val]
+        # Try without leading underscore (AST sometimes prefixes _)
+        stripped = val.lstrip("_")
+        if stripped in inputs:
+            return inputs[stripped]
+        # Try with leading underscore
+        if f"_{val}" in inputs:
+            return inputs[f"_{val}"]
+        # Case-insensitive fallback
+        val_lower = val.lower().lstrip("_")
+        for k, v in inputs.items():
+            if k.lower().lstrip("_") == val_lower:
+                return v
     return val
+
+
+def _safe_int(val, default=14):
+    """Safely convert a value to int, returning default if impossible."""
+    if isinstance(val, (int, float)):
+        return int(val)
+    if isinstance(val, str):
+        try:
+            return int(float(val))
+        except (ValueError, TypeError):
+            return default
+    return default
+
+
+def _safe_float(val, default=1.0):
+    """Safely convert a value to float, returning default if impossible."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+    return default
 
 
 def _compute_indicators(df, indicator_defs, inputs=None):
     computed = {}
     inputs = inputs or {}
+    _ind_errors = []  # Collect errors for diagnostic
 
     for ind_def in indicator_defs:
         name = ind_def["name"]
@@ -72,28 +111,28 @@ def _compute_indicators(df, indicator_defs, inputs=None):
         raw_args = ind_def.get("args", {})
 
         if name == "supertrend":
-            factor = float(_resolve_input_value(raw_args.get("factor", raw_args.get("arg0", 3)), inputs))
-            p = int(_resolve_input_value(raw_args.get("atr_period", raw_args.get("arg1", 10)), inputs))
+            factor = _safe_float(_resolve_input_value(raw_args.get("factor", raw_args.get("arg0", 3)), inputs), 3.0)
+            p = _safe_int(_resolve_input_value(raw_args.get("atr_period", raw_args.get("arg1", 10)), inputs), 10)
             try:
                 out = ind.supertrend(df["high"], df["low"], df["close"], p, factor)
                 computed[var] = out["supertrend"]
                 dv = ind_def.get("direction_var")
                 if dv:
                     computed[dv] = out["direction"]
-            except (TypeError, ValueError, KeyError):
-                pass
+            except Exception as _e:
+                _ind_errors.append(f"supertrend var={var} factor={factor} p={p}: {type(_e).__name__}: {_e}")
             continue
 
         if name in ("bb", "bollinger_bands"):
             source_key = str(_resolve_input_value(
                 raw_args.get("source", raw_args.get("arg0", "close")), inputs
             )).strip().strip('"')
-            p = int(_resolve_input_value(
+            p = _safe_int(_resolve_input_value(
                 raw_args.get("length", raw_args.get("period", raw_args.get("arg1", 20))), inputs
-            ))
-            sd = float(_resolve_input_value(
+            ), 20)
+            sd = _safe_float(_resolve_input_value(
                 raw_args.get("std_dev", raw_args.get("mult", raw_args.get("arg2", 2.0))), inputs
-            ))
+            ), 2.0)
             series = df[source_key] if source_key in OHLCV_FIELDS else computed.get(source_key, df["close"])
             try:
                 out = ind.bollinger_bands(series, p, sd)
@@ -110,8 +149,8 @@ def _compute_indicators(df, indicator_defs, inputs=None):
             continue
 
         if name in ("adx", "dmi"):
-            p = int(_resolve_input_value(raw_args.get("period", raw_args.get("arg0", 14)), inputs))
-            smoothing = int(_resolve_input_value(raw_args.get("smoothing", raw_args.get("arg1", p)), inputs))
+            p = _safe_int(_resolve_input_value(raw_args.get("period", raw_args.get("arg0", 14)), inputs), 14)
+            smoothing = _safe_int(_resolve_input_value(raw_args.get("smoothing", raw_args.get("arg1", p)), inputs), p)
 
             def _ser(key, default_ohlc):
                 k = str(raw_args.get(key, default_ohlc)).strip().strip('"')
@@ -164,7 +203,7 @@ def _compute_indicators(df, indicator_defs, inputs=None):
         if name == "atr" and "high" not in resolved_args:
             resolved_args = {"high": df["high"], "low": df["low"], "close": df["close"]}
             if "period" in raw_args:
-                resolved_args["period"] = int(_resolve_input_value(raw_args["period"], inputs))
+                resolved_args["period"] = _safe_int(_resolve_input_value(raw_args["period"], inputs), 14)
         elif name == "vwap" and "high" not in resolved_args:
             resolved_args = {"high": df["high"], "low": df["low"], "close": df["close"], "volume": df["volume"]}
 
@@ -196,6 +235,17 @@ def _compute_indicators(df, indicator_defs, inputs=None):
         else:
             computed[var] = result
 
+    # Write indicator computation errors to diag log
+    if _ind_errors:
+        try:
+            import os
+            _diag = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_backtest_diag.log")
+            with open(_diag, "a") as _f:
+                _f.write("\n--- INDICATOR ERRORS ---\n")
+                for err in _ind_errors:
+                    _f.write(f"  {err}\n")
+        except Exception:
+            pass
     return computed
 
 
@@ -416,6 +466,23 @@ def _find_operator(condition, op):
 
 
 def _resolve_value(token, values, variables=None):
+    token = token.strip()
+    # Strip wrapping parentheses: (close - nearSup) → close - nearSup
+    while token.startswith("(") and token.endswith(")"):
+        depth = 0
+        matched = True
+        for ci, ch in enumerate(token):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            if depth == 0 and ci < len(token) - 1:
+                matched = False
+                break
+        if matched:
+            token = token[1:-1].strip()
+        else:
+            break
     if token in values:
         return values[token]
     try:
@@ -438,12 +505,22 @@ def _resolve_value(token, values, variables=None):
     return float("nan")
 
 
+def _get_condition_str(c):
+    """Extract the condition string from an entry/exit dict, checking both 'condition' and 'when'."""
+    if isinstance(c, dict):
+        cond = c.get("condition", "")
+        if not cond:
+            cond = c.get("when", "")
+        return str(cond).strip() if cond else ""
+    return str(c).strip()
+
+
 def _evaluate_conditions(conditions, values, computed, idx, variables=None):
     if not conditions:
         return False
     has_nonempty = False
     for c in conditions:
-        cond_str = c.get("condition", "") if isinstance(c, dict) else str(c)
+        cond_str = _get_condition_str(c)
         if not cond_str:
             continue
         has_nonempty = True
@@ -456,7 +533,7 @@ def _evaluate_conditions_any(conditions, values, computed, idx, variables=None):
     if not conditions:
         return False
     for c in conditions:
-        cond_str = c.get("condition", "") if isinstance(c, dict) else str(c)
+        cond_str = _get_condition_str(c)
         if not cond_str:
             continue
         if _eval_condition(cond_str, values, computed, idx, variables):
@@ -592,6 +669,167 @@ def _resolve_bar_variables(values, variables, inputs):
             break
 
 
+def _post_process_computed(df, computed, variables, inputs_dict):
+    """Fill gaps the transpiler/AST missed: auto-compute SuperTrend from ATR,
+    resolve crossover/crossunder variables as indicator series, derive
+    SuperTrend direction flags and flips, compound range checks, etc."""
+    import re as _ppre
+
+    # ------------------------------------------------------------------ #
+    # 1) AUTO-COMPUTE SUPERTREND if stDir or st needed but missing        #
+    # ------------------------------------------------------------------ #
+    _need_st = ("stDir" in variables and "stDir" not in computed) or \
+               ("st" in variables and "st" not in computed)
+    if _need_st:
+        atr_period = _safe_int(inputs_dict.get("atrPeriod",
+                     inputs_dict.get("stPeriod",
+                     inputs_dict.get("atr_period", 10))), 10)
+        st_factor = _safe_float(inputs_dict.get("factor",
+                    inputs_dict.get("stMult",
+                    inputs_dict.get("stMultiplier",
+                    inputs_dict.get("stFactor", 3.0)))), 3.0)
+        try:
+            out = ind.supertrend(df["high"], df["low"], df["close"],
+                                 atr_period, st_factor)
+            if "st" not in computed:
+                computed["st"] = out["supertrend"]
+            if "stDir" not in computed:
+                computed["stDir"] = out["direction"]
+            computed["stLine"] = out["supertrend"]
+            computed["supertrend"] = out["supertrend"]
+            computed["supertrend_direction"] = out["direction"]
+            # Store final upper/lower bands (fu/fl in PineScript)
+            if "fu" in variables and "fu" not in computed:
+                computed["fu"] = out["final_upper"]
+            if "fl" in variables and "fl" not in computed:
+                computed["fl"] = out["final_lower"]
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ #
+    # 1b) DERIVE SuperTrend direction flips from stDir                    #
+    #     The transpiler stores var declarations not the runtime :=       #
+    #     reassignments, so we compute flip signals directly.             #
+    # ------------------------------------------------------------------ #
+    if "stDir" in computed:
+        _dir = computed["stDir"]
+        _prev_dir = _dir.shift(1)
+        # flipUpClose = direction just changed to bullish (1)
+        if "flipUpClose" in variables and "flipUpClose" not in computed:
+            computed["flipUpClose"] = ((_dir == 1.0) & (_prev_dir == -1.0)).astype(float)
+        # flipDownClose = direction just changed to bearish (-1)
+        if "flipDownClose" in variables and "flipDownClose" not in computed:
+            computed["flipDownClose"] = ((_dir == -1.0) & (_prev_dir == 1.0)).astype(float)
+        # stBullish / stBearish convenience aliases
+        if "stBullish" in variables and "stBullish" not in computed:
+            computed["stBullish"] = (_dir == 1.0).astype(float)
+        if "stBearish" in variables and "stBearish" not in computed:
+            computed["stBearish"] = (_dir == -1.0).astype(float)
+
+    # ------------------------------------------------------------------ #
+    # 2) RESOLVE crossover/crossunder variable expressions as series      #
+    # ------------------------------------------------------------------ #
+    for var_name, var_expr in variables.items():
+        if var_name in computed or not isinstance(var_expr, str):
+            continue
+        m = _ppre.match(r'ta\.crossover\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)', var_expr.strip())
+        if m:
+            a_s, b_s = computed.get(m.group(1)), computed.get(m.group(2))
+            if a_s is not None and b_s is not None:
+                computed[var_name] = ((a_s.shift(1) <= b_s.shift(1)) & (a_s > b_s)).astype(float)
+            continue
+        m = _ppre.match(r'ta\.crossunder\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)', var_expr.strip())
+        if m:
+            a_s, b_s = computed.get(m.group(1)), computed.get(m.group(2))
+            if a_s is not None and b_s is not None:
+                computed[var_name] = ((a_s.shift(1) >= b_s.shift(1)) & (a_s < b_s)).astype(float)
+            continue
+
+    # Also resolve crossover/crossunder by variable NAME pattern even if
+    # the expression doesn't contain ta.crossover (e.g. captured as "na")
+    if "macdLine" in computed and "signalLine" in computed:
+        _ml, _sl = computed["macdLine"], computed["signalLine"]
+        if "macdCrossUpClose" in variables and "macdCrossUpClose" not in computed:
+            computed["macdCrossUpClose"] = ((_ml.shift(1) <= _sl.shift(1)) & (_ml > _sl)).astype(float)
+        if "macdCrossDownClose" in variables and "macdCrossDownClose" not in computed:
+            computed["macdCrossDownClose"] = ((_ml.shift(1) >= _sl.shift(1)) & (_ml < _sl)).astype(float)
+        # common aliases
+        if "macdCrossUp" in variables and "macdCrossUp" not in computed:
+            computed["macdCrossUp"] = ((_ml.shift(1) <= _sl.shift(1)) & (_ml > _sl)).astype(float)
+        if "macdCrossDown" in variables and "macdCrossDown" not in computed:
+            computed["macdCrossDown"] = ((_ml.shift(1) >= _sl.shift(1)) & (_ml < _sl)).astype(float)
+
+    # ------------------------------------------------------------------ #
+    # 3) RESOLVE simple comparisons: var op number                        #
+    # ------------------------------------------------------------------ #
+    for var_name, var_expr in variables.items():
+        if var_name in computed or not isinstance(var_expr, str):
+            continue
+        expr = var_expr.strip()
+        m = _ppre.match(r'^(\w+)\s*(==|!=|>=|<=|>|<)\s*(-?\d+(?:\.\d+)?)$', expr)
+        if m:
+            series = computed.get(m.group(1))
+            if series is not None:
+                num = float(m.group(3))
+                op = m.group(2)
+                ops = {"==": "__eq__", "!=": "__ne__", ">": "__gt__",
+                       "<": "__lt__", ">=": "__ge__", "<=": "__le__"}
+                computed[var_name] = getattr(series, ops[op])(num).astype(float)
+            continue
+
+    # ------------------------------------------------------------------ #
+    # 3b) RESOLVE compound range checks as series                         #
+    #     e.g. adxInRangeClose = adx >= 20 and adx <= 35                 #
+    # ------------------------------------------------------------------ #
+    for var_name, var_expr in variables.items():
+        if var_name in computed or not isinstance(var_expr, str):
+            continue
+        expr = var_expr.strip()
+        # Pattern: seriesA op1 num1 and seriesB op2 num2
+        m = _ppre.match(
+            r'^(\w+)\s*(>=|<=|>|<|==|!=)\s*(-?\d+(?:\.\d+)?)\s+and\s+'
+            r'(\w+)\s*(>=|<=|>|<|==|!=)\s*(-?\d+(?:\.\d+)?)$', expr)
+        if m:
+            s1, s2 = computed.get(m.group(1)), computed.get(m.group(4))
+            if s1 is not None and s2 is not None:
+                ops = {"==": "__eq__", "!=": "__ne__", ">": "__gt__",
+                       "<": "__lt__", ">=": "__ge__", "<=": "__le__"}
+                r1 = getattr(s1, ops[m.group(2)])(float(m.group(3)))
+                r2 = getattr(s2, ops[m.group(5)])(float(m.group(6)))
+                computed[var_name] = (r1 & r2).astype(float)
+            continue
+
+    # Also resolve adxInRangeClose by NAME if expression didn't match
+    if "adx" in computed and "adxInRangeClose" in variables and "adxInRangeClose" not in computed:
+        _adx = computed["adx"]
+        # Default ADX range from strategy name hint "ADX 20-35"
+        _lo = _safe_float(inputs_dict.get("adxMin", inputs_dict.get("adxLow", 20)), 20)
+        _hi = _safe_float(inputs_dict.get("adxMax", inputs_dict.get("adxHigh", 35)), 35)
+        computed["adxInRangeClose"] = ((_adx >= _lo) & (_adx <= _hi)).astype(float)
+
+    # ------------------------------------------------------------------ #
+    # 4) RESOLVE flip detection: var and not var[1]                       #
+    # ------------------------------------------------------------------ #
+    for var_name, var_expr in variables.items():
+        if var_name in computed or not isinstance(var_expr, str):
+            continue
+        expr = var_expr.strip()
+        m = _ppre.match(r'^(\w+)\s+and\s+not\s+(\w+)\[1\]$', expr)
+        if m and m.group(1) == m.group(2):
+            series = computed.get(m.group(1))
+            if series is not None:
+                prev = series.shift(1).fillna(0)
+                computed[var_name] = ((series == 1.0) & (prev == 0.0)).astype(float)
+                continue
+        m = _ppre.match(r'^not\s+(\w+)\s+and\s+(\w+)\[1\]$', expr)
+        if m and m.group(1) == m.group(2):
+            series = computed.get(m.group(1))
+            if series is not None:
+                prev = series.shift(1).fillna(0)
+                computed[var_name] = ((series == 0.0) & (prev == 1.0)).astype(float)
+                continue
+
+
 def run_backtest(df, strategy_def, settings):
     # --- DIAGNOSTIC LOG (written to file to verify code version) ---
     _diag_path = None
@@ -601,15 +839,21 @@ def run_backtest(df, strategy_def, settings):
         _diag_path = os.path.join(_diag_dir, "_backtest_diag.log")
         with open(_diag_path, "w") as _df:
             _df.write(f"run_backtest called at {datetime.datetime.now()}\n")
-            _df.write(f"CODE VERSION: v7-full-fix\n")
+            _df.write(f"CODE VERSION: v11-position-state\n")
             _df.write(f"df shape: {df.shape}\n")
             _df.write(f"strategy keys: {list(strategy_def.keys())}\n")
             _df.write(f"entry_long: {strategy_def.get('entry_long', [])}\n")
             _df.write(f"entry_short: {strategy_def.get('entry_short', [])}\n")
-            _df.write(f"exit_rules count: {len(strategy_def.get('exit_rules', []))}\n")
+            _df.write(f"exit_rules: {strategy_def.get('exit_rules', [])}\n")
             _df.write(f"indicators count: {len(strategy_def.get('indicators', []))}\n")
+            for _ii, _idef in enumerate(strategy_def.get('indicators', [])):
+                _df.write(f"  indicator[{_ii}]: {_idef}\n")
             _df.write(f"variables: {list(strategy_def.get('variables', {}).keys())}\n")
+            for _vk, _vv in strategy_def.get('variables', {}).items():
+                _df.write(f"  var {_vk} = {repr(_vv)}\n")
             _df.write(f"inputs count: {len(strategy_def.get('inputs', []))}\n")
+            for _inp in strategy_def.get('inputs', []):
+                _df.write(f"  input: {_inp.get('name')} = {_inp.get('default')} ({type(_inp.get('default')).__name__})\n")
     except Exception:
         pass
     # --- END DIAGNOSTIC ---
@@ -654,11 +898,32 @@ def run_backtest(df, strategy_def, settings):
 
     computed = _compute_indicators(df, indicator_defs, inputs_dict)
 
+    # --- POST-PROCESSING: fill gaps the transpiler/AST missed ---
+    _post_process_computed(df, computed, variables, inputs_dict)
+
+    # Log computed indicator keys
+    if _diag_path:
+        try:
+            with open(_diag_path, "a") as _df:
+                _df.write(f"\ncomputed keys after indicators: {sorted(computed.keys())}\n")
+                _df.write(f"inputs_dict keys: {sorted(inputs_dict.keys())}\n")
+                # Check specific keys
+                for _ck in ["st", "stDir", "fu", "fl", "flipUpClose", "flipDownClose",
+                            "macdLine", "signalLine", "macdCrossUpClose", "macdCrossDownClose",
+                            "adx", "adxInRangeClose"]:
+                    if _ck in computed:
+                        _s = computed[_ck]
+                        _df.write(f"  {_ck}: len={len(_s)}, first_valid={_s.first_valid_index()}, sample={_s.iloc[50] if len(_s) > 50 else 'N/A'}\n")
+                    else:
+                        _df.write(f"  {_ck}: MISSING from computed\n")
+        except Exception:
+            pass
+
     # --- Pre-compute simplified support/resistance from rolling pivot data ---
     # This approximates fibonacci levels for strategies using request.security()
     # and array-based level computation that the engine cannot replicate.
     # Compute multiple fib levels and at each bar pick nearest below/above close.
-    _pivot_lookback = int(inputs_dict.get("h22Lookback", 30))
+    _pivot_lookback = _safe_int(inputs_dict.get("h22Lookback", 30), 30)
     _rolling_high = df["high"].rolling(window=_pivot_lookback, min_periods=1).max()
     _rolling_low = df["low"].rolling(window=_pivot_lookback, min_periods=1).min()
     _fib_levels = [0.236, 0.382, 0.44, 0.50, 0.618, 0.786]
@@ -722,16 +987,16 @@ def run_backtest(df, strategy_def, settings):
 
         # Inject simplified support/resistance if not already resolved
         if "nearSup" not in values or np.isnan(values.get("nearSup", float("nan"))):
-            ns = float(_sup1.iat[i]) if not pd.isna(_sup1.iat[i]) else float("nan")
+            ns = float(_near_sup.iat[i]) if not pd.isna(_near_sup.iat[i]) else float("nan")
             values["nearSup"] = ns
         if "nearRes" not in values or np.isnan(values.get("nearRes", float("nan"))):
-            nr = float(_res2.iat[i]) if not pd.isna(_res2.iat[i]) else float("nan")
+            nr = float(_near_res.iat[i]) if not pd.isna(_near_res.iat[i]) else float("nan")
             values["nearRes"] = nr
         if "nextSup" not in values or np.isnan(values.get("nextSup", float("nan"))):
-            ns2 = float(_sup2.iat[i]) if not pd.isna(_sup2.iat[i]) else float("nan")
+            ns2 = float(_next_sup.iat[i]) if not pd.isna(_next_sup.iat[i]) else float("nan")
             values["nextSup"] = ns2
         if "nextRes" not in values or np.isnan(values.get("nextRes", float("nan"))):
-            nr2 = float(_res1.iat[i]) if not pd.isna(_res1.iat[i]) else float("nan")
+            nr2 = float(_next_res.iat[i]) if not pd.isna(_next_res.iat[i]) else float("nan")
             values["nextRes"] = nr2
 
         # Inject barsSinceExit for cooldown tracking
@@ -743,7 +1008,32 @@ def run_backtest(df, strategy_def, settings):
         if "nearResC" not in values:
             values["nearResC"] = 1.0
 
+        # Map PineScript position-state variables to engine position tracking.
+        # PineScript `var bool inLong/inShort` are stateful and use := which the
+        # transpiler can't capture.  Override them with the engine's real state.
+        if "inLong" in variables:
+            values["inLong"] = 1.0 if pm.has_position and pm.current_position.direction == "long" else 0.0
+        if "inShort" in variables:
+            values["inShort"] = 1.0 if pm.has_position and pm.current_position.direction == "short" else 0.0
+        if "flat" in variables:
+            values["flat"] = 1.0 if not pm.has_position else 0.0
+        # barstate.isconfirmed is always true in a backtester (only closed bars)
+        values["barstate.isconfirmed"] = 1.0
+
         _resolve_bar_variables(values, variables, inputs_dict)
+
+        # Detailed diagnostic at specific bars
+        if _diag_path and i in (50, 100, 500, 1000):
+            try:
+                with open(_diag_path, "a") as _df:
+                    _df.write(f"\n--- BAR {i} DETAILED ---\n")
+                    for _vk in ["close", "st", "stDir", "fu", "fl", "flat", "adx",
+                                "macdCrossUpClose", "macdCrossDownClose", "adxInRangeClose",
+                                "buyEntry", "sellEntry", "exitLong", "exitShort",
+                                "strategy.position_size", "barsSinceExit"]:
+                        _df.write(f"  {_vk} = {values.get(_vk, 'MISSING')}\n")
+            except Exception:
+                pass
 
         _was_in_position = pm.has_position
         if pm.has_position:
@@ -755,7 +1045,7 @@ def run_backtest(df, strategy_def, settings):
             if not closed_by_exit and pm.has_position:
                 for rule in exit_rules:
                     rule_type = rule.get("type", "")
-                    cond = rule.get("condition", "")
+                    cond = rule.get("condition", "") or rule.get("when", "")
                     if rule_type in ("close", "close_all") and cond:
                         if _eval_condition(cond, values, computed, i, variables):
                             comment = rule.get("comment", rule.get("id", "close"))

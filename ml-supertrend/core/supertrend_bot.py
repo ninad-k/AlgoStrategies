@@ -44,6 +44,7 @@ class Config:
     cluster_choice: str = "Best"   # "Best", "Average", or "Worst" cluster
     volume_ma_period: int = 20
     volume_multiplier: float = 1.2 # volume must exceed MA * this to confirm signal
+    use_volume_filter: bool = True  # if False, skip volume confirmation (useful when history has no tick volume)
     sl_multiplier: float = 2.0     # stop loss = ATR * this
     tp_multiplier: float = 3.0     # take profit = ATR * this
     use_trailing: bool = True
@@ -269,8 +270,19 @@ class SuperTrendBot:
 
     def check_volume_condition(self, df: pd.DataFrame) -> bool:
         """Signal filter: current bar volume must exceed the moving average by the configured multiplier."""
-        current_volume = df['tick_volume'].iloc[-1]
-        avg_volume = df['volume_ma'].iloc[-1]
+        if not self.config.use_volume_filter:
+            return True
+
+        current_volume = float(df["tick_volume"].iloc[-1])
+        avg_volume = df["volume_ma"].iloc[-1]
+        if pd.isna(avg_volume):
+            return True
+
+        avg_volume = float(avg_volume)
+        # Historical rates often have tick_volume = 0 for every bar; do not block all signals in that case.
+        if current_volume <= 0 and avg_volume <= 0:
+            return True
+
         return current_volume > avg_volume * self.config.volume_multiplier
 
     def place_order(self, order_type: int, volume: float, price: float, sl: float, tp: float) -> int:

@@ -6,8 +6,9 @@
 //+------------------------------------------------------------------+
 #property copyright "AlgoStrategies"
 #property link      ""
-#property version   "1.00"
+#property version   "1.04"
 #property description "Buy/Sell on close beyond Donchian channel with volume>MA confirmation and LWTI slope. SL trails the DC basis. Partial TPs at 1R/2R, optional break-even, optional max-candle filter."
+#property description "If Strategy Tester shows 0 trades: check History Quality (Tools - History Center). Low tick quality often yields tick_volume=0; enable InpBypassVolumeWhenNoTicks or download full tick history."
 
 #include <Trade\Trade.mqh>
 
@@ -50,6 +51,10 @@ input int  InpLwtiSlopeBars = 2;            // LWTI slope lookback (bars)
 
 sinput string sep3 = "=== Entry Filters ===";
 input int  InpMaxCandlePoints = 0;          // Max entry candle range in points (0=off)
+input bool InpBypassVolumeWhenNoTicks = true; // Tester: if bar tick volume is 0, skip vol>MA check (live usually has volume>0)
+input bool InpUseLwtiFilter = true;         // false = Donchian + volume/candle only (LWTI ignored)
+input bool InpLwtiRequireMidline50 = false; // true = LWTI>50 & rising (long) / <50 & falling (short) — very strict
+input bool InpVerboseEntry = false;       // Journal: why Donchian break did not open (debug)
 
 sinput string sep4 = "=== Lot Sizing ===";
 input ENUM_LOT_MODE InpLotMode  = LOT_FIXED; // Lot mode
@@ -66,6 +71,7 @@ input bool   InpBreakEven = true;               // Move SL to entry after TP1
 sinput string sep6 = "=== General ===";
 input long   InpMagic   = 20250407;             // Magic number
 input string InpComment = "DonchianVolLWTI";    // Order comment
+input bool   InpShowIndicatorsOnChart = true;   // Attach Donchian, Volumes MA & LWTI to chart
 
 //+------------------------------------------------------------------+
 //| Globals                                                          |
@@ -86,6 +92,119 @@ bool     g_BreakEvenActive = false;
 ulong    g_Ticket         = 0;
 
 datetime g_LastBarTime    = 0;
+
+string   g_ChartIndDc   = ""; // short name on chart (for removal)
+string   g_ChartIndVol  = "";
+string   g_ChartIndLwti = "";
+
+//+------------------------------------------------------------------+
+//| Chart: attach / detach indicator handles (same as iCustom)       |
+//+------------------------------------------------------------------+
+bool ChartIndicatorsAllowed()
+  {
+   if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE))
+      return(false);
+   return(true);
+  }
+
+bool ChartIndicatorDeleteByShortName(const string shortname)
+  {
+   if(shortname == "") return(false);
+   int windows = (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL);
+   for(int w = 0; w < windows; w++)
+     {
+      int total = ChartIndicatorsTotal(0, w);
+      for(int i = 0; i < total; i++)
+        {
+         if(ChartIndicatorName(0, w, i) == shortname)
+            return ChartIndicatorDelete(0, w, shortname);
+        }
+     }
+   return(false);
+  }
+
+bool ChartAttachIndicator(const int subwindow, const int handle, string &outShortName)
+  {
+   outShortName = "";
+   if(handle == INVALID_HANDLE) return(false);
+   int before = ChartIndicatorsTotal(0, subwindow);
+   if(!ChartIndicatorAdd(0, subwindow, handle))
+     {
+      Print("ChartIndicatorAdd failed sub=", subwindow, " err=", GetLastError());
+      return(false);
+     }
+   int after = ChartIndicatorsTotal(0, subwindow);
+   if(after > before)
+     {
+      outShortName = ChartIndicatorName(0, subwindow, after - 1);
+      return(true);
+     }
+   return(false);
+  }
+
+void RemoveEaChartIndicators()
+  {
+   if(g_ChartIndLwti != "")
+     {
+      ChartIndicatorDeleteByShortName(g_ChartIndLwti);
+      g_ChartIndLwti = "";
+     }
+   if(g_ChartIndVol != "")
+     {
+      ChartIndicatorDeleteByShortName(g_ChartIndVol);
+      g_ChartIndVol = "";
+     }
+   if(g_ChartIndDc != "")
+     {
+      ChartIndicatorDeleteByShortName(g_ChartIndDc);
+      g_ChartIndDc = "";
+     }
+   ChartRedraw(0);
+  }
+
+void ApplyEaChartIndicators()
+  {
+   RemoveEaChartIndicators();
+   if(!InpShowIndicatorsOnChart || !ChartIndicatorsAllowed())
+      return;
+
+   if(ChartAttachIndicator(0, g_DcHandle, g_ChartIndDc))
+      Print("Chart: Donchian → ", g_ChartIndDc);
+   if(ChartAttachIndicator(1, g_VolHandle, g_ChartIndVol))
+      Print("Chart: Volume MA → ", g_ChartIndVol);
+   if(ChartAttachIndicator(2, g_LwtiHandle, g_ChartIndLwti))
+      Print("Chart: LWTI → ", g_ChartIndLwti);
+
+   ChartRedraw(0);
+  }
+
+//+------------------------------------------------------------------+
+//| Broker-compatible filling mode (FOK often fails → no trades)    |
+//+------------------------------------------------------------------+
+ENUM_ORDER_TYPE_FILLING GetFillingMode()
+  {
+   uint filling = (uint)SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+   if((filling & SYMBOL_FILLING_FOK) == SYMBOL_FILLING_FOK) return ORDER_FILLING_FOK;
+   if((filling & SYMBOL_FILLING_IOC) == SYMBOL_FILLING_IOC) return ORDER_FILLING_IOC;
+   return ORDER_FILLING_RETURN;
+  }
+
+//+------------------------------------------------------------------+
+//| Position ticket for this EA (order ticket ≠ position ticket)    |
+//+------------------------------------------------------------------+
+ulong FindOurPositionTicket()
+  {
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
+      return ticket;
+     }
+   return 0;
+  }
 
 //+------------------------------------------------------------------+
 //| Initialization                                                   |
@@ -115,7 +234,10 @@ int OnInit()
 
    g_Trade.SetExpertMagicNumber(InpMagic);
    g_Trade.SetDeviationInPoints(20);
-   g_Trade.SetTypeFilling(ORDER_FILLING_FOK);
+   ENUM_ORDER_TYPE_FILLING fill = GetFillingMode();
+   g_Trade.SetTypeFilling(fill);
+   Print("Order filling mode: ", EnumToString(fill),
+         " (SYMBOL_FILLING_MODE=", (ulong)SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE), ")");
 
    g_DcHandle = iCustom(_Symbol, _Period, "Donchian Channels", InpDcLength, InpDcOffset);
    if(g_DcHandle == INVALID_HANDLE)
@@ -140,8 +262,13 @@ int OnInit()
       return(INIT_FAILED);
      }
 
-   Print("DonchianVolLWTI_EA initialized. Magic=", InpMagic,
-         " DC=", InpDcLength, " VolMA=", InpVolMaLength, " LWTI=", InpLwtiPeriod);
+   Print("DonchianVolLWTI_EA v1.04 Magic=", InpMagic,
+         " DC=", InpDcLength, " VolMA=", InpVolMaLength, " LWTI=", InpLwtiPeriod,
+         " LwtiMid50=", InpLwtiRequireMidline50, " UseLwti=", InpUseLwtiFilter,
+         " ShowIndicators=", InpShowIndicatorsOnChart);
+
+   ApplyEaChartIndicators();
+
    return(INIT_SUCCEEDED);
   }
 
@@ -150,6 +277,8 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
+   RemoveEaChartIndicators();
+
    if(g_DcHandle   != INVALID_HANDLE) IndicatorRelease(g_DcHandle);
    if(g_VolHandle  != INVALID_HANDLE) IndicatorRelease(g_VolHandle);
    if(g_LwtiHandle != INVALID_HANDLE) IndicatorRelease(g_LwtiHandle);
@@ -237,12 +366,17 @@ void ResetState()
 
 void SyncTradeState()
   {
-   bool hasPos = PositionSelectByTicket(g_Ticket);
-   if(!hasPos && g_TradeState != STATE_FLAT)
+   if(g_TradeState == STATE_FLAT) return;
+   if(g_Ticket != 0 && PositionSelectByTicket(g_Ticket))
+      return;
+   ulong t = FindOurPositionTicket();
+   if(t != 0)
      {
-      Print("Position no longer exists. Resetting state.");
-      ResetState();
+      g_Ticket = t;
+      return;
      }
+   Print("Position no longer exists. Resetting state.");
+   ResetState();
   }
 
 //+------------------------------------------------------------------+
@@ -301,11 +435,13 @@ void OpenEntry(int direction, double basis)
 
    if(!ok)
      {
-      Print("Entry failed: retcode=", g_Trade.ResultRetcode(), " ", g_Trade.ResultComment());
+      Print("Entry failed: retcode=", g_Trade.ResultRetcode(),
+            " ", g_Trade.ResultRetcodeDescription(),
+            " ", g_Trade.ResultComment());
       return;
      }
 
-   g_Ticket          = g_Trade.ResultOrder();
+   g_Ticket          = FindOurPositionTicket();
    g_EntryPrice      = g_Trade.ResultPrice();
    if(g_EntryPrice <= 0.0) g_EntryPrice = entry;
    g_StopLoss        = basis;
@@ -446,6 +582,7 @@ void TryEntry()
    double lwti1, lwtiN;
    if(!GetLwti(1, lwti1)) return;
    if(!GetLwti(1 + InpLwtiSlopeBars, lwtiN)) return;
+   if(lwti1 == EMPTY_VALUE || lwtiN == EMPTY_VALUE) return;
 
    double close1 = iClose(_Symbol, _Period, 1);
    double close2 = iClose(_Symbol, _Period, 2);
@@ -466,16 +603,44 @@ void TryEntry()
    bool dcBuyBreak  = (close2 <= upper2) && (close1 > upper1);
    bool dcSellBreak = (close2 >= lower2) && (close1 < lower1);
 
-   bool volUp = (vol1 > ma1) && (close1 > open1);
-   bool volDn = (vol1 > ma1) && (close1 < open1);
+   // Strategy Tester often has tick_volume=0 → vol1>ma1 is false even when MA>0. Optional bypass.
+   bool volConfirm = (vol1 > ma1);
+   if(InpBypassVolumeWhenNoTicks && vol1 <= 0.0)
+      volConfirm = true;
 
-   bool lwtiUp = (lwti1 > 50.0) && (lwti1 > lwtiN);
-   bool lwtiDn = (lwti1 < 50.0) && (lwti1 < lwtiN);
+   bool volUp = volConfirm && (close1 > open1);
+   bool volDn = volConfirm && (close1 < open1);
+
+   bool lwtiUp = true;
+   bool lwtiDn = true;
+   if(InpUseLwtiFilter)
+     {
+      if(InpLwtiRequireMidline50)
+        {
+         lwtiUp = (lwti1 > 50.0) && (lwti1 > lwtiN);
+         lwtiDn = (lwti1 < 50.0) && (lwti1 < lwtiN);
+        }
+      else
+        {
+         // Slope-only: still requires LWTI direction aligned with trade (less strict than 50-line + slope)
+         lwtiUp = (lwti1 > lwtiN);
+         lwtiDn = (lwti1 < lwtiN);
+        }
+     }
 
    if(dcBuyBreak && volUp && lwtiUp)
       OpenEntry(STATE_LONG, basis1);
    else if(dcSellBreak && volDn && lwtiDn)
       OpenEntry(STATE_SHORT, basis1);
+   else if(InpVerboseEntry && (dcBuyBreak || dcSellBreak))
+     {
+      if(dcBuyBreak && !(volUp && lwtiUp))
+         Print("Donchian BUY blocked: volUp=", volUp, " (volConfirm=", volConfirm, " bullCandle=", (close1 > open1),
+               ") lwtiUp=", lwtiUp, " lwti1=", DoubleToString(lwti1, 2), " lwtiN=", DoubleToString(lwtiN, 2));
+      if(dcSellBreak && !(volDn && lwtiDn))
+         Print("Donchian SELL blocked: volDn=", volDn, " lwtiDn=", lwtiDn,
+               " lwti1=", DoubleToString(lwti1, 2), " lwtiN=", DoubleToString(lwtiN, 2));
+     }
   }
 
 //+------------------------------------------------------------------+

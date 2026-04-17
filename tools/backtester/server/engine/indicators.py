@@ -156,6 +156,8 @@ def supertrend(
     return {
         "supertrend": pd.Series(st, index=idx),
         "direction": pd.Series(direction, index=idx),
+        "final_upper": pd.Series(f_up, index=idx),
+        "final_lower": pd.Series(f_lo, index=idx),
     }
 
 

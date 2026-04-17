@@ -1,0 +1,218 @@
+═════════════════════════════════════════════════════════════════════════════════
+                    REY CAPITAL - GEMMA TRADER
+                   QUICK START REFERENCE GUIDE
+═════════════════════════════════════════════════════════════════════════════════
+
+FIRST TIME SETUP (Run Once)
+─────────────────────────────────────────────────────────────────────────────────
+
+1. Open PowerShell as Administrator
+2. Navigate to: D:\Projects\AlgoStrategies\AlgoStrategies\execution\gemma_trader
+3. Run:
+
+   .\Setup-GemmaTrader.ps1
+
+   This will:
+   ✓ Check Python installation
+   ✓ Create virtual environment
+   ✓ Install dependencies
+   ✓ Set up Ollama & Gemma 4 model
+   ✓ Create logs directory
+
+   Wait 5-10 minutes for Gemma model to download (~6GB)
+
+
+RUNNING THE APPLICATION
+─────────────────────────────────────────────────────────────────────────────────
+
+Paper Trading Mode (Default, Recommended):
+
+   .\Run-GemmaTrader.ps1
+
+Live Trading Mode (Use with Caution):
+
+   .\Run-GemmaTrader.ps1 -Mode live
+
+
+ACCESSING THE DASHBOARD
+─────────────────────────────────────────────────────────────────────────────────
+
+Once running, open browser:
+
+   http://localhost:8050
+
+Dashboard shows:
+   • Real-time trade decisions
+   • Open positions
+   • Performance metrics
+   • AI reasoning
+   • Trade history
+
+
+STOPPING THE APPLICATION
+─────────────────────────────────────────────────────────────────────────────────
+
+Graceful Shutdown (Recommended):
+
+   .\Stop-GemmaTrader.ps1
+
+Quick Stop (in running terminal):
+
+   Press Ctrl+C
+
+Force Kill (if unresponsive):
+
+   .\Stop-GemmaTrader.ps1 -Force
+
+
+COMMON CONFIGURATIONS
+─────────────────────────────────────────────────────────────────────────────────
+
+Change Dashboard Port:
+   .\Run-GemmaTrader.ps1 -Port 8080
+
+Trade Specific Coins:
+   .\Run-GemmaTrader.ps1 -Symbols BTCUSD ETHUSD
+
+Dashboard Only (No Trading):
+   .\Run-GemmaTrader.ps1 -DashboardOnly
+
+Custom Config File:
+   .\Run-GemmaTrader.ps1 -Config my_config.yaml
+
+
+TROUBLESHOOTING QUICK FIXES
+─────────────────────────────────────────────────────────────────────────────────
+
+Problem: "Python not found"
+   Solution: Install Python 3.8+ from python.org, add to PATH, restart PowerShell
+
+Problem: "Ollama service not running"
+   Solution: Run setup again: .\Setup-GemmaTrader.ps1
+
+Problem: "Gemma model not found"
+   Solution: ollama pull gemma4
+
+Problem: "Port 8050 already in use"
+   Solution: .\Run-GemmaTrader.ps1 -Port 8080
+
+Problem: "Virtual environment not found"
+   Solution: Delete venv folder, run setup again
+
+Problem: "Script execution disabled"
+   Solution: Run as admin, then:
+            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+
+KEY DIRECTORIES
+─────────────────────────────────────────────────────────────────────────────────
+
+Application:     D:\Projects\AlgoStrategies\AlgoStrategies\execution\gemma_trader
+Virtual Env:     .\venv\
+Logs:            .\logs\
+Config:          .\config.yaml
+
+
+LOG FILES
+─────────────────────────────────────────────────────────────────────────────────
+
+Location: logs/ directory
+
+Files:
+   • trades.json              - Trade records
+   • gemma_decisions.json     - AI decisions
+   • trade_outcomes.json      - Trade results
+   • adaptive_context.txt     - Learning history
+
+
+SCRIPT SUMMARY
+─────────────────────────────────────────────────────────────────────────────────
+
+Setup-GemmaTrader.ps1
+   Purpose: One-time initialization
+   Usage:   .\Setup-GemmaTrader.ps1
+   Options: -SkipOllama, -SkipMT5, -OllamaModel
+
+Run-GemmaTrader.ps1
+   Purpose: Launch the trading bot
+   Usage:   .\Run-GemmaTrader.ps1
+   Options: -Mode (paper|live), -Port, -Symbols, -Interval, -DashboardOnly
+
+Stop-GemmaTrader.ps1
+   Purpose: Safely shut down the bot
+   Usage:   .\Stop-GemmaTrader.ps1
+   Options: -Force, -KillOllama, -WaitSeconds
+
+
+TRADING MODES
+─────────────────────────────────────────────────────────────────────────────────
+
+PAPER MODE (Default)
+   • Simulated trading
+   • No real money at risk
+   • Perfect for testing
+   • Recommended: Start here
+
+LIVE MODE
+   • Real trading with actual funds
+   • Requires MetaTrader 5 login
+   • Risk management enabled
+   • Caution: Test thoroughly in paper mode first
+
+
+DEFAULT TRADING SYMBOLS
+─────────────────────────────────────────────────────────────────────────────────
+
+   • BTCUSD  - Bitcoin
+   • ETHUSD  - Ethereum
+   • LTCUSD  - Litecoin
+   • XRPUSD  - Ripple
+   • SOLUSD  - Solana
+
+Edit config.yaml to add/remove symbols
+
+
+PERFORMANCE TIPS
+─────────────────────────────────────────────────────────────────────────────────
+
+• Use GPU for faster inference (if NVIDIA GPU available)
+• Reduce poll_interval_seconds for more frequent checks
+• Increase confidence_threshold for fewer, higher-quality trades
+• Reduce max_open_trades to limit concurrent positions
+
+
+IMPORTANT WARNINGS
+─────────────────────────────────────────────────────────────────────────────────
+
+⚠️  LIVE TRADING RISKS
+   • Real money is at risk in live mode
+   • Test thoroughly in paper mode first
+   • Start with small position sizes
+   • Monitor actively, don't leave unattended
+   • Have stop-loss orders in place
+
+⚠️  OLLAMA REQUIREMENTS
+   • Requires 6-8GB RAM
+   • ~9.6GB disk space for Gemma model
+   • GPU optional but recommended
+   • Don't run on low-spec systems
+
+
+DOCUMENTATION
+─────────────────────────────────────────────────────────────────────────────────
+
+Detailed Guide:      DEPLOYMENT.md
+Config Reference:    config.yaml
+System Requirements: README.md
+
+
+CONTACT & SUPPORT
+─────────────────────────────────────────────────────────────────────────────────
+
+Email: info@reycapitalsfo.com
+Repository: D:\Projects\AlgoStrategies\AlgoStrategies\execution\gemma_trader
+
+
+═════════════════════════════════════════════════════════════════════════════════
+Version: 1.0 | Last Updated: April 2024 | Rey Capital
+═════════════════════════════════════════════════════════════════════════════════

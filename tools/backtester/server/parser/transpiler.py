@@ -699,6 +699,14 @@ def _fallback_extract(source: str, result: dict) -> dict:
     if not result.get("entry_long") and not result.get("entry_short"):
         _extract_strategy_calls_from_source(lines, result)
 
+    # ---- exit rules from regex (only if AST didn't find them) ----
+    if not result.get("exit_rules"):
+        _extract_strategy_calls_from_source(lines, result)
+
+    # ---- last-resort: infer entries from variable names if still empty ----
+    if not result.get("entry_long") and not result.get("entry_short"):
+        _infer_entries_from_variables(result)
+
     return result
 
 
@@ -800,6 +808,73 @@ def _try_numeric(s):
         return s
 
 
+def _infer_entries_from_variables(result):
+    """Last-resort: if strategy.entry calls were not found by AST or regex,
+    look for variables named buyEntry/sellEntry/longEntry/shortEntry etc.
+    and create synthetic entry records so the backtest engine can evaluate them."""
+    variables = result.get("variables", {})
+    if not variables:
+        return
+
+    # Patterns that suggest a long entry condition variable
+    long_patterns = ["buyEntry", "buySignal", "longEntry", "longSignal",
+                     "enterLong", "goLong", "buy_entry", "long_entry",
+                     "buy_signal", "long_signal", "filteredBuy"]
+    short_patterns = ["sellEntry", "sellSignal", "shortEntry", "shortSignal",
+                      "enterShort", "goShort", "sell_entry", "short_entry",
+                      "sell_signal", "short_signal", "filteredSell"]
+
+    for var_name in variables:
+        for pat in long_patterns:
+            if var_name == pat or var_name.lower() == pat.lower():
+                result["entry_long"].append({
+                    "id": "Buy",
+                    "direction": "long",
+                    "condition": var_name,
+                    "comment": f"inferred from variable {var_name}",
+                })
+                desc = "Long entry (inferred): {}".format(var_name)
+                if desc not in result["entry_conditions"]:
+                    result["entry_conditions"].append(desc)
+                break
+        for pat in short_patterns:
+            if var_name == pat or var_name.lower() == pat.lower():
+                result["entry_short"].append({
+                    "id": "Sell",
+                    "direction": "short",
+                    "condition": var_name,
+                    "comment": f"inferred from variable {var_name}",
+                })
+                desc = "Short entry (inferred): {}".format(var_name)
+                if desc not in result["entry_conditions"]:
+                    result["entry_conditions"].append(desc)
+                break
+
+    # Also look for close/exit variables if exit_rules are empty
+    if not result.get("exit_rules"):
+        exit_long_patterns = ["exitLong", "closeLong", "exit_long", "close_long"]
+        exit_short_patterns = ["exitShort", "closeShort", "exit_short", "close_short"]
+        for var_name in variables:
+            for pat in exit_long_patterns:
+                if var_name == pat or var_name.lower() == pat.lower():
+                    result["exit_rules"].append({
+                        "type": "close",
+                        "id": f"close_{var_name}",
+                        "condition": var_name,
+                        "comment": f"inferred from variable {var_name}",
+                    })
+                    break
+            for pat in exit_short_patterns:
+                if var_name == pat or var_name.lower() == pat.lower():
+                    result["exit_rules"].append({
+                        "type": "close",
+                        "id": f"close_{var_name}",
+                        "condition": var_name,
+                        "comment": f"inferred from variable {var_name}",
+                    })
+                    break
+
+
 def _extract_strategy_calls_from_source(lines, result):
     """Walk source lines to find if-blocks containing strategy.* calls."""
     i = 0
@@ -811,6 +886,9 @@ def _extract_strategy_calls_from_source(lines, result):
             condition = m.group(1).strip()
             if_indent = len(lines[i]) - len(lines[i].lstrip())
             i += 1
+            # Collect all body lines, joining multi-line calls
+            body_lines = []
+            accum = ""
             while i < n:
                 line = lines[i]
                 if not line.strip() or line.strip().startswith("//"):
@@ -820,16 +898,54 @@ def _extract_strategy_calls_from_source(lines, result):
                 if line_indent <= if_indent:
                     break
                 body_stripped = line.strip()
-                _process_strategy_line(body_stripped, condition, result)
+                # Join continuation: if we're accumulating a multi-line strategy call
+                if accum:
+                    accum += " " + body_stripped
+                    # Check if parens are balanced
+                    depth = sum(1 for c in accum if c == '(') - sum(1 for c in accum if c == ')')
+                    if depth <= 0:
+                        body_lines.append(accum)
+                        accum = ""
+                elif body_stripped.startswith("strategy.") and body_stripped.count("(") > body_stripped.count(")"):
+                    accum = body_stripped
+                else:
+                    body_lines.append(body_stripped)
                 i += 1
+            if accum:
+                body_lines.append(accum)
+            for bl in body_lines:
+                _process_strategy_line(bl, condition, result)
             continue
         if stripped.startswith("strategy."):
-            _process_strategy_line(stripped, "", result)
+            # Handle standalone strategy calls, possibly multi-line
+            accum = stripped
+            depth = sum(1 for c in accum if c == '(') - sum(1 for c in accum if c == ')')
+            while depth > 0 and i + 1 < n:
+                i += 1
+                accum += " " + lines[i].strip()
+                depth = sum(1 for c in accum if c == '(') - sum(1 for c in accum if c == ')')
+            _process_strategy_line(accum, "", result)
         i += 1
 
 
 def _process_strategy_line(line, condition, result):
-    m = _re.match(r'strategy\.entry\s*\((.+)\)$', line)
+    # Strip trailing comments
+    comment_pos = -1
+    in_str = False
+    str_char = None
+    for ci, ch in enumerate(line):
+        if not in_str and ch in ('"', "'"):
+            in_str = True
+            str_char = ch
+        elif in_str and ch == str_char:
+            in_str = False
+        elif not in_str and ch == '/' and ci + 1 < len(line) and line[ci + 1] == '/':
+            comment_pos = ci
+            break
+    if comment_pos > 0:
+        line = line[:comment_pos].rstrip()
+
+    m = _re.match(r'strategy\.entry\s*\((.+)\)\s*$', line)
     if m:
         args_str = m.group(1)
         parts = _split_args(args_str)
@@ -858,7 +974,7 @@ def _process_strategy_line(line, condition, result):
                 result["entry_conditions"].append(desc)
         return
 
-    m = _re.match(r'strategy\.exit\s*\((.+)\)$', line)
+    m = _re.match(r'strategy\.exit\s*\((.+)\)\s*$', line)
     if m:
         args_str = m.group(1)
         parts = _split_args(args_str)
@@ -879,7 +995,7 @@ def _process_strategy_line(line, condition, result):
         result["exit_rules"].append(exit_info)
         return
 
-    m = _re.match(r'strategy\.close\s*\((.+)\)$', line)
+    m = _re.match(r'strategy\.close\s*\((.+)\)\s*$', line)
     if m:
         args_str = m.group(1)
         parts = _split_args(args_str)
@@ -896,7 +1012,7 @@ def _process_strategy_line(line, condition, result):
         result["exit_rules"].append(close_info)
         return
 
-    m = _re.match(r'strategy\.close_all\s*\((.+)\)$', line)
+    m = _re.match(r'strategy\.close_all\s*\((.+)\)\s*$', line)
     if m:
         args_str = m.group(1)
         parts = _split_args(args_str)

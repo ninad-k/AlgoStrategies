@@ -17,6 +17,10 @@ def generate_report(bt_id: int, req, df: pd.DataFrame) -> dict:
     from ..parser import parse_pinescript
     from ..engine.backtest import run_backtest
 
+    # --- DIAGNOSTIC: log the parsed strategy to file ---
+    import os
+    _gen_diag = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_generator_diag.log")
+
     # Parse strategy
     strategy_def = None
     if req.pinescript and req.pinescript.strip():
@@ -27,6 +31,28 @@ def generate_report(bt_id: int, req, df: pd.DataFrame) -> dict:
             log.warning("Parse failed, using strategy_config: %s", e)
             strategy_def = None
             strategy_name = ""
+
+    # Log what we got
+    try:
+        with open(_gen_diag, "w") as gf:
+            gf.write(f"pinescript length: {len(req.pinescript) if req.pinescript else 0}\n")
+            gf.write(f"pinescript FULL:\n{req.pinescript or ''}\n---END PINESCRIPT---\n")
+            gf.write(f"strategy_def is None: {strategy_def is None}\n")
+            if strategy_def:
+                gf.write(f"entry_long: {strategy_def.get('entry_long', [])}\n")
+                gf.write(f"entry_short: {strategy_def.get('entry_short', [])}\n")
+                gf.write(f"exit_rules: {len(strategy_def.get('exit_rules', []))}\n")
+                gf.write(f"indicators: {len(strategy_def.get('indicators', []))}\n")
+                gf.write(f"inputs: {len(strategy_def.get('inputs', []))}\n")
+                gf.write(f"variables keys: {list(strategy_def.get('variables', {}).keys())}\n")
+                for _vk, _vv in strategy_def.get('variables', {}).items():
+                    gf.write(f"  var {_vk} = {_vv}\n")
+            gf.write(f"strategy_config present: {req.strategy_config is not None}\n")
+            if req.strategy_config:
+                gf.write(f"strategy_config keys: {list(req.strategy_config.keys())}\n")
+                gf.write(f"strategy_config entry_long: {req.strategy_config.get('entry_long', [])}\n")
+    except Exception:
+        pass
 
     if strategy_def is None and req.strategy_config:
         strategy_def = req.strategy_config
@@ -80,6 +106,7 @@ def generate_report(bt_id: int, req, df: pd.DataFrame) -> dict:
     db.save_deals(bt_id, result["deals"])
     db.save_equity_curve(bt_id, result["equity_curve"])
     db.save_metrics(bt_id, metrics)
+
 
     return {
         "metrics": metrics,

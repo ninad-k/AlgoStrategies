@@ -262,13 +262,16 @@ textarea.code-editor {
     min-width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    min-height: 320px;
+    min-height: 500px;
+    height: 60vh;
     resize: vertical;
     tab-size: 4;
     white-space: pre;
     overflow-x: auto;
+    overflow-y: auto;
     background: var(--bg-input);
     border-radius: var(--radius-sm);
+    padding: 12px;
 }
 
 /* Buttons */

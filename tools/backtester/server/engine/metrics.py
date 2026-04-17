@@ -27,9 +27,9 @@ def compute_metrics(trades: list[dict], equity_curve: list[dict],
     n_profit = len(profit_trades)
     n_loss = len(loss_trades)
 
-    # Profit factor
+    # Profit factor (cap at 9999.99 to keep JSON-safe)
     profit_factor = abs(gross_profit / gross_loss) if gross_loss != 0 else (
-        float("inf") if gross_profit > 0 else 0
+        9999.99 if gross_profit > 0 else 0
     )
 
     # Drawdown from equity curve
@@ -62,7 +62,7 @@ def compute_metrics(trades: list[dict], equity_curve: list[dict],
     # Z-Score
     z = _compute_zscore(trades)
 
-    return {
+    result = {
         "total_net_profit": round(net_profit, 2),
         "gross_profit": round(gross_profit, 2),
         "gross_loss": round(gross_loss, 2),
@@ -100,6 +100,24 @@ def compute_metrics(trades: list[dict], equity_curve: list[dict],
         "bars": bars,
         "total_deals": len(trades) * 2,
     }
+    return _sanitize_metrics(result)
+
+
+def _sanitize_metrics(m: dict) -> dict:
+    """Replace inf/nan with JSON-safe values."""
+    import math
+    out = {}
+    for k, v in m.items():
+        if isinstance(v, float):
+            if math.isinf(v):
+                out[k] = 9999.99 if v > 0 else -9999.99
+            elif math.isnan(v):
+                out[k] = 0.0
+            else:
+                out[k] = v
+        else:
+            out[k] = v
+    return out
 
 
 def _empty_metrics(initial_capital: float, bars: int) -> dict:

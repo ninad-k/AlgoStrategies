@@ -58,6 +58,11 @@ def main() -> None:
         default=None,
         help="Path to terminal64.exe if initialize fails (or set MT5_TERMINAL_PATH)",
     )
+    parser.add_argument(
+        "--no-volume-filter",
+        action="store_true",
+        help="Ignore tick-volume confirmation (fixes 0 trades when MT5 history has no tick volume)",
+    )
     args = parser.parse_args()
 
     cfg_file = load_json_config(args.config)
@@ -87,6 +92,8 @@ def main() -> None:
         trail_activation=global_cfg.get("trail_activation_atr", 1.5),
         risk_percent=sym_cfg.get("risk_percent", 1.0),
         max_positions=global_cfg.get("max_positions_per_symbol", 1),
+        use_volume_filter=not args.no_volume_filter
+        and global_cfg.get("use_volume_filter", True),
     )
 
     end = datetime.now(timezone.utc)

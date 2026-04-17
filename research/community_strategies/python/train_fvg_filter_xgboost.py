@@ -1,30 +1,32 @@
 """
 FVG Liquidity Sweep Filter — Multi-Timeframe XGBoost ONNX
 ----------------------------------------------------------
-Trains XGBoost classifier to filter winning vs losing FVG+sweep setups
-across M1, M5, M15, M30, H1 timeframes. Binary classification (1=win, 0=loss).
+Trains on **all standard MT5 chart periods**: minute frames up to M20, then
+M30, H1–H4, D1, W1, MN1.
 
-Features extracted from price action around FVG detection:
-  - EMA alignment score (9/21/50 stack quality)
-  - Liquidity sweep strength (wick extension beyond swing)
-  - FVG gap size (normalized by ATR)
-  - ATR volatility
-  - RSI momentum
-  - Volume profile
-  - MTF bias (H4/D1 trend alignment)
+Data loading (default **last 6 months**, `FVG_TRAIN_MONTHS` / `FVG_TRAIN_YEARS`):
+  - Prefer `copy_rates_range` for **every** timeframe into the lookback window.
+  - If range is empty: chunked `copy_rates_from_pos` (100k bars/call) until the window
+    is covered or history ends; then trim to [utc_from, utc_to].
 
-Output: FVG_Filter_XGB.onnx -> MQL5/Files/
+Features (8 floats, matches FVG_LiquiditySweep_Sessions_EA_XGB.mq5):
+  - EMA alignment, FVG gap/ATR, sweep strength, ATR ratio, RSI momentum,
+    bar body, wick ratio, close position in range.
+
+Output: FVG_Filter_XGB.onnx -> <terminal_data>/MQL5/Files/
+
+Requires: MetaTrader 5 running, logged in, history available (History Center).
 """
 
 import sys
 import os
-import datetime
+import shutil
+import datetime as dt
 import numpy as np
 import pandas as pd
 import MetaTrader5 as mt5
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import TimeSeriesSplit, cross_val_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
 import xgboost as xgb
 from onnxmltools.convert.common.data_types import FloatTensorType
@@ -32,11 +34,33 @@ from onnxmltools.convert import convert_xgboost
 
 
 # ─── CONFIG ──────────────────────────────────────────────────────────
-SYMBOL       = "XAUUSD"
-TIMEFRAMES   = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15,
-                mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
-TF_NAMES     = ["M1", "M5", "M15", "M30", "H1"]
-BARS_PER_TF  = 20000
+SYMBOL = os.environ.get("FVG_TRAIN_SYMBOL", "XAUUSD")
+# Lookback: default 6 months; set FVG_TRAIN_MONTHS=6 or FVG_TRAIN_YEARS=0.5
+if os.environ.get("FVG_TRAIN_YEARS"):
+    TRAIN_MONTHS = int(round(float(os.environ["FVG_TRAIN_YEARS"]) * 12))
+else:
+    TRAIN_MONTHS = int(os.environ.get("FVG_TRAIN_MONTHS", "6"))
+TRAIN_MONTHS = max(TRAIN_MONTHS, 1)
+
+def _mt5_all_chart_timeframes():
+    """All MT5 periods from M1 through monthly (skip constants missing in API)."""
+    spec = [
+        "M1", "M2", "M3", "M4", "M5", "M6", "M10", "M12", "M15", "M20",
+        "M30", "H1", "H2", "H3", "H4", "D1", "W1", "MN1",
+    ]
+    tfs, names = [], []
+    for sn in spec:
+        c = getattr(mt5, "TIMEFRAME_" + sn, None)
+        if c is not None:
+            tfs.append(c)
+            names.append(sn)
+    return tfs, names
+
+
+TIMEFRAMES, TF_NAMES = _mt5_all_chart_timeframes()
+
+MAX_BARS_PER_CALL = 100_000  # MetaTrader 5 limit per copy_rates_from_pos request
+
 EMA_FAST     = 9
 EMA_SLOW     = 21
 EMA_TREND    = 50
@@ -59,16 +83,155 @@ def connect_mt5():
     return info.data_path
 
 
-def fetch_data_multitf():
-    """Fetch OHLCV data for all timeframes."""
+def _symbol_rank(name: str) -> int:
+    """Lower = better for gold spot training (prefer USD pairs over crosses)."""
+    u = name.upper()
+    if "XAUUSD" in u:
+        return 0
+    if "XAU" in u and u.endswith("USD"):
+        return 1
+    if u in ("GOLD",) or ("GOLD" in u and "EUR" not in u and "GBP" not in u):
+        return 2
+    if "XAU" in u:
+        return 3
+    return 9
+
+
+def resolve_training_symbol(want: str) -> str:
+    """Pick a tradable symbol: use `want` if valid, else best gold/XAU from terminal."""
+    if want:
+        si = mt5.symbol_info(want)
+        if si is not None:
+            if not si.visible:
+                mt5.symbol_select(want, True)
+            return want
+
+    alt = [
+        "XAUUSD", "GOLD", "XAUUSDm", "XAUUSD.a", "XAUUSD_i",
+        "XAUUSD.", "XAUUSD#", "XAUUSD.r",
+    ]
+    for s in alt:
+        si = mt5.symbol_info(s)
+        if si is not None:
+            mt5.symbol_select(s, True)
+            print(f"Resolved symbol '{want}' -> '{s}' (set FVG_TRAIN_SYMBOL to pin a name).")
+            return s
+
+    found = []
+    syms = mt5.symbols_get()
+    if syms:
+        for s in syms:
+            u = s.name.upper()
+            if "XAU" in u or u == "GOLD" or "GOLD" in u:
+                found.append(s.name)
+    found = sorted(set(found), key=_symbol_rank)
+    if found:
+        pick = found[0]
+        mt5.symbol_select(pick, True)
+        print(f"Resolved symbol '{want}' -> '{pick}' from terminal list ({len(found)} candidates).")
+        return pick
+
+    print("ERROR: No gold/XAU symbol found. Set env FVG_TRAIN_SYMBOL to your broker's name.")
+    return want
+
+
+# Approximate minutes per bar (for bar-count estimates on higher timeframes)
+_TF_MINUTES = {
+    "M1": 1, "M2": 2, "M3": 3, "M4": 4, "M5": 5, "M6": 6,
+    "M10": 10, "M12": 12, "M15": 15, "M20": 20, "M30": 30,
+    "H1": 60, "H2": 120, "H3": 180, "H4": 240,
+    "D1": 1440, "W1": 10080, "MN1": 43200,
+}
+
+
+def _bars_for_window(tf_name: str) -> int:
+    """Estimated bars needed to cover TRAIN_MONTHS on this timeframe."""
+    total_days = TRAIN_MONTHS * (365.25 / 12.0)
+    total_min = total_days * 24 * 60
+    m = max(_TF_MINUTES.get(tf_name, 1440), 1)
+    return int(total_min / m) + 100
+
+
+def _fetch_rates_chunked_to_window(symbol: str, tf, utc_from: dt.datetime, utc_to: dt.datetime, tf_name: str):
+    """
+    Walk copy_rates_from_pos in 100k chunks until oldest bar is before utc_from
+    or no more data. Trim to [utc_from, utc_to].
+    """
+    target_ts = int(utc_from.timestamp())
+    pieces = []
+    pos = 0
+    max_bars = max(_bars_for_window(tf_name) * 2, MAX_BARS_PER_CALL * 3)
+
+    while pos < max_bars:
+        part = mt5.copy_rates_from_pos(symbol, tf, pos, MAX_BARS_PER_CALL)
+        if part is None or len(part) == 0:
+            if pos == 0:
+                print(
+                    f"    [{tf_name}] chunk fetch empty — open chart / History Center for '{symbol}'."
+                )
+            break
+        pieces.append(part)
+        oldest = int(part["time"][0])
+        if oldest <= target_ts:
+            break
+        if len(part) < MAX_BARS_PER_CALL:
+            break
+        pos += len(part)
+
+    if not pieces:
+        return None
+    full = np.concatenate(pieces)
+    df = pd.DataFrame(full)
+    df["time"] = pd.to_datetime(df["time"], unit="s")
+    df = df.sort_values("time").drop_duplicates(subset=["time"], keep="last")
+    t0 = pd.Timestamp(utc_from)
+    t1 = pd.Timestamp(utc_to)
+    df = df[(df["time"] >= t0) & (df["time"] <= t1)]
+    return df
+
+
+def fetch_data_multitf(symbol: str):
+    """Fetch OHLCV for all timeframes: last TRAIN_MONTHS calendar-equivalent window (UTC)."""
+    utc_to = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    utc_to = utc_to.replace(microsecond=0)
+    days = int(round(TRAIN_MONTHS * (365.25 / 12.0)))
+    utc_from = utc_to - dt.timedelta(days=days)
+    utc_from = utc_from.replace(microsecond=0)
+    print(
+        f"History window (UTC): {utc_from.isoformat()} -> {utc_to.isoformat()} "
+        f"(~{TRAIN_MONTHS} month(s), ~{days} days)"
+    )
+
+    si = mt5.symbol_info(symbol)
+    if si is None:
+        print(f"ERROR: symbol_info('{symbol}') is None — cannot load rates.")
+        return {}
+    if not si.visible:
+        mt5.symbol_select(symbol, True)
+
     data = {}
     for tf, name in zip(TIMEFRAMES, TF_NAMES):
-        rates = mt5.copy_rates_from_pos(SYMBOL, tf, 0, BARS_PER_TF)
+        rates = mt5.copy_rates_range(symbol, tf, utc_from, utc_to)
         if rates is None or len(rates) == 0:
-            print(f"No data for {name}")
-            continue
-        df = pd.DataFrame(rates)
-        df["time"] = pd.to_datetime(df["time"], unit="s")
+            df = _fetch_rates_chunked_to_window(symbol, tf, utc_from, utc_to, name)
+            if df is None or len(df) == 0:
+                need = min(MAX_BARS_PER_CALL, max(_bars_for_window(name), 250))
+                part = mt5.copy_rates_from_pos(symbol, tf, 0, need)
+                if part is None or len(part) == 0:
+                    print(f"[{name}] No data. err={mt5.last_error()}")
+                    continue
+                df = pd.DataFrame(part)
+                df["time"] = pd.to_datetime(df["time"], unit="s")
+                t0 = pd.Timestamp(utc_from)
+                t1 = pd.Timestamp(utc_to)
+                df = df[(df["time"] >= t0) & (df["time"] <= t1)]
+                if len(df) == 0:
+                    print(f"[{name}] No bars in {TRAIN_MONTHS}m window after fallback.")
+                    continue
+        else:
+            df = pd.DataFrame(rates)
+            df["time"] = pd.to_datetime(df["time"], unit="s")
+
         df.set_index("time", inplace=True)
         df.sort_index(inplace=True)
         data[name] = df
@@ -105,55 +268,55 @@ def compute_rsi(series, period=14):
     return 100 - (100 / (1 + rs))
 
 
-def detect_fvg_bullish(highs, lows, i, min_gap):
-    """Check for bullish FVG at bar i: lows[i] > highs[i+2]"""
-    if i < 2:
+def detect_fvg_bullish(h, l, i, min_gap):
+    """Bullish FVG at bar i: lows[i] > highs[i+2] (numpy 1d arrays)."""
+    if i < 2 or i + 2 >= len(h):
         return False, 0.0
-    gap = lows.iloc[i] - highs.iloc[i+2] if i+2 < len(highs) else 0
+    gap = l[i] - h[i + 2]
     if gap > min_gap:
-        return True, (lows.iloc[i] + highs.iloc[i+2]) / 2.0
+        return True, (l[i] + h[i + 2]) * 0.5
     return False, 0.0
 
 
-def detect_fvg_bearish(highs, lows, i, min_gap):
-    """Check for bearish FVG at bar i: highs[i] < lows[i+2]"""
-    if i < 2:
+def detect_fvg_bearish(h, l, i, min_gap):
+    """Bearish FVG at bar i: highs[i] < lows[i+2]."""
+    if i < 2 or i + 2 >= len(h):
         return False, 0.0
-    gap = lows.iloc[i+2] - highs.iloc[i] if i+2 < len(highs) else 0
+    gap = l[i + 2] - h[i]
     if gap > min_gap:
-        return True, (highs.iloc[i] + lows.iloc[i+2]) / 2.0
+        return True, (h[i] + l[i + 2]) * 0.5
     return False, 0.0
 
 
-def detect_liquidity_sweep(direction, highs, lows, closes, i, lookback=20):
-    """Detect swing high/low sweep. Returns (detected, sweep_strength)"""
+def detect_liquidity_sweep(direction, h, l, c, i, lookback=20):
+    """Swing sweep before bar i. h,l,c are numpy arrays."""
+    if i < 2:
+        return False, 0.0
+    eff_lb = lookback
     if i < lookback + 2:
-        # Relaxed: check in available lookback
-        lookback = min(i - 2, lookback)
+        eff_lb = min(i - 2, lookback)
+    start = max(0, i - eff_lb)
+    sh = h[start:i]
+    sl = l[start:i]
 
-    subset_high = highs.iloc[max(0, i-lookback):i]
-    subset_low = lows.iloc[max(0, i-lookback):i]
-
-    if direction == 1:  # Bullish: looking for swept swing low
-        swing_low = subset_low.min()
-        if lows.iloc[i-1] <= swing_low:  # Relaxed: wick touches
-            strength = max(0.5, (closes.iloc[i-1] - lows.iloc[i-1]) / (closes.iloc[i-1] - swing_low + 1e-6))
+    if direction == 1:
+        swing_low = float(np.min(sl))
+        if l[i - 1] <= swing_low:
+            strength = max(0.5, (c[i - 1] - l[i - 1]) / (c[i - 1] - swing_low + 1e-6))
             return True, min(strength, 2.0)
-    else:  # Bearish: looking for swept swing high
-        swing_high = subset_high.max()
-        if highs.iloc[i-1] >= swing_high:  # Relaxed: wick touches
-            strength = max(0.5, (highs.iloc[i-1] - closes.iloc[i-1]) / (swing_high - closes.iloc[i-1] + 1e-6))
+    else:
+        swing_high = float(np.max(sh))
+        if h[i - 1] >= swing_high:
+            strength = max(0.5, (h[i - 1] - c[i - 1]) / (swing_high - c[i - 1] + 1e-6))
             return True, min(strength, 2.0)
 
     return False, 0.0
 
 
 def build_feature_matrix(df):
-    """Extract 8 features for each bar."""
+    """Extract 8 features per setup (numpy-accelerated inner loop)."""
     df = df.copy()
-    n = len(df)
 
-    # Indicators
     df["ema_fast"] = compute_ema(df["close"], EMA_FAST)
     df["ema_slow"] = compute_ema(df["close"], EMA_SLOW)
     df["ema_trend"] = compute_ema(df["close"], EMA_TREND)
@@ -161,99 +324,92 @@ def build_feature_matrix(df):
     df["rsi"] = compute_rsi(df["close"], RSI_PERIOD)
     df.dropna(inplace=True)
 
+    if len(df) < FVG_LOOKBACK + 25:
+        return None, None
+
+    h = df["high"].to_numpy(dtype=np.float64)
+    l = df["low"].to_numpy(dtype=np.float64)
+    o = df["open"].to_numpy(dtype=np.float64)
+    c = df["close"].to_numpy(dtype=np.float64)
+    atr_a = df["atr"].to_numpy(dtype=np.float64)
+    rsi_a = df["rsi"].to_numpy(dtype=np.float64)
+    ema_f = df["ema_fast"].to_numpy(dtype=np.float64)
+    ema_s = df["ema_slow"].to_numpy(dtype=np.float64)
+    ema_t = df["ema_trend"].to_numpy(dtype=np.float64)
+
+    n = len(df)
+    min_gap_baseline = float(np.nanmedian(atr_a)) * 0.1
+
     features = []
     labels = []
 
-    min_gap_baseline = df["atr"].median() * 0.1  # Relaxed threshold
-
-    for i in range(FVG_LOOKBACK, len(df) - 20):
-        atr = df["atr"].iloc[i]
-        if atr <= 0:
+    for i in range(FVG_LOOKBACK, n - 20):
+        atrv = atr_a[i]
+        if atrv <= 0:
             continue
 
-        # Feature 1: EMA alignment (bullish=1, bearish=-1, choppy=0)
-        ema_fast = df["ema_fast"].iloc[i]
-        ema_slow = df["ema_slow"].iloc[i]
-        ema_trend = df["ema_trend"].iloc[i]
-
-        if ema_fast > ema_slow > ema_trend:
+        ef, es, et = ema_f[i], ema_s[i], ema_t[i]
+        if ef > es > et:
             ema_align = 1.0
-            direction = 1  # Bullish setup
-        elif ema_fast < ema_slow < ema_trend:
+            direction = 1
+        elif ef < es < et:
             ema_align = -1.0
-            direction = -1  # Bearish setup
+            direction = -1
         else:
-            ema_align = 0.0
-            direction = 0
-
-        if direction == 0:
             continue
 
-        # Feature 2: FVG detection and gap size
         if direction == 1:
-            fvg_found, fvg_price = detect_fvg_bullish(df["high"], df["low"], i, min_gap_baseline)
+            fvg_found, fvg_price = detect_fvg_bullish(h, l, i, min_gap_baseline)
         else:
-            fvg_found, fvg_price = detect_fvg_bearish(df["high"], df["low"], i, min_gap_baseline)
+            fvg_found, fvg_price = detect_fvg_bearish(h, l, i, min_gap_baseline)
 
         if not fvg_found:
             continue
 
-        fvg_gap = abs(fvg_price - df["close"].iloc[i]) / atr
+        fvg_gap = abs(fvg_price - c[i]) / atrv
 
-        # Feature 3: Liquidity sweep detection
-        sweep_found, sweep_strength = detect_liquidity_sweep(direction, df["high"],
-                                                               df["low"], df["close"], i, SWING_LOOKBACK)
+        sweep_found, sweep_strength = detect_liquidity_sweep(direction, h, l, c, i, SWING_LOOKBACK)
         if not sweep_found:
             continue
 
-        # Feature 4: ATR normalized
-        atr_norm = atr / df["close"].iloc[i]
+        atr_norm = atrv / c[i]
+        rsi_m = (rsi_a[i] - 50.0) / 50.0
+        bar_body = abs(c[i] - o[i])
+        bar_size = bar_body / atrv
 
-        # Feature 5: RSI momentum
-        rsi = df["rsi"].iloc[i]
-        rsi_momentum = (rsi - 50) / 50.0
-
-        # Feature 6: Bar size (body / ATR)
-        bar_body = abs(df["close"].iloc[i] - df["open"].iloc[i])
-        bar_size = bar_body / atr
-
-        # Feature 7: Wick extension
         if direction == 1:
-            lower_wick = df["open"].iloc[i] - df["low"].iloc[i]
+            lower_wick = o[i] - l[i]
             wick_ratio = lower_wick / (bar_body + 1e-6)
+            hl_rng = h[i] - l[i]
+            close_pos = (c[i] - l[i]) / (hl_rng + 1e-6)
         else:
-            upper_wick = df["high"].iloc[i] - df["open"].iloc[i]
+            upper_wick = h[i] - o[i]
             wick_ratio = upper_wick / (bar_body + 1e-6)
+            hl_rng = h[i] - l[i]
+            close_pos = (h[i] - c[i]) / (hl_rng + 1e-6)
 
-        # Feature 8: Close proximity to extreme
+        entry_price = c[i]
+        fut = c[i + 1 : i + 21]
         if direction == 1:
-            close_pos = (df["close"].iloc[i] - df["low"].iloc[i]) / (df["high"].iloc[i] - df["low"].iloc[i] + 1e-6)
+            target = entry_price + 1.5 * atrv
+            win = bool(np.any(fut > target))
         else:
-            close_pos = (df["high"].iloc[i] - df["close"].iloc[i]) / (df["high"].iloc[i] - df["low"].iloc[i] + 1e-6)
+            target = entry_price - 1.5 * atrv
+            win = bool(np.any(fut < target))
 
-        # Label: winning setup (direction confirmation in next 20 bars)
-        # Bullish win: price closes above entry + 1.5*atr within 20 bars
-        # Bearish win: price closes below entry - 1.5*atr within 20 bars
-        entry_price = df["close"].iloc[i]
-        future_closes = df["close"].iloc[i+1:min(i+21, len(df))]
-
-        if direction == 1:
-            target = entry_price + 1.5 * atr
-            win = (future_closes > target).any()
-        else:
-            target = entry_price - 1.5 * atr
-            win = (future_closes < target).any()
-
-        row = np.array([
-            ema_align,           # 0: EMA alignment
-            fvg_gap,             # 1: FVG gap normalized
-            sweep_strength,      # 2: Liquidity sweep strength
-            atr_norm,            # 3: ATR ratio
-            rsi_momentum,        # 4: RSI momentum
-            bar_size,            # 5: Bar body size
-            wick_ratio,          # 6: Wick extension
-            close_pos            # 7: Close position
-        ], dtype=np.float32)
+        row = np.array(
+            [
+                ema_align,
+                fvg_gap,
+                sweep_strength,
+                atr_norm,
+                rsi_m,
+                bar_size,
+                wick_ratio,
+                close_pos,
+            ],
+            dtype=np.float32,
+        )
 
         features.append(row)
         labels.append(1 if win else 0)
@@ -268,11 +424,19 @@ def main():
     print("=" * 70)
     print("FVG Liquidity Sweep Filter — Multi-Timeframe XGBoost ONNX Training")
     print("=" * 70)
+    print(f"Requested symbol: {SYMBOL}  |  Lookback: {TRAIN_MONTHS} month(s)  |  TFs: {', '.join(TF_NAMES)}")
 
     # Step 1: Connect and fetch
     data_path = connect_mt5()
+    train_symbol = resolve_training_symbol(SYMBOL)
+    print(f"Training on: {train_symbol}")
+    if not train_symbol or mt5.symbol_info(train_symbol) is None:
+        print("Abort: no valid symbol for training.")
+        mt5.shutdown()
+        sys.exit(1)
+
     files_dir = os.path.join(data_path, "MQL5", "Files")
-    dfs = fetch_data_multitf()
+    dfs = fetch_data_multitf(train_symbol)
 
     # Step 2: Build features from all timeframes
     print("\nBuilding feature matrix from all timeframes...")
@@ -335,16 +499,22 @@ def main():
     y_proba = model.predict_proba(X_test)[:, 1]
 
     acc = (y_pred == y_test).mean()
-    auc = roc_auc_score(y_test, y_proba)
+    if len(np.unique(y_test)) > 1:
+        auc = roc_auc_score(y_test, y_proba)
+    else:
+        auc = float("nan")
 
     print(f"\nTest Accuracy: {acc:.4f}")
-    print(f"Test AUC-ROC: {auc:.4f}")
+    print(f"Test AUC-ROC: {auc:.4f}" if not np.isnan(auc) else "\nTest AUC-ROC: n/a (single class in test set)")
     print("\nConfusion Matrix:")
-    cm = confusion_matrix(y_test, y_pred)
-    print(f"  TN: {cm[0,0]}, FP: {cm[0,1]}")
-    print(f"  FN: {cm[1,0]}, TP: {cm[1,1]}")
+    cm = confusion_matrix(y_test, y_pred, labels=[0, 1])
+    if cm.size == 4:
+        print(f"  TN: {cm[0,0]}, FP: {cm[0,1]}")
+        print(f"  FN: {cm[1,0]}, TP: {cm[1,1]}")
+    else:
+        print(f"  (degenerate) {cm}")
     print("\nClassification Report:")
-    print(classification_report(y_test, y_pred, target_names=["Loss", "Win"]))
+    print(classification_report(y_test, y_pred, target_names=["Loss", "Win"], labels=[0, 1], zero_division=0))
 
     # Feature importance
     print("Feature Importance:")
@@ -353,20 +523,23 @@ def main():
     for name, imp in zip(feature_names, model.feature_importances_):
         print(f"  {name:12s}: {imp:.4f}")
 
-    # Time-series CV
-    print("\nTime-Series Cross-Validation (5 folds):")
-    tscv = TimeSeriesSplit(n_splits=5)
-    cv_scores = []
-    for fold, (tr_idx, te_idx) in enumerate(tscv.split(X)):
-        m = xgb.XGBClassifier(
-            n_estimators=200, max_depth=6, learning_rate=0.08,
-            objective="binary:logistic", verbosity=0, random_state=42
-        )
-        m.fit(X[tr_idx], y[tr_idx])
-        sc = (m.predict(X[te_idx]) == y[te_idx]).mean()
-        cv_scores.append(sc)
-        print(f"  Fold {fold+1}: {sc:.4f}")
-    print(f"  Mean CV: {np.mean(cv_scores):.4f} +/- {np.std(cv_scores):.4f}")
+    # Time-series CV (skip if too few samples)
+    if len(X) >= 80:
+        print("\nTime-Series Cross-Validation (5 folds):")
+        tscv = TimeSeriesSplit(n_splits=5)
+        cv_scores = []
+        for fold, (tr_idx, te_idx) in enumerate(tscv.split(X)):
+            m = xgb.XGBClassifier(
+                n_estimators=200, max_depth=6, learning_rate=0.08,
+                objective="binary:logistic", verbosity=0, random_state=42
+            )
+            m.fit(X[tr_idx], y[tr_idx])
+            sc = (m.predict(X[te_idx]) == y[te_idx]).mean()
+            cv_scores.append(sc)
+            print(f"  Fold {fold+1}: {sc:.4f}")
+        print(f"  Mean CV: {np.mean(cv_scores):.4f} +/- {np.std(cv_scores):.4f}")
+    else:
+        print(f"\nSkipping time-series CV (need more samples; have {len(X)}).")
 
     # Step 6: Export ONNX
     print("\n" + "=" * 70)
@@ -384,22 +557,39 @@ def main():
     size_kb = os.path.getsize(output_path) / 1024
     print(f"Model saved: {output_path} ({size_kb:.1f} KB)")
 
-    # Verify with ONNX Runtime
+    repo_copy = os.path.join(os.path.dirname(os.path.abspath(__file__)), MODEL_NAME)
+    try:
+        shutil.copy2(output_path, repo_copy)
+        print(f"Copy for repo/workspace: {repo_copy}")
+    except OSError as e:
+        print(f"  (optional copy to repo folder failed: {e})")
+
+    # Verify with ONNX Runtime (shape, dtypes, probabilities)
     try:
         import onnxruntime as ort
-        sess = ort.InferenceSession(output_path)
+        sess = ort.InferenceSession(output_path, providers=["CPUExecutionProvider"])
         inp = sess.get_inputs()[0]
-        out = sess.get_outputs()
-        print(f"  Input : {inp.name} {inp.shape} {inp.type}")
-        for o in out:
-            print(f"  Output: {o.name} {o.shape} {o.type}")
+        outs = sess.get_outputs()
+        print(f"  Input : {inp.name} shape={inp.shape} type={inp.type}")
+        for o in outs:
+            print(f"  Output: {o.name} shape={o.shape} type={o.type}")
 
-        # Test inference
-        test_features = np.array([[1.0, 0.5, 1.0, 0.003, 0.1, 0.8, 1.2, 0.7]], dtype=np.float32)
-        result = sess.run(None, {inp.name: test_features})
-        print(f"  Test inference OK. Output: {result[1]}")
+        if inp.shape != [1, N_FEATURES] and list(inp.shape[-1:]) != [N_FEATURES]:
+            print(f"  WARN: expected input last dim {N_FEATURES}, got {inp.shape}")
+
+        z = np.zeros((1, N_FEATURES), dtype=np.float32)
+        r0 = sess.run(None, {inp.name: z})
+        test_vec = np.array([[1.0, 0.5, 1.0, 0.003, 0.1, 0.8, 1.2, 0.7]], dtype=np.float32)
+        r1 = sess.run(None, {inp.name: test_vec})
+        for tag, r in [("zeros", r0), ("sample", r1)]:
+            probs = r[1] if len(r) > 1 else r[0]
+            flat = np.asarray(probs).reshape(-1)
+            if flat.size >= 2:
+                s = float(flat[0] + flat[1])
+                print(f"  Inference [{tag}]: class_probs[0:2]={flat[:2]}  sum={s:.4f}")
+        print("  ONNX Runtime verification: OK")
     except Exception as e:
-        print(f"  ONNX verification: {e}")
+        print(f"  ONNX verification failed: {e}")
 
     mt5.shutdown()
     print(f"\n[OK] Training complete. Ready for FVG_LiquiditySweep_Sessions_EA_XGB.")

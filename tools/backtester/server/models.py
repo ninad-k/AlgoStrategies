@@ -17,9 +17,9 @@ class BacktestRequest(BaseModel):
     start_date: str = "2020-01-01"
     end_date: str = ""
     initial_capital: float = 10000.0
-    leverage: float = 1.0
-    commission_pct: float = 0.0
-    slippage_points: float = 0.0
+    leverage: float = 500.0
+    commission_pct: float = 0.5
+    slippage_points: float = 30.0
     input_overrides: dict[str, Any] = Field(default_factory=dict)
 
 

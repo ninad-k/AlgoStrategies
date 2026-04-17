@@ -6,8 +6,10 @@
 //| SL/TP: ATR-based with 1.8x multiplier                            |
 //+------------------------------------------------------------------+
 #property copyright "Community Strategy - AlgoStrategies"
-#property version   "2.00"
+#property version   "2.03"
 #property strict
+// Pack ONNX into Strategy Tester agent sandbox (file must exist in terminal MQL5\Files\ when you compile in MetaEditor)
+#property tester_file "FVG_Filter_XGB.onnx"
 
 #include <Trade/Trade.mqh>
 CTrade g_Trade;
@@ -31,7 +33,7 @@ input int     InpSwingLookback = 20;
 input double  InpSweepWickMin  = 0.5;
 
 input group "=== XGBoost Filter ==="
-input string  InpONNXPath      = "FVG_Filter_XGB.onnx";
+input string  InpONNXPath      = "FVG_Filter_XGB.onnx"; // Must sit in terminal Data\MQL5\Files\ (same name as tester_file)
 input double  InpONNXThreshold = 0.55;     // Probability threshold (0.5-1.0)
 input bool    InpUseONNX       = true;     // Enable ONNX filtering
 
@@ -199,29 +201,44 @@ int OnInit()
       return INIT_FAILED;
    }
 
-   // Load ONNX model
+   // Load ONNX — required when InpUseONNX (otherwise EA stops with INIT_FAILED)
    if(InpUseONNX)
    {
+      string base = TerminalInfoString(TERMINAL_DATA_PATH);
+      ResetLastError();
       hONNX = OnnxCreate(InpONNXPath, ONNX_DEFAULT);
       if(hONNX == INVALID_HANDLE)
       {
-         Print("WARNING: ONNX model not loaded (", InpONNXPath, "). Running without filter.");
+         int err = GetLastError();
+         string msg = StringFormat(
+            "FVG_LiquiditySweep_XGB: ONNX load failed. file=\"%s\"  last_error=%d  (e.g. 5019 = missing/bad ONNX). Expected: %s\\MQL5\\Files\\%s",
+            InpONNXPath, err, base, InpONNXPath
+         );
+         Print("ERROR: ", msg);
+         if(MQLInfoInteger(MQL_TESTER))
+            Print("  Strategy Tester: place ONNX in terminal MQL5\\Files\\, keep #property tester_file, recompile (F7), then re-run test.");
+         Alert(msg);
+
+         if(hEMAFast  != INVALID_HANDLE) IndicatorRelease(hEMAFast);
+         if(hEMASlow  != INVALID_HANDLE) IndicatorRelease(hEMASlow);
+         if(hEMATrend != INVALID_HANDLE) IndicatorRelease(hEMATrend);
+         if(hATR      != INVALID_HANDLE) IndicatorRelease(hATR);
+         if(hRSI      != INVALID_HANDLE) IndicatorRelease(hRSI);
+         return INIT_FAILED;
       }
-      else
-      {
-         long inputShape[] = {1, 8};
-         OnnxSetInputShape(hONNX, 0, inputShape);
-         long labelShape[] = {1};
-         OnnxSetOutputShape(hONNX, 0, labelShape);
-         long probShape[] = {1, 2};
-         OnnxSetOutputShape(hONNX, 1, probShape);
-         Print("ONNX filter loaded: ", InpONNXPath);
-      }
+
+      long inputShape[] = {1, 8};
+      OnnxSetInputShape(hONNX, 0, inputShape);
+      long labelShape[] = {1};
+      OnnxSetOutputShape(hONNX, 0, labelShape);
+      long probShape[] = {1, 2};
+      OnnxSetOutputShape(hONNX, 1, probShape);
+      Print("ONNX filter loaded: ", base, "\\MQL5\\Files\\", InpONNXPath);
    }
 
    Print("FVG_LiquiditySweep_XGB initialized. ", _Symbol, " Magic=", InpMagicNumber);
    Print("  Kill zones: ", (InpUseKillZones ? "ON" : "OFF"));
-   Print("  ONNX filter: ", (InpUseONNX && hONNX != INVALID_HANDLE ? "ON" : "OFF"));
+   Print("  ONNX filter: ", (InpUseONNX ? "ON" : "OFF (InpUseONNX=false)"));
    return INIT_SUCCEEDED;
 }
 
