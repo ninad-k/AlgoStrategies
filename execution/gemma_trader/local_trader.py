@@ -34,6 +34,7 @@ import schedule
 from gemma_analyzer import analyze_with_gemma
 from risk_manager import RiskManager
 from broker_bridge import create_broker
+import features as enriched_features
 
 logger = logging.getLogger("rey_capital_trader")
 
@@ -348,8 +349,15 @@ def calculate_indicators(df: pd.DataFrame, symbol: str = "") -> dict:
     # ── Support/Resistance from recent swing points ──
     support, resistance = _find_support_resistance(df)
 
+    # ── Enriched features (market structure, pivots, S/R touches, modern indicators) ──
+    try:
+        enriched = enriched_features.compute_all(df)
+    except Exception as e:
+        logger.warning(f"features.compute_all failed: {e}")
+        enriched = {}
+
     # ── Build comprehensive indicator dict ──
-    return {
+    base = {
         "symbol": symbol,
         "data_source": "mt5",
         "close": close,
@@ -399,13 +407,15 @@ def calculate_indicators(df: pd.DataFrame, symbol: str = "") -> dict:
         "candle_patterns": ", ".join(patterns) if patterns else "NONE",
         "last_5_candles": " → ".join(last5),
 
-        # Support/Resistance
+        # Support/Resistance (swing-based, existing)
         "nearest_support": support,
         "nearest_resistance": resistance,
 
         # VWAP
         "vwap": sf("VWAP_D", close),
     }
+    base.update(enriched)
+    return base
 
 
 def _detect_candle_patterns(df: pd.DataFrame) -> list:
@@ -524,6 +534,21 @@ class GemmaLocalTrader:
         self.config = config
         self.interval = interval or config.get("mt5_data", {}).get("timeframe", "1m")
         self.symbols = symbols or config["trading"]["allowed_symbols"]
+
+        # Load per-symbol strategy_rules.yaml overrides into config.
+        try:
+            from backtest import rules_loader
+            merged = rules_loader.merge(self.config)
+            for sym in self.symbols:
+                block = rules_loader.get_for_symbol(self.config, sym)
+                for section in ("filters", "thresholds"):
+                    for k, v in block.get(section, {}).items():
+                        logger.info(f"  merged rules: {sym} {k}={v}")
+            if merged.get("version"):
+                logger.info(f"Loaded strategy_rules.yaml v{merged.get('version')}")
+        except Exception as e:
+            logger.warning(f"rules_loader.merge failed (using config defaults): {e}")
+
         self.risk_manager = RiskManager(config)
         self.broker = create_broker(config)
         self.cycle_count = 0
@@ -545,6 +570,12 @@ class GemmaLocalTrader:
                 logger.warning("MT5 package not available, using TradingView fallback")
             except Exception as e:
                 logger.warning(f"MT5 init failed: {e}, using TradingView fallback")
+
+        # Pre-flight: verify every configured symbol resolves on the broker.
+        # Aborts startup (SystemExit 2) on zero/ambiguous candidates; auto-remaps
+        # single close matches (BTCUSD -> BTCUSDm) in memory only.
+        if self.mt5_feed and self.mt5_feed.connected:
+            self.symbols = self.mt5_feed.verify_symbols(self.symbols)
 
     def analyze_symbol(self, symbol: str):
         """Full pipeline: fetch data → calculate indicators → Gemma decision → execute trade."""
@@ -946,8 +977,9 @@ class GemmaLocalTrader:
         if not self.mt5_feed or not self.mt5_feed.connected:
             return
 
+        from broker_bridge import is_bot_trade
         open_positions = self.mt5_feed.get_positions()
-        open_symbols = {p["symbol"] for p in open_positions if p.get("magic") == 240411}
+        open_symbols = {p["symbol"] for p in open_positions if is_bot_trade(p)}
 
         for trade in list(self.risk_manager.open_trades):
             if trade["symbol"] not in open_symbols:
@@ -1033,13 +1065,26 @@ class GemmaLocalTrader:
 
         # Emit stats update
         if self.socketio:
+            open_trades_mt5 = self._count_bot_positions_on_broker()
             self.socketio.emit("stats_update", {
                 "cycle": self.cycle_count,
                 "balance": balance,
                 "open_trades": len(self.risk_manager.open_trades),
+                "open_trades_mt5": open_trades_mt5,
                 "daily_pnl": self.risk_manager.daily_pnl,
                 "timestamp": datetime.now().isoformat(),
             })
+
+    def _count_bot_positions_on_broker(self) -> int:
+        """MT5-verified count of currently-open bot positions. Survives restart."""
+        if not self.mt5_feed or not self.mt5_feed.connected:
+            return len(self.risk_manager.open_trades)
+        try:
+            from broker_bridge import is_bot_trade
+            positions = self.mt5_feed.get_positions()
+            return sum(1 for p in positions if is_bot_trade(p))
+        except Exception:
+            return len(self.risk_manager.open_trades)
 
     def start(self, run_every_seconds: int = None):
         """Start the trading bot with recurring schedule."""

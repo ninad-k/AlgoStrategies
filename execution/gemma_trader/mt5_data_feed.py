@@ -118,6 +118,72 @@ class MT5DataFeed:
 
         return True
 
+    def _find_candidates(self, symbol: str) -> list:
+        """
+        Find broker symbols that likely match the requested short name.
+        Handles common suffixes like BTCUSDm, BTCUSD.pro, BTCUSD_raw.
+        Match rule: broker name starts with the requested name (case-insensitive).
+        """
+        try:
+            all_symbols = mt5.symbols_get()
+        except Exception as e:
+            logger.error(f"mt5.symbols_get() failed: {e}")
+            return []
+
+        if not all_symbols:
+            return []
+
+        needle = symbol.lower()
+        candidates = [
+            s.name for s in all_symbols
+            if s.name.lower().startswith(needle) and s.name.lower() != needle
+        ]
+        return candidates
+
+    def verify_symbols(self, symbols: list) -> list:
+        """
+        Pre-flight verification of configured symbols. For each symbol:
+          - exact match on the broker → keep and select
+          - exactly one close candidate (e.g. BTCUSD → BTCUSDm) → auto-remap and warn
+          - zero or multiple candidates → fatal, raises SystemExit(2)
+        Returns the resolved symbol list (may contain remapped names).
+        """
+        if not self.connected:
+            logger.error("MT5 not connected - cannot verify symbols")
+            raise SystemExit(2)
+
+        resolved = []
+        for sym in symbols:
+            info = mt5.symbol_info(sym)
+            if info is not None:
+                mt5.symbol_select(sym, True)
+                resolved.append(sym)
+                continue
+
+            candidates = self._find_candidates(sym)
+            if len(candidates) == 1:
+                remap = candidates[0]
+                logger.warning(
+                    f"Symbol '{sym}' not found; auto-remapping to '{remap}'"
+                )
+                mt5.symbol_select(remap, True)
+                resolved.append(remap)
+            elif len(candidates) == 0:
+                logger.error(
+                    f"Symbol '{sym}' not found on broker and no candidates match. "
+                    f"Check config.yaml trading.allowed_symbols."
+                )
+                raise SystemExit(2)
+            else:
+                logger.error(
+                    f"Symbol '{sym}' not found; ambiguous candidates: {candidates}. "
+                    f"Edit config.yaml trading.allowed_symbols to pick one."
+                )
+                raise SystemExit(2)
+
+        logger.info(f"Verified {len(resolved)} symbols on broker: {resolved}")
+        return resolved
+
     def get_candles(self, symbol: str, timeframe_str: str,
                     n_bars: int = 200) -> pd.DataFrame:
         """
@@ -275,9 +341,11 @@ class MT5DataFeed:
         if deals is None:
             return []
 
+        from broker_bridge import is_bot_trade
+
         result = []
         for deal in deals:
-            if deal.magic == 240411:  # Only our bot's trades
+            if is_bot_trade(deal):
                 result.append({
                     "ticket": deal.ticket,
                     "order": deal.order,

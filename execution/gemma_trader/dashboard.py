@@ -77,13 +77,18 @@ def api_health():
     trades = read_json_log(TRADES_LOG)
     decisions = read_json_log(DECISIONS_LOG)
 
-    # Try to get real balance from MT5
-    balance = 100000  # fallback
+    # Try to get real balance from MT5, and authoritative bot-only open count.
+    # Fall back to trades.json heuristic if MT5 is unreachable.
+    balance = 100000
+    open_trades = len([t for t in trades if not t.get("closed")])
     try:
         import MetaTrader5 as mt5
+        from broker_bridge import is_bot_trade
         info = mt5.account_info()
         if info:
             balance = info.balance
+        positions = mt5.positions_get() or []
+        open_trades = sum(1 for p in positions if is_bot_trade(p))
     except Exception:
         pass
 
@@ -92,7 +97,7 @@ def api_health():
         "mode": config.get("trading", {}).get("mode", "paper"),
         "model": config.get("ollama", {}).get("model", "gemma4"),
         "balance": balance,
-        "open_trades": len([t for t in trades if not t.get("closed")]),
+        "open_trades": open_trades,
         "daily_pnl": 0.0,
         "total_decisions": len(decisions),
         "total_trades": len(trades),
@@ -237,10 +242,11 @@ def api_pnl():
 
     try:
         import MetaTrader5 as mt5
+        from broker_bridge import is_bot_trade
         mt5_positions = mt5.positions_get()
         if mt5_positions:
             for pos in mt5_positions:
-                if pos.magic == 240411:  # Only our bot's trades
+                if is_bot_trade(pos):
                     positions.append({
                         "symbol": pos.symbol,
                         "type": "BUY" if pos.type == 0 else "SELL",

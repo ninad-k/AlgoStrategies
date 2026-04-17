@@ -143,21 +143,41 @@ def _build_prompt(data: dict) -> str:
     symbol = data.get("symbol", "UNKNOWN")
     tf = data.get("timeframe", "1m")
 
+    swing_h = ", ".join(str(x) for x in (data.get("swing_highs") or [])) or "N/A"
+    swing_l = ", ".join(str(x) for x in (data.get("swing_lows") or [])) or "N/A"
+    sr_scores = data.get("sr_touch_scores") or {}
+    sr_line = ", ".join(f"{lvl} (x{n})" for lvl, n in list(sr_scores.items())[:5]) or "N/A"
+
     return f"""Analyze {symbol} on {tf} timeframe. Make a trade decision.
 
 PRICE ACTION:
   Close: {data.get('close')} | Open: {data.get('open')} | High: {data.get('high')} | Low: {data.get('low')}
   Last 5 Candles: {data.get('last_5_candles', 'N/A')}
   Candlestick Patterns: {data.get('candle_patterns', 'NONE')}
+  Pin Bar: {data.get('pin_bar', 'NONE')} | Tweezer: {data.get('tweezer', 'NONE')} | Three-Inside: {data.get('three_inside', 'NONE')}
   Nearest Support: {data.get('nearest_support', 'N/A')} | Resistance: {data.get('nearest_resistance', 'N/A')}
+
+MARKET STRUCTURE:
+  Swings H: {swing_h}
+  Swings L: {swing_l}
+  Structure: {data.get('structure', 'N/A')} | BOS: {data.get('bos', 'NONE')} | CHoCH: {data.get('choch', 'NONE')}
+  Inside Bar: {data.get('inside_bar', False)} | Outside Bar: {data.get('outside_bar', False)}
+
+PIVOT LEVELS:
+  PP: {data.get('pivot_pp', 'N/A')}
+  R1 {data.get('pivot_r1', 'N/A')} R2 {data.get('pivot_r2', 'N/A')} R3 {data.get('pivot_r3', 'N/A')}
+  S1 {data.get('pivot_s1', 'N/A')} S2 {data.get('pivot_s2', 'N/A')} S3 {data.get('pivot_s3', 'N/A')}
+  Camarilla: R4 {data.get('cam_r4', 'N/A')} R3 {data.get('cam_r3', 'N/A')} | S3 {data.get('cam_s3', 'N/A')} S4 {data.get('cam_s4', 'N/A')}
+  Top touch scores: {sr_line}
 
 TREND:
   EMA(9): {data.get('ema9')} | EMA(20): {data.get('ema20')} | EMA(50): {data.get('ema50')} | EMA(200): {data.get('ema200')}
   SMA(20): {data.get('sma20')} | SMA(50): {data.get('sma50')}
   Trend: {data.get('trend')} | EMA Cross: {data.get('ema_cross', 'NONE')}
   ADX: {data.get('adx')} | DI+: {data.get('di_plus')} | DI-: {data.get('di_minus')}
-  Supertrend: {data.get('supertrend', 'N/A')}
+  Supertrend: {data.get('supertrend', 'N/A')} | Direction: {data.get('supertrend_dir', 'N/A')}
   Parabolic SAR: {data.get('psar_signal', 'N/A')}
+  Chandelier Exit Long: {data.get('chandelier_exit_long', 'N/A')} | Short: {data.get('chandelier_exit_short', 'N/A')}
 
 ICHIMOKU CLOUD:
   Tenkan-sen: {data.get('ichimoku_tenkan')} | Kijun-sen: {data.get('ichimoku_kijun')}
@@ -171,6 +191,7 @@ MOMENTUM:
   Stoch K: {data.get('stoch_k')} | D: {data.get('stoch_d')}
   CCI(20): {data.get('cci')} | Williams %R(14): {data.get('williams_r')}
   ROC(10): {data.get('roc')} | MFI(14): {data.get('mfi')}
+  Awesome Osc: {data.get('awesome_osc', 'N/A')} | AO Signal: {data.get('ao_signal', 'NONE')}
 
 VOLATILITY:
   ATR(14): {data.get('atr')}
@@ -180,6 +201,7 @@ VOLATILITY:
 VOLUME:
   Current Volume: {data.get('volume')} | Trend: {data.get('vol_trend')} ({data.get('vol_ratio', '?')}x avg)
   VWAP: {data.get('vwap')}
+  CMF(20): {data.get('cmf', 'N/A')}
 
 Respond with JSON only."""
 

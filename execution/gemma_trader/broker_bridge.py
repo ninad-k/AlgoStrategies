@@ -10,6 +10,26 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 
+# ─── Bot identity: used everywhere to separate this bot's trades from
+#     other strategies running on the same MT5 account. ───
+BOT_MAGIC = 240411
+BOT_COMMENT_PREFIX = "gemma4"
+
+
+def is_bot_trade(obj) -> bool:
+    """
+    True if the given MT5 position / deal / order dict-or-object was
+    placed by this bot. Duck-typed: works with mt5.TradePosition namedtuples,
+    mt5.TradeDeal, and plain dicts (e.g. from MT5DataFeed.get_positions()).
+    """
+    if obj is None:
+        return False
+    magic = getattr(obj, "magic", None)
+    if magic is None and isinstance(obj, dict):
+        magic = obj.get("magic")
+    return magic == BOT_MAGIC
+
+
 class BaseBroker(ABC):
     @abstractmethod
     def get_balance(self) -> float:
@@ -142,8 +162,8 @@ class MT5Broker(BaseBroker):
             "price": price,
             "sl": sl,
             "tp": tp,
-            "magic": 240411,
-            "comment": "gemma4-trader",
+            "magic": BOT_MAGIC,
+            "comment": f"{BOT_COMMENT_PREFIX}-trader",
             "type_time": self.mt5.ORDER_TIME_GTC,
             "type_filling": filling_mode,
         }
@@ -198,8 +218,8 @@ class MT5Broker(BaseBroker):
                 "type": close_type,
                 "position": pos.ticket,
                 "price": price,
-                "magic": 240411,
-                "comment": "gemma4-close",
+                "magic": BOT_MAGIC,
+                "comment": f"{BOT_COMMENT_PREFIX}-close",
             }
             result = self.mt5.order_send(request)
             logger.info(f"Closed position {pos.ticket}: {result.retcode}")

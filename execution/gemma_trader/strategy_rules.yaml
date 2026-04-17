@@ -1,0 +1,96 @@
+version: 1
+updated_utc: "2026-04-17T00:00:00+00:00"
+# Per-symbol filter / threshold overrides maintained by backtest/scheduler.py.
+# Live trader loads this at startup and overrides config.yaml defaults per symbol.
+# Only numeric values under filters / thresholds are tunable by the proposer.
+symbols:
+  BTCUSD:
+    filters:
+      min_adx: 20
+      min_vol_ratio: 1.0
+      required_structure: null
+      block_when_bb_width_below: null
+    thresholds:
+      min_confidence: 0.65
+      rsi_oversold: 30
+      rsi_overbought: 70
+      sl_atr: 1.0
+      tp_atr: 1.5
+      cooldown_min: 3
+    baseline:
+      expectancy_r: null
+      max_dd_r: null
+      trades: null
+      win_rate: null
+  ETHUSD:
+    filters:
+      min_adx: 20
+      min_vol_ratio: 1.0
+      required_structure: null
+      block_when_bb_width_below: null
+    thresholds:
+      min_confidence: 0.65
+      rsi_oversold: 30
+      rsi_overbought: 70
+      sl_atr: 1.0
+      tp_atr: 1.5
+      cooldown_min: 3
+    baseline:
+      expectancy_r: null
+      max_dd_r: null
+      trades: null
+      win_rate: null
+  LTCUSD:
+    filters:
+      min_adx: 20
+      min_vol_ratio: 1.0
+      required_structure: null
+      block_when_bb_width_below: null
+    thresholds:
+      min_confidence: 0.65
+      rsi_oversold: 30
+      rsi_overbought: 70
+      sl_atr: 1.0
+      tp_atr: 1.5
+      cooldown_min: 3
+    baseline:
+      expectancy_r: null
+      max_dd_r: null
+      trades: null
+      win_rate: null
+  XRPUSD:
+    filters:
+      min_adx: 20
+      min_vol_ratio: 1.0
+      required_structure: null
+      block_when_bb_width_below: null
+    thresholds:
+      min_confidence: 0.65
+      rsi_oversold: 30
+      rsi_overbought: 70
+      sl_atr: 1.0
+      tp_atr: 1.5
+      cooldown_min: 3
+    baseline:
+      expectancy_r: null
+      max_dd_r: null
+      trades: null
+      win_rate: null
+  SOLUSD:
+    filters:
+      min_adx: 20
+      min_vol_ratio: 1.0
+      required_structure: null
+      block_when_bb_width_below: null
+    thresholds:
+      min_confidence: 0.65
+      rsi_oversold: 30
+      rsi_overbought: 70
+      sl_atr: 1.0
+      tp_atr: 1.5
+      cooldown_min: 3
+    baseline:
+      expectancy_r: null
+      max_dd_r: null
+      trades: null
+      win_rate: null
