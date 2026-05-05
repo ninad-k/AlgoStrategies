@@ -1,0 +1,671 @@
+// SPDX-License-Identifier: MPL-2.0
+// Author: Ninad Kulkarni
+//
+// Strategy v2: trade the Swing Structure Forecast with SMC confluence.
+//
+// Entry trigger (same as v1): swing direction flip after `swingLen` pivots.
+// New v2 confluence filters (all optional, all enabled by default):
+//   1. Internal trend bias must align with the flip direction.
+//      Internal trend updates on every internal BOS/CHoCH; longs require
+//      internalTrend = BULLISH, shorts require BEARISH.
+//   2. Premium/Discount filter — longs only when entry is in the discount
+//      half of the trailing range, shorts only in premium.
+//   3. Unmitigated order-block confluence — for a long, require at least one
+//      live bullish OB whose top is below entry; mirror for shorts.
+// Stop = opposing pivot ± ATR buffer; TP = projected target × fib multiple.
+
+//@version=6
+strategy("Swing Structure Forecast v2 — Strategy",
+     overlay = true,
+     initial_capital = 10000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100,
+     pyramiding = 0,
+     calc_on_every_tick = false,
+     process_orders_on_close = true,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.02,
+     max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500,
+     max_bars_back = 5000)
+
+// ── Constants ──────────────────────────────────────────────────────
+BULL_LEG = 1, BEAR_LEG = 0
+BULLISH = 1, BEARISH = -1
+ALL = "All", BOS = "BOS", CHOCH = "CHoCH"
+TINY = size.tiny, SMALL = size.small, NORMAL = size.normal
+ATRm = "Atr", RANGEm = "Cumulative Mean Range"
+CLOSEs = "Close", HIGHLOW = "High/Low"
+
+// ── Inputs ─────────────────────────────────────────────────────────
+GRP_F = "Forecast Core"
+swingLen   = input.int(16, "Swing Length", minval = 10, group = GRP_F)
+samples    = input.int(20, "Samples", minval = 3, maxval = 20, group = GRP_F)
+method     = input.string("Weighted", "Method", ["Weighted","Average","Median"], group = GRP_F)
+minSamples = input.int(3, "Min Samples Before Trading", minval = 2, group = GRP_F)
+fwdBars    = input.int(5,  "Forecast Bars", minval = 5, group = GRP_F)
+showBeam   = input.bool(true, "Beam",        group = GRP_F)
+showTarget = input.bool(true, "Target Zone", group = GRP_F)
+showDots   = input.bool(true, "Path Dots",   group = GRP_F)
+showFibs   = input.bool(true, "Fib Ext",     group = GRP_F)
+fib1On = input.bool(true,  "Lvl 1", group=GRP_F, inline="f1") , fib1V = input.float(1.000,"", group=GRP_F, inline="f1", minval=0.001, step=0.001)
+fib2On = input.bool(true,  "Lvl 2", group=GRP_F, inline="f2") , fib2V = input.float(1.272,"", group=GRP_F, inline="f2", minval=0.001, step=0.001)
+fib3On = input.bool(true,  "Lvl 3", group=GRP_F, inline="f3") , fib3V = input.float(1.618,"", group=GRP_F, inline="f3", minval=0.001, step=0.001)
+fib4On = input.bool(false, "Lvl 4", group=GRP_F, inline="f4") , fib4V = input.float(2.000,"", group=GRP_F, inline="f4", minval=0.001, step=0.001)
+fib5On = input.bool(false, "Lvl 5", group=GRP_F, inline="f5") , fib5V = input.float(2.618,"", group=GRP_F, inline="f5", minval=0.001, step=0.001)
+
+GRP_SR = "S/R Zones"
+showLevels = input.bool(true, "Show S/R Zones", group=GRP_SR)
+zoneATR    = input.float(0.30, "Zone Width (ATR)", minval=0.05, maxval=0.5, step=0.05, group=GRP_SR)
+maxAge     = input.int(300, "Max Zone Age", minval=30, group=GRP_SR)
+
+GRP_SMC = "SMC Confluence"
+useTrendFilter = input.bool(true,  "Require Internal Trend Alignment", group=GRP_SMC,
+     tooltip="Long needs internal trend BULLISH; short needs BEARISH. Trend updates on every internal BOS/CHoCH.")
+useZoneFilter  = input.bool(true,  "Premium/Discount Filter", group=GRP_SMC,
+     tooltip="Longs only when entry < midpoint of trailing range; shorts only above.")
+useOBFilter    = input.bool(false, "Require Unmitigated OB", group=GRP_SMC,
+     tooltip="Long needs at least one bullish OB top below entry; mirror for short.")
+useEQTP        = input.bool(false, "Use Nearest EQH/EQL as TP", group=GRP_SMC,
+     tooltip="Override forecast TP with nearest opposite-side equal high/low when available.")
+
+GRP_STR = "SMC — Structure / OB"
+intLen     = input.int(5,   "Internal Pivot Length", minval=2, group=GRP_STR)
+showIntStr = input.bool(true,  "Show Internal BOS/CHoCH", group=GRP_STR)
+showSwStr  = input.bool(true,  "Show Swing BOS/CHoCH", group=GRP_STR)
+showOB     = input.bool(true,  "Show Internal OBs", group=GRP_STR)
+obSize     = input.int(5, "OB Display Count", minval=1, maxval=20, group=GRP_STR)
+obFilter   = input.string(ATRm, "OB Filter", group=GRP_STR, options=[ATRm, RANGEm])
+obMitig    = input.string(HIGHLOW, "OB Mitigation", group=GRP_STR, options=[CLOSEs, HIGHLOW])
+
+GRP_EQ = "SMC — EQH/EQL"
+showEQ = input(true, "Show EQH/EQL", group=GRP_EQ)
+eqLen  = input.int(3, "Bars Confirmation", group=GRP_EQ, minval=1)
+eqThr  = input.float(0.1, "Threshold", group=GRP_EQ, minval=0, maxval=0.5, step=0.1)
+
+GRP_PD = "SMC — Premium/Discount"
+showPD = input.bool(true, "Show PD Zones", group=GRP_PD)
+
+GRP_RISK = "Risk / Exits"
+riskPct     = input.float(1.0, "Risk %", minval=0.05, maxval=5.0, step=0.05, group=GRP_RISK)
+slAtrMult   = input.float(1.0, "SL ATR Buffer (× ATR200)", minval=0.0, step=0.1, group=GRP_RISK)
+useFibTP    = input.bool(false, "Use Fib TP Multiple", group=GRP_RISK)
+fibTPLevel  = input.float(1.000, "Fib TP Level", minval=0.1, step=0.001, group=GRP_RISK)
+maxBarsHold = input.int(0, "Max Bars in Trade (0 = off)", minval=0, group=GRP_RISK)
+reverseFlip = input.bool(true, "Reverse on Opposite Flip", group=GRP_RISK)
+
+GRP_DIR = "Direction Toggles"
+allowLong  = input.bool(true,  "Allow Long",  group=GRP_DIR)
+allowShort = input.bool(true,  "Allow Short", group=GRP_DIR)
+
+GRP_C = "Colors"
+bullClr = input.color(#00ff00, "Bull",     inline="c", group=GRP_C)
+bearClr = input.color(#ff0000, "Bear",     inline="c", group=GRP_C)
+projClr = input.color(#42a5f5, "Forecast", inline="c2",group=GRP_C)
+fibClr  = input.color(#ffeb3b, "Fib",      inline="c2",group=GRP_C)
+swBullishCol = input.color(#089981, "Swing Bull", inline="s", group=GRP_C)
+swBearishCol = input.color(#F23645, "Swing Bear", inline="s", group=GRP_C)
+intBullCol   = input.color(#089981, "Int Bull",   inline="i", group=GRP_C)
+intBearCol   = input.color(#F23645, "Int Bear",   inline="i", group=GRP_C)
+intBullOBClr = input.color(color.new(#3179f5, 80), "Int Bull OB", group=GRP_C)
+intBearOBClr = input.color(color.new(#f77c80, 80), "Int Bear OB", group=GRP_C)
+premClr = input.color(#F23645, "Premium",     inline="z", group=GRP_C)
+discClr = input.color(#089981, "Discount",    inline="z", group=GRP_C)
+eqClr   = input.color(#878b94, "Equilibrium", inline="z", group=GRP_C)
+
+CLEAR = color.new(color.black, 100)
+
+// ── Types ──────────────────────────────────────────────────────────
+type Pivot
+    float price
+    int   idx
+
+type SRZone
+    float price
+    int   startIdx
+    bool  isResistance
+    bool  broken
+    box   outerBox
+    box   innerBox
+    line  lvlLine
+
+type SmcPivot
+    float currentLevel
+    float lastLevel
+    bool  crossed
+    int   barTime  = time
+    int   barIndex = bar_index
+
+type Trend
+    int bias
+
+type EqualDisplay
+    line  l_ine = na
+    label l_abel = na
+
+type OrderBlock
+    float barHigh
+    float barLow
+    int   barTime
+    int   bias
+
+type Trailing
+    float top
+    float bottom
+    int   barTime
+    int   barIndex
+    int   lastTopTime
+    int   lastBottomTime
+
+// ── State ──────────────────────────────────────────────────────────
+var hi = Pivot.new(na, na)
+var lo = Pivot.new(na, na)
+var bool dir = false
+
+var srZones = array.new<SRZone>()
+var pcts    = array.new<float>()
+var durs    = array.new<float>()
+
+var swingHi    = SmcPivot.new(na, na, false)
+var swingLo    = SmcPivot.new(na, na, false)
+var internalHi = SmcPivot.new(na, na, false)
+var internalLo = SmcPivot.new(na, na, false)
+var equalHi    = SmcPivot.new(na, na, false)
+var equalLo    = SmcPivot.new(na, na, false)
+var swingTrend    = Trend.new(0)
+var internalTrend = Trend.new(0)
+var equalHiDisp = EqualDisplay.new()
+var equalLoDisp = EqualDisplay.new()
+var trail = Trailing.new(na, na, na, na, na, na)
+var intOBs = array.new<OrderBlock>()
+var intOBBoxes = array.new<box>()
+var parsedHi = array.new<float>()
+var parsedLo = array.new<float>()
+var timesArr = array.new<int>()
+
+// Track last EQH/EQL for TP override
+var float lastEQH = na
+var float lastEQL = na
+
+// Live entry markers
+var int   entryBar  = na
+var float lastEntry = na
+var float lastSL    = na
+var float lastTP    = na
+
+// Forecast objects
+var polyline beamOuter = na, var polyline beamMid = na, var polyline beamInner = na
+var line     centerLine = na
+var box      tgtOuter = na,  var box      tgtInner = na
+var label    tgtLabel = na
+var label[]  dots      = array.new<label>()
+var line[]   fibLines  = array.new<line>()
+var label[]  fibLabels = array.new<label>()
+
+atr = ta.atr(200)
+
+// OB box pool
+if barstate.isfirst and showOB
+    for i = 1 to obSize
+        intOBBoxes.push(box.new(na,na,na,na, xloc=xloc.bar_time, extend=extend.right))
+
+// ── Pre-bar bookkeeping (parsed OHLC for OBs) ──────────────────────
+bearObSrc = obMitig == CLOSEs ? close : high
+bullObSrc = obMitig == CLOSEs ? close : low
+volMeasure = obFilter == ATRm ? atr : ta.cum(ta.tr) / bar_index
+hiVolBar   = (high - low) >= 2 * volMeasure
+parsedHigh = hiVolBar ? low : high
+parsedLow  = hiVolBar ? high : low
+parsedHi.push(parsedHigh)
+parsedLo.push(parsedLow)
+timesArr.push(time)
+
+// ── Helpers ────────────────────────────────────────────────────────
+buildBeamPts(int oIdx, int tIdx, float orig, float tgt, float bHalf, float mult, int steps) =>
+    pts = array.new<chart.point>()
+    for s = 0 to steps
+        t = s / float(steps), eased = t * t * (3.0 - 2.0 * t)
+        x = oIdx + int((tIdx - oIdx) * t), yc = orig + (tgt - orig) * eased
+        sp = bHalf * mult * eased
+        pts.push(chart.point.from_index(x, yc + sp))
+    for s = steps to 0
+        t = s / float(steps), eased = t * t * (3.0 - 2.0 * t)
+        x = oIdx + int((tIdx - oIdx) * t), yc = orig + (tgt - orig) * eased
+        sp = bHalf * mult * eased
+        pts.push(chart.point.from_index(x, yc - sp))
+    pts
+
+forecastPct(array<float> a) =>
+    n = a.size(), out = 0.0
+    if n > 0
+        if method == "Weighted"
+            tw = 0.0, ws = 0.0
+            for i = 0 to n - 1
+                w = i + 1.0
+                ws += a.get(i) * w
+                tw += w
+            out := ws / tw
+        else if method == "Median"
+            out := a.median()
+        else
+            out := a.avg()
+    out
+
+qtyForRisk(float slDist) =>
+    riskMoney = strategy.equity * (riskPct / 100.0)
+    riskMoney / math.max(slDist, syminfo.mintick)
+
+leg(int size) =>
+    var int legV = 0
+    newHi = high[size] > ta.highest(size)
+    newLo = low[size]  < ta.lowest(size)
+    if newHi
+        legV := BEAR_LEG
+    else if newLo
+        legV := BULL_LEG
+    legV
+
+startNewLeg(int legV) => ta.change(legV) != 0
+startBearLeg(int legV) => ta.change(legV) == -1
+startBullLeg(int legV) => ta.change(legV) == 1
+
+drawEqual(SmcPivot piv, float lvl, int sz, bool isHigh) =>
+    ed = isHigh ? equalHiDisp : equalLoDisp
+    txt = isHigh ? "EQH" : "EQL"
+    ec  = isHigh ? swBearishCol : swBullishCol
+    st  = isHigh ? label.style_label_down : label.style_label_up
+    line.delete(ed.l_ine)
+    label.delete(ed.l_abel)
+    ed.l_ine := line.new(chart.point.new(piv.barTime, na, piv.currentLevel), chart.point.new(time[sz], na, lvl), xloc=xloc.bar_time, color=ec, style=line.style_dotted)
+    pos = math.round(0.5 * (piv.barIndex + bar_index - sz))
+    ed.l_abel := label.new(chart.point.new(na, pos, lvl), txt, xloc.bar_index, color=color(na), textcolor=ec, style=st, size=size.tiny)
+    if isHigh
+        lastEQH := lvl
+    else
+        lastEQL := lvl
+
+captureStructure(int size, bool equalMode, bool internal) =>
+    legV = leg(size)
+    isNew = startNewLeg(legV)
+    isLow = startBullLeg(legV)
+    isHigh = startBearLeg(legV)
+    if isNew
+        if isLow
+            piv = equalMode ? equalLo : internal ? internalLo : swingLo
+            if equalMode and math.abs(piv.currentLevel - low[size]) < eqThr * atr
+                drawEqual(piv, low[size], size, false)
+            piv.lastLevel := piv.currentLevel
+            piv.currentLevel := low[size]
+            piv.crossed := false
+            piv.barTime := time[size]
+            piv.barIndex := bar_index[size]
+            if not equalMode and not internal
+                trail.bottom := piv.currentLevel
+                trail.barTime := piv.barTime
+                trail.barIndex := piv.barIndex
+                trail.lastBottomTime := piv.barTime
+        else
+            piv = equalMode ? equalHi : internal ? internalHi : swingHi
+            if equalMode and math.abs(piv.currentLevel - high[size]) < eqThr * atr
+                drawEqual(piv, high[size], size, true)
+            piv.lastLevel := piv.currentLevel
+            piv.currentLevel := high[size]
+            piv.crossed := false
+            piv.barTime := time[size]
+            piv.barIndex := bar_index[size]
+            if not equalMode and not internal
+                trail.top := piv.currentLevel
+                trail.barTime := piv.barTime
+                trail.barIndex := piv.barIndex
+                trail.lastTopTime := piv.barTime
+
+drawStructure(SmcPivot piv, string txt, color c, string lst, string lbst, string sz) =>
+    var line  l = line.new(na,na,na,na, xloc=xloc.bar_time)
+    var label lb = label.new(na,na)
+    l := line.new(chart.point.new(piv.barTime, na, piv.currentLevel), chart.point.new(time, na, piv.currentLevel), xloc.bar_time, color=c, style=lst)
+    lb := label.new(chart.point.new(na, math.round(0.5 * (piv.barIndex + bar_index)), piv.currentLevel), txt, xloc.bar_index, color=color(na), textcolor=c, style=lbst, size=sz)
+
+deleteOBs() =>
+    for [i, ob] in intOBs
+        crossed = false
+        if bearObSrc > ob.barHigh and ob.bias == BEARISH
+            crossed := true
+        else if bullObSrc < ob.barLow and ob.bias == BULLISH
+            crossed := true
+        if crossed
+            intOBs.remove(i)
+
+storeOB(SmcPivot piv, int bias) =>
+    if showOB
+        array<float> a = na
+        int idx = na
+        if bias == BEARISH
+            a := parsedHi.slice(piv.barIndex, bar_index)
+            idx := piv.barIndex + a.indexof(a.max())
+        else
+            a := parsedLo.slice(piv.barIndex, bar_index)
+            idx := piv.barIndex + a.indexof(a.min())
+        ob = OrderBlock.new(parsedHi.get(idx), parsedLo.get(idx), timesArr.get(idx), bias)
+        if intOBs.size() >= 100
+            intOBs.pop()
+        intOBs.unshift(ob)
+
+drawOBs() =>
+    n = intOBs.size()
+    if n > 0
+        slice = intOBs.slice(0, math.min(obSize, n))
+        for [i, ob] in slice
+            obClr = ob.bias == BEARISH ? intBearOBClr : intBullOBClr
+            b = intOBBoxes.get(i)
+            b.set_top_left_point(chart.point.new(ob.barTime, na, ob.barHigh))
+            b.set_bottom_right_point(chart.point.new(last_bar_time, na, ob.barLow))
+            b.set_border_color(na)
+            b.set_bgcolor(obClr)
+
+displayInternalStructure() =>
+    if ta.crossover(close, internalHi.currentLevel) and not internalHi.crossed
+        tag = internalTrend.bias == BEARISH ? CHOCH : BOS
+        internalHi.crossed := true
+        internalTrend.bias := BULLISH
+        if showIntStr
+            drawStructure(internalHi, tag, intBullCol, line.style_dashed, label.style_label_down, TINY)
+        storeOB(internalHi, BULLISH)
+    if ta.crossunder(close, internalLo.currentLevel) and not internalLo.crossed
+        tag = internalTrend.bias == BULLISH ? CHOCH : BOS
+        internalLo.crossed := true
+        internalTrend.bias := BEARISH
+        if showIntStr
+            drawStructure(internalLo, tag, intBearCol, line.style_dashed, label.style_label_up, TINY)
+        storeOB(internalLo, BEARISH)
+
+displaySwingStructure() =>
+    if ta.crossover(close, swingHi.currentLevel) and not swingHi.crossed
+        tag = swingTrend.bias == BEARISH ? CHOCH : BOS
+        swingHi.crossed := true
+        swingTrend.bias := BULLISH
+        if showSwStr
+            drawStructure(swingHi, tag, swBullishCol, line.style_solid, label.style_label_down, SMALL)
+    if ta.crossunder(close, swingLo.currentLevel) and not swingLo.crossed
+        tag = swingTrend.bias == BULLISH ? CHOCH : BOS
+        swingLo.crossed := true
+        swingTrend.bias := BEARISH
+        if showSwStr
+            drawStructure(swingLo, tag, swBearishCol, line.style_solid, label.style_label_up, SMALL)
+
+updateTrailing() =>
+    trail.top := math.max(high, trail.top)
+    trail.lastTopTime := trail.top == high ? time : trail.lastTopTime
+    trail.bottom := math.min(low, trail.bottom)
+    trail.lastBottomTime := trail.bottom == low ? time : trail.lastBottomTime
+
+drawZone(float lvl, int idx, float top, float bot, string txt, color c, string st) =>
+    var label lb = label.new(na,na, text=txt, color=color(na), textcolor=c, style=st, size=size.small)
+    var box   bx = box.new(na,na,na,na, bgcolor=color.new(c, 80), border_color=color(na), xloc=xloc.bar_time)
+    bx.set_top_left_point(chart.point.new(trail.barTime, na, top))
+    bx.set_bottom_right_point(chart.point.new(last_bar_time, na, bot))
+    lb.set_point(chart.point.new(na, idx, lvl))
+
+drawPDZones() =>
+    drawZone(trail.top, math.round(0.5 * (trail.barIndex + last_bar_index)), trail.top, 0.95*trail.top + 0.05*trail.bottom, "Premium", premClr, label.style_label_down)
+    eq = math.avg(trail.top, trail.bottom)
+    drawZone(eq, last_bar_index, 0.525*trail.top + 0.475*trail.bottom, 0.525*trail.bottom + 0.475*trail.top, "Equilibrium", eqClr, label.style_label_left)
+    drawZone(trail.bottom, math.round(0.5 * (trail.barIndex + last_bar_index)), 0.95*trail.bottom + 0.05*trail.top, trail.bottom, "Discount", discClr, label.style_label_up)
+
+// ── Forecast pivot detection (drives entries) ──────────────────────
+H = ta.highest(high, swingLen)
+L = ta.lowest(low,   swingLen)
+if high == H
+    dir := true
+if low == L
+    dir := false
+
+if high[1] == H[1] and high < H
+    hi.idx   := bar_index[1]
+    hi.price := high[1]
+if low[1] == L[1] and low > L
+    lo.idx   := bar_index[1]
+    lo.price := low[1]
+
+// ── Direction flip → record + draw S/R + decide trade ──────────────
+if dir != dir[1] and not na(hi.price) and not na(lo.price)
+    pct  = not dir ? (hi.price - lo.price) / lo.price * 100 : (lo.price - hi.price) / hi.price * 100
+    bars = math.abs(hi.idx - lo.idx)
+    pcts.push(math.abs(pct))
+    durs.push(bars)
+    if pcts.size() > samples
+        pcts.shift()
+        durs.shift()
+
+    if showLevels
+        zw = atr * zoneATR
+        if dir
+            z = SRZone.new()
+            z.price := hi.price
+            z.startIdx := hi.idx
+            z.isResistance := true
+            z.broken := false
+            z.outerBox := box.new(hi.idx, hi.price + zw,         bar_index + 5, hi.price, border_color=CLEAR, bgcolor=color.new(bearClr, 90))
+            z.innerBox := box.new(hi.idx, hi.price + zw * 0.35,  bar_index + 5, hi.price, border_color=CLEAR, bgcolor=color.new(bearClr, 82))
+            z.lvlLine  := line.new(hi.idx, hi.price, bar_index + 5, hi.price, color=color.new(bearClr, 45), width=1)
+            srZones.push(z)
+        else
+            z = SRZone.new()
+            z.price := lo.price
+            z.startIdx := lo.idx
+            z.isResistance := false
+            z.broken := false
+            z.outerBox := box.new(lo.idx, lo.price, bar_index + 5, lo.price - zw,        border_color=CLEAR, bgcolor=color.new(bullClr, 90))
+            z.innerBox := box.new(lo.idx, lo.price, bar_index + 5, lo.price - zw * 0.35, border_color=CLEAR, bgcolor=color.new(bullClr, 82))
+            z.lvlLine  := line.new(lo.idx, lo.price, bar_index + 5, lo.price, color=color.new(bullClr, 45), width=1)
+            srZones.push(z)
+
+    if pcts.size() >= minSamples
+        fPct = forecastPct(pcts)
+        if fPct > 0.0
+            wantLong  = dir       and allowLong
+            wantShort = (not dir) and allowShort
+
+            // SMC trend confluence
+            trendOK = not useTrendFilter or
+                       (wantLong  and internalTrend.bias == BULLISH) or
+                       (wantShort and internalTrend.bias == BEARISH)
+
+            // Premium/Discount zone confluence
+            zoneOK = true
+            if useZoneFilter and not na(trail.top) and not na(trail.bottom)
+                mid = math.avg(trail.top, trail.bottom)
+                zoneOK := wantLong ? close <= mid : close >= mid
+
+            // Unmitigated OB confluence
+            obOK = true
+            if useOBFilter
+                hasMatch = false
+                for [_, ob] in intOBs
+                    if wantLong  and ob.bias == BULLISH and ob.barHigh < close
+                        hasMatch := true
+                        break
+                    if wantShort and ob.bias == BEARISH and ob.barLow  > close
+                        hasMatch := true
+                        break
+                obOK := hasMatch
+
+            if (wantLong or wantShort) and trendOK and zoneOK and obOK
+                origin   = wantLong ? lo.price : hi.price
+                rawTgt   = wantLong ? origin * (1.0 + fPct/100.0) : origin * (1.0 - fPct/100.0)
+                fcastTP  = useFibTP ? origin + (rawTgt - origin) * fibTPLevel : rawTgt
+
+                // EQH/EQL TP override — pick a closer logical target if available
+                tpPrice = fcastTP
+                if useEQTP
+                    if wantLong and not na(lastEQH) and lastEQH > close and lastEQH < fcastTP
+                        tpPrice := lastEQH
+                    if wantShort and not na(lastEQL) and lastEQL < close and lastEQL > fcastTP
+                        tpPrice := lastEQL
+
+                opposing = wantLong ? lo.price : hi.price
+                slPrice  = wantLong ? opposing - atr * slAtrMult : opposing + atr * slAtrMult
+                entry    = close
+                slDist   = math.abs(entry - slPrice)
+
+                if slDist > syminfo.mintick * 5
+                    qty = qtyForRisk(slDist)
+                    inLong  = strategy.position_size > 0
+                    inShort = strategy.position_size < 0
+
+                    if reverseFlip and ((wantLong and inShort) or (wantShort and inLong))
+                        strategy.close_all(comment="flip-close")
+
+                    geomOK = wantLong ? (tpPrice > entry and slPrice < entry) :
+                                        (tpPrice < entry and slPrice > entry)
+
+                    if geomOK and not (wantLong and inLong) and not (wantShort and inShort)
+                        if wantLong
+                            strategy.entry("L", strategy.long, qty=qty, comment="ssf2-long")
+                            strategy.exit ("L-x", "L", stop=slPrice, limit=tpPrice)
+                        if wantShort
+                            strategy.entry("S", strategy.short, qty=qty, comment="ssf2-short")
+                            strategy.exit ("S-x", "S", stop=slPrice, limit=tpPrice)
+                        entryBar  := bar_index
+                        lastEntry := entry
+                        lastSL    := slPrice
+                        lastTP    := tpPrice
+
+// ── S/R aging / cleanup ────────────────────────────────────────────
+if srZones.size() > 0
+    for i = srZones.size() - 1 to 0
+        z = srZones.get(i)
+        age = bar_index - z.startIdx
+        clr = z.isResistance ? bearClr : bullClr
+        if not z.broken
+            brokeUp   =  z.isResistance and close > z.price
+            brokeDown = not z.isResistance and close < z.price
+            if brokeUp or brokeDown
+                z.broken := true
+                line.set_style(z.lvlLine, line.style_dotted)
+                line.set_color(z.lvlLine, color.new(clr, 80))
+                box.set_bgcolor(z.outerBox, color.new(clr, 96))
+                box.set_bgcolor(z.innerBox, color.new(clr, 94))
+        if age > maxAge or (z.broken and age > 30)
+            box.delete(z.outerBox)
+            box.delete(z.innerBox)
+            line.delete(z.lvlLine)
+            srZones.remove(i)
+            continue
+        if not z.broken
+            fade   = math.min(float(age) / float(maxAge), 1.0)
+            outerT = int(90.0 + 10.0 * fade)
+            innerT = int(82.0 + 18.0 * fade)
+            lineT  = int(45.0 + 55.0 * fade)
+            box.set_right(z.outerBox, bar_index + 5)
+            box.set_right(z.innerBox, bar_index + 5)
+            line.set_x2(z.lvlLine, bar_index + 5)
+            box.set_bgcolor(z.outerBox, color.new(clr, outerT))
+            box.set_bgcolor(z.innerBox, color.new(clr, innerT))
+            line.set_color(z.lvlLine, color.new(clr, lineT))
+
+// ── Forecast renderer (latest bar only) ────────────────────────────
+if barstate.islast and pcts.size() >= 2
+    beamOuter.delete()
+    beamMid.delete()
+    beamInner.delete()
+    centerLine.delete()
+    tgtOuter.delete()
+    tgtInner.delete()
+    tgtLabel.delete()
+    for d in dots
+        d.delete()
+    dots.clear()
+    for fl in fibLines
+        fl.delete()
+    fibLines.clear()
+    for flb in fibLabels
+        flb.delete()
+    fibLabels.clear()
+    fPct = forecastPct(pcts)
+    variance = 0.0
+    for i = 0 to pcts.size() - 1
+        d = pcts.get(i) - fPct
+        variance += d * d
+    stdDev = math.sqrt(variance / pcts.size())
+    isBear = not dir
+    origin    = isBear ? hi.price : lo.price
+    originIdx = isBear ? hi.idx   : lo.idx
+    target    = isBear ? origin * (1.0 - fPct/100.0) : origin * (1.0 + fPct/100.0)
+    targetIdx = bar_index + fwdBars
+    bandHalf  = math.max(origin * stdDev / 100.0, atr * 0.1)
+    if showBeam and not na(originIdx)
+        outerPts = buildBeamPts(originIdx, targetIdx, origin, target, bandHalf, 1.5, 12)
+        midPts   = buildBeamPts(originIdx, targetIdx, origin, target, bandHalf, 1.0, 12)
+        innerPts = buildBeamPts(originIdx, targetIdx, origin, target, bandHalf, 0.5, 12)
+        beamOuter := polyline.new(outerPts, false, true, line_color=CLEAR,                  fill_color=color.new(projClr, 93))
+        beamMid   := polyline.new(midPts,   false, true, line_color=color.new(projClr, 80), fill_color=color.new(projClr, 87))
+        beamInner := polyline.new(innerPts, false, true, line_color=CLEAR,                  fill_color=color.new(projClr, 78))
+    if not na(originIdx)
+        centerLine := line.new(originIdx, origin, targetIdx, target, color=color.new(projClr, 30), width=1, style=line.style_dashed)
+    if showDots and not na(originIdx)
+        for s = 1 to 4
+            t = s / 5.0, eased = t * t * (3.0 - 2.0 * t)
+            x = originIdx + int((targetIdx - originIdx) * t)
+            y = origin + (target - origin) * eased
+            tr_ = int(25.0 + 45.0 * (1.0 - t))
+            dots.push(label.new(x, y, "●", style=label.style_none, textcolor=color.new(projClr, tr_), size=size.tiny))
+    if showTarget
+        tgtTop = target + bandHalf * 0.6
+        tgtBot = target - bandHalf * 0.6
+        tgtOuter := box.new(targetIdx - 3, tgtTop + bandHalf*0.3, targetIdx + 6, tgtBot - bandHalf*0.3, border_color=CLEAR, bgcolor=color.new(projClr, 90))
+        tgtInner := box.new(targetIdx - 2, tgtTop, targetIdx + 5, tgtBot, border_color=color.new(projClr, 40), border_width=1, bgcolor=color.new(projClr, 80))
+        sign = isBear ? "▼ " : "▲ "
+        tgtLabel := label.new(targetIdx + 6, target, sign + str.tostring(fPct, "#.##") + "%\n" + str.tostring(target, format.mintick), style=label.style_label_left, color=color.new(projClr, 15), textcolor=color.white, size=size.normal)
+    if showFibs
+        full = target - origin
+        actA = array.from(fib1On, fib2On, fib3On, fib4On, fib5On)
+        valA = array.from(fib1V,  fib2V,  fib3V,  fib4V,  fib5V)
+        alA  = array.from(30, 45, 30, 55, 65)
+        for i = 0 to valA.size() - 1
+            if not actA.get(i)
+                continue
+            r  = valA.get(i)
+            fp = origin + full * r
+            a  = alA.get(i)
+            fibLines.push(line.new(bar_index, fp, targetIdx + 20, fp, color=color.new(fibClr, a), width=1, style=r == 1.0 ? line.style_solid : line.style_dashed))
+            fibLabels.push(label.new(targetIdx + 22, fp, str.tostring(r, "#.###") + "  " + str.tostring(fp, format.mintick), style=label.style_label_left, color=color.new(fibClr, 80), textcolor=color.new(fibClr, 10), size=size.small))
+
+// ── SMC execution ──────────────────────────────────────────────────
+if showPD or showSwStr or showIntStr or showOB
+    updateTrailing()
+
+captureStructure(50, false, false)
+captureStructure(intLen, false, true)
+if showEQ
+    captureStructure(eqLen, true, false)
+
+displayInternalStructure()
+displaySwingStructure()
+
+if showOB
+    deleteOBs()
+if showOB and (barstate.islastconfirmedhistory or barstate.islast)
+    drawOBs()
+
+if showPD and barstate.islast
+    drawPDZones()
+
+// ── Time-based exit & cleanup ──────────────────────────────────────
+if maxBarsHold > 0 and strategy.position_size != 0 and not na(entryBar)
+    if bar_index - entryBar >= maxBarsHold
+        strategy.close_all(comment="time-stop")
+        entryBar := na
+
+if strategy.position_size == 0
+    entryBar := na
+    lastEntry := na
+    lastSL := na
+    lastTP := na
+
+// Live entry/SL/TP markers
+plot(strategy.position_size != 0 ? lastEntry : na, "Entry", color=color.new(color.aqua, 0), style=plot.style_circles, linewidth=2)
+plot(strategy.position_size != 0 ? lastSL    : na, "SL",    color=color.new(color.red,  0), style=plot.style_circles, linewidth=2)
+plot(strategy.position_size != 0 ? lastTP    : na, "TP",    color=color.new(color.lime, 0), style=plot.style_circles, linewidth=2)
+
+// ── Alerts ─────────────────────────────────────────────────────────
+alertcondition(strategy.position_size > 0 and strategy.position_size[1] <= 0, "Long Entry",  "{{ticker}} long entry")
+alertcondition(strategy.position_size < 0 and strategy.position_size[1] >= 0, "Short Entry", "{{ticker}} short entry")
