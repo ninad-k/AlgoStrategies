@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: MPL-2.0
+// Author: Ninad Kulkarni
+//
+// Strategy: trade the Swing Structure Forecast.
+//   - Detect swing pivots over `swingLen` bars.
+//   - On every confirmed direction flip, record the just-completed swing leg
+//     (% size + bar duration) and aggregate the last N legs into a forecast.
+//   - Bull flip → long; bear flip → short.
+//   - SL = opposing pivot ± ATR buffer; TP = projected target (optional fib mult).
+
+//@version=6
+strategy("Swing Structure Forecast — Strategy",
+     overlay              = true,
+     initial_capital      = 10000,
+     default_qty_type     = strategy.percent_of_equity,
+     default_qty_value    = 100,
+     pyramiding           = 0,
+     calc_on_every_tick   = false,
+     process_orders_on_close = true,
+     commission_type      = strategy.commission.percent,
+     commission_value     = 0.02,
+     max_labels_count     = 500,
+     max_boxes_count      = 500,
+     max_lines_count      = 500,
+     max_bars_back        = 5000)
+
+// ── Inputs ─────────────────────────────────────────────────────────
+
+GRP_DETECT  = "Detection"
+swingLen    = input.int(16, "Swing Length", minval = 10, group = GRP_DETECT)
+
+GRP_PROJ    = "Forecast"
+samples     = input.int(20, "Samples",  minval = 3, maxval = 20, group = GRP_PROJ)
+method      = input.string("Weighted", "Method", ["Weighted", "Average", "Median"], group = GRP_PROJ)
+minSamples  = input.int(3, "Min Samples Before Trading", minval = 2, group = GRP_PROJ)
+
+GRP_RISK    = "Risk / Exits"
+riskPct     = input.float(1.0, "Risk % per Trade", minval = 0.05, maxval = 5.0, step = 0.05, group = GRP_RISK)
+slAtrMult   = input.float(1.0, "SL ATR Buffer (× ATR200)", minval = 0.0, step = 0.1, group = GRP_RISK)
+useFibTP    = input.bool(false, "Use Fib TP Multiple", group = GRP_RISK)
+fibTPLevel  = input.float(1.000, "Fib TP Level", minval = 0.1, step = 0.001, group = GRP_RISK,
+     tooltip = "1.0 = projected target. 1.272 / 1.618 push TP further along the same direction.")
+maxBarsHold = input.int(0, "Max Bars in Trade (0 = off)", minval = 0, group = GRP_RISK)
+reverseFlip = input.bool(true, "Reverse on Opposite Flip", group = GRP_RISK)
+
+GRP_DIR     = "Direction Toggles"
+allowLong   = input.bool(true,  "Allow Long",  group = GRP_DIR)
+allowShort  = input.bool(true,  "Allow Short", group = GRP_DIR)
+
+GRP_VIS     = "Visualization"
+showPivots  = input.bool(true, "Plot Pivots", group = GRP_VIS)
+
+// ── State ──────────────────────────────────────────────────────────
+
+type Pivot
+    float price
+    int   idx
+
+var hi  = Pivot.new(na, na)
+var lo  = Pivot.new(na, na)
+var bool dir = false
+
+var pcts = array.new<float>()
+var durs = array.new<float>()
+
+var int  entryBar    = na
+var float lastEntry  = na
+var float lastSL     = na
+var float lastTP     = na
+
+atr = ta.atr(200)
+
+// ── Pivot detection ────────────────────────────────────────────────
+
+H = ta.highest(high, swingLen)
+L = ta.lowest(low,   swingLen)
+
+if high == H
+    dir := true
+if low  == L
+    dir := false
+
+if high[1] == H[1] and high < H
+    hi.idx   := bar_index[1]
+    hi.price := high[1]
+    if showPivots
+        label.new(hi.idx, hi.price, "H", style = label.style_label_down, color = color.new(color.red, 70), textcolor = color.white, size = size.tiny)
+
+if low[1] == L[1] and low > L
+    lo.idx   := bar_index[1]
+    lo.price := low[1]
+    if showPivots
+        label.new(lo.idx, lo.price, "L", style = label.style_label_up, color = color.new(color.green, 70), textcolor = color.white, size = size.tiny)
+
+// ── Forecast aggregation helper ────────────────────────────────────
+
+forecastPct(array<float> a) =>
+    n   = a.size()
+    out = 0.0
+    if n > 0
+        if method == "Weighted"
+            tw = 0.0, ws = 0.0
+            for i = 0 to n - 1
+                w   = i + 1.0
+                ws += a.get(i) * w
+                tw += w
+            out := ws / tw
+        else if method == "Median"
+            out := a.median()
+        else
+            out := a.avg()
+    out
+
+// ── Position-sizing helper ─────────────────────────────────────────
+
+// Lots/units that risk `riskPct` of equity given a stop distance in price.
+qtyForRisk(float slDist) =>
+    riskMoney = strategy.equity * (riskPct / 100.0)
+    riskMoney / math.max(slDist, syminfo.mintick)
+
+// ── Direction flip → record swing leg + decide trade ───────────────
+
+if dir != dir[1] and not na(hi.price) and not na(lo.price)
+    pct  = not dir ? (hi.price - lo.price) / lo.price * 100 : (lo.price - hi.price) / hi.price * 100
+    bars = math.abs(hi.idx - lo.idx)
+
+    pcts.push(math.abs(pct))
+    durs.push(bars)
+    if pcts.size() > samples
+        pcts.shift()
+        durs.shift()
+
+    // Need a few completed swings before any trade
+    if pcts.size() >= minSamples
+        fPct = forecastPct(pcts)
+
+        if fPct > 0.0
+            wantLong  = dir       and allowLong
+            wantShort = (not dir) and allowShort
+
+            if wantLong or wantShort
+                origin   = wantLong ? lo.price : hi.price
+                rawTgt   = wantLong ? origin * (1.0 + fPct / 100.0) : origin * (1.0 - fPct / 100.0)
+                tpPrice  = useFibTP ? origin + (rawTgt - origin) * fibTPLevel : rawTgt
+                opposing = wantLong ? lo.price : hi.price
+                slPrice  = wantLong ? opposing - atr * slAtrMult : opposing + atr * slAtrMult
+
+                entry  = close
+                slDist = math.abs(entry - slPrice)
+
+                // Only fire if SL is on the correct side of entry by a meaningful amount
+                if slDist > syminfo.mintick * 5
+                    qty = qtyForRisk(slDist)
+                    inLong  = strategy.position_size > 0
+                    inShort = strategy.position_size < 0
+
+                    // Reverse if a position exists in the opposite direction
+                    if reverseFlip and ((wantLong and inShort) or (wantShort and inLong))
+                        strategy.close_all(comment = "flip-close")
+
+                    // Sanity-check TP/SL geometry before submitting
+                    geomOK = wantLong  ? (tpPrice > entry and slPrice < entry) :
+                                         (tpPrice < entry and slPrice > entry)
+
+                    if geomOK and not (wantLong and inLong) and not (wantShort and inShort)
+                        if wantLong
+                            strategy.entry("L", strategy.long, qty = qty, comment = "ssf-long")
+                            strategy.exit ("L-x", "L", stop = slPrice, limit = tpPrice)
+                        if wantShort
+                            strategy.entry("S", strategy.short, qty = qty, comment = "ssf-short")
+                            strategy.exit ("S-x", "S", stop = slPrice, limit = tpPrice)
+
+                        entryBar  := bar_index
+                        lastEntry := entry
+                        lastSL    := slPrice
+                        lastTP    := tpPrice
+
+// ── Time-based exit ────────────────────────────────────────────────
+
+if maxBarsHold > 0 and strategy.position_size != 0 and not na(entryBar)
+    if bar_index - entryBar >= maxBarsHold
+        strategy.close_all(comment = "time-stop")
+        entryBar := na
+
+if strategy.position_size == 0
+    entryBar  := na
+    lastEntry := na
+    lastSL    := na
+    lastTP    := na
+
+// ── Lightweight overlay: latest pending TP/SL/entry ────────────────
+
+plot(strategy.position_size != 0 ? lastEntry : na, "Entry", color = color.new(color.aqua,  0), style = plot.style_circles, linewidth = 2)
+plot(strategy.position_size != 0 ? lastSL    : na, "SL",    color = color.new(color.red,   0), style = plot.style_circles, linewidth = 2)
+plot(strategy.position_size != 0 ? lastTP    : na, "TP",    color = color.new(color.lime,  0), style = plot.style_circles, linewidth = 2)
